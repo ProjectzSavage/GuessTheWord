@@ -28,6 +28,7 @@ ServerScriptService
 | `src/ServerScriptService/Hearts.server.luau`                    | `ServerScriptService > Scripts` | Script   |
 | `src/ServerStorage/Modules/Dictionary.luau`                     | `ServerStorage > Modules`   | ModuleScript |
 | `src/ServerStorage/Modules/HeartHUDManager.luau`                | `ServerStorage > Modules`   | ModuleScript |
+| `src/ReplicatedStorage/LetterImages.luau`                      | `ReplicatedStorage`         | ModuleScript |
 | `src/StarterPlayerScripts/InputHandler.client.luau`             | `StarterPlayerScripts`      | LocalScript |
 
 > **Tip:** For each file, right-click the target container in Studio →
@@ -41,13 +42,21 @@ ServerScriptService
 Build the exact tree in `docs/UI_HIERARCHY.md` **manually** in `StarterGui`:
 
 - `GameUI` ScreenGui with `TopBar`, `PuzzleArea`, `InteractionFrame`.
-- Heart `Folder`s with `ImageLabel`s named exactly `Heart1/2/3`.
-- `AnswerBox` (TextBox), `ScrambledBank` (Frame), `PlayVsBotButton` (TextButton).
+- Heart `Folder`s with `ImageLabel`s named exactly `Heart1/2/3` (set each
+  `HeartN.Image` to your heart texture).
+- `AnswerBox` (**Frame** — not a TextBox anymore), `ScrambledBank` (Frame),
+  `PlayVsBotButton` (TextButton).
 - Put your own heart textures and clue image asset IDs where the docs say.
 
-The `ScrambledBank` buttons and the above-head `HeartHUD` are handled by code —
-do not build those by hand (the billboard template in `ServerStorage` is the one
-exception; see `UI_HIERARCHY.md`).
+The `ScrambledBank` tiles, the `AnswerBox` slots, and the above-head `HeartHUD`
+are handled by code — do not build those by hand (the `HeartHUD` billboard
+template in `ServerStorage` is the one exception; see `UI_HIERARCHY.md`).
+
+### Letter images (A-Z)
+
+In `ReplicatedStorage.LetterImages`, replace the placeholder `rbxassetid://...`
+values with your letter A–Z image IDs. These images are used for the scrambled
+bank tiles and the answer-box slots.
 
 > **Frame visibility is managed by the script.** A Frame with `Visible = false`
 > hides all its children, so `InputHandler` sets the top-level frames'

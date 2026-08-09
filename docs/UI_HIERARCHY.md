@@ -27,12 +27,17 @@ StarterGui
     │   │   ├── Clue2 (ImageLabel)
     │   │   ├── Clue3 (ImageLabel)
     │   │   └── Clue4 (ImageLabel)
-    │   ├── AnswerBox  (TextBox)     Font GothamBold, TextSize 36, TextEditable=false
-    │   └── ScrambledBank  (Frame)   buttons are created here by InputHandler
+    │   ├── AnswerBox  (Frame)   -- letter slots are built here as ImageLabels
+    │   └── ScrambledBank  (Frame)   letter tiles are created here as ImageButtons
     │
     └── InteractionFrame  (Frame)  lower area
         └── PlayVsBotButton  (TextButton)   "Play vs Bot", Visible = false initially
 ```
+
+> **`AnswerBox` is now a `Frame`, not a `TextBox`.** The guessed letters are shown
+> as letter IMAGES (from `ReplicatedStorage.LetterImages`). `InputHandler` clears
+> `AnswerBox` and rebuilds one slot per letter on every change. Leave it empty;
+> do not add children by hand.
 
 ## Heart container details
 
@@ -49,20 +54,30 @@ OpponentHeartContainer          PlayerHeartContainer
 
 - **OpponentHeartContainer** — shows the enemy player's remaining hearts.
 - **PlayerHeartContainer** — shows your own remaining hearts.
-- `HeartN.Image` should be your heart texture (`rbxassetid://...`).
+- `HeartN.Image` must be your heart texture (`rbxassetid://...`). Set it once in
+  Studio on each of the 6 ImageLabels; `InputHandler` only toggles their
+  `Visible` to match the current count.
 
-> **Important:** The scripts shipped in this repo drive the **hearts above the
-> head** (`ServerStorage.HeartHUD` BillboardGui) via the `HeartUpdate`
-> RemoteEvent. To also populate the two TopBar containers, add a small client
-> listener (e.g. inside InputHandler or a UIController) that subscribes to
-> `HeartUpdate` and toggles `Heart1/2/3` in the matching container. Everything
-> you need is already in `ReplicatedStorage.Events`.
+> **Important:** The TopBar hearts are now driven by the client script
+> `InputHandler`. The server sends each player their own count via
+> `HeartUpdate` and their opponent's via `OpponentHeartUpdate` (both in
+> `ReplicatedStorage.Events`). `InputHandler` fills `PlayerHeartContainer` and
+> `OpponentHeartContainer` accordingly. The above-head hearts
+> (`ServerStorage.HeartHUD`) are still driven server-side.
 
 ## ScrambledBank (dynamic)
 
-Do **not** create buttons by hand. `InputHandler` creates `TextButton`s named
-`Letter1..N` inside `ScrambledBank` on every `RoundStart`, lays them out with a
-`UIListLayout`, and wires click handling automatically.
+Do **not** create tiles by hand. `InputHandler` creates `ImageButton` tiles
+(named `Tile1..N`) inside `ScrambledBank` on every `RoundStart`, lays them out
+with a `UIListLayout`, and wires click handling automatically. Each tile shows
+the letter as an image from `ReplicatedStorage.LetterImages`.
+
+## LetterImages module (in ReplicatedStorage)
+
+`InputHandler` reads `ReplicatedStorage.LetterImages` for the A-Z letter images.
+Open that ModuleScript and replace the placeholder `rbxassetid://...` values
+with **your** A-Z asset IDs. There's also an optional `underscore` image used for
+empty answer-box slots.
 
 ## HeartHUD (above-head BillboardGui) — in ServerStorage
 

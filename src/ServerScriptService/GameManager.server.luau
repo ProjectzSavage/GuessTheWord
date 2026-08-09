@@ -39,6 +39,7 @@ local SubmitGuess = Events:WaitForChild("SubmitGuess")
 local TimerUpdate = Events:WaitForChild("TimerUpdate")
 local Countdown = Events:WaitForChild("Countdown")
 local HeartUpdate = Events:WaitForChild("HeartUpdate")
+local OpponentHeartUpdate = Events:WaitForChild("OpponentHeartUpdate")
 local RoundStart = Events:WaitForChild("RoundStart")
 local RoundEnd = Events:WaitForChild("RoundEnd")
 local GameOver = Events:WaitForChild("GameOver")
@@ -137,9 +138,22 @@ local function opponentSeat(seatIndex)
 	return seatIndex == 1 and 2 or 1
 end
 
+-- Tell ONE real player on a seat their own heart count (HeartUpdate) and their
+-- opponent's count (OpponentHeartUpdate), so the client can fill the two TopBar
+-- heart containers (PlayerHeartContainer + OpponentHeartContainer).
+local function sendClientHearts(tableState, seatIndex)
+	local occ = tableState.occupants[seatIndex]
+	if not occ or occ == "BOT" then
+		return
+	end
+	local oppIdx = opponentSeat(seatIndex)
+	HeartUpdate:FireClient(occ, tableState.hearts[seatIndex] or 0)
+	OpponentHeartUpdate:FireClient(occ, tableState.hearts[oppIdx] or 0)
+end
+
 local function broadcastHearts(tableState)
 	-- Update the above-head billboard hearts (server-side) for each character
-	-- (player or bot), and notify real clients (for the TopBar heart containers).
+	-- (player or bot), and send both real players their own + opponent's hearts.
 	for seatIndex, occ in tableState.occupants do
 		if occ then
 			local count = tableState.hearts[seatIndex] or 0
@@ -149,7 +163,7 @@ local function broadcastHearts(tableState)
 				end
 			else
 				HeartHUDManager.setHearts(occ, count) -- shows billboard + count
-				HeartUpdate:FireClient(occ, count)    -- for client TopBar UI
+				sendClientHearts(tableState, seatIndex)
 			end
 		end
 	end
@@ -338,7 +352,12 @@ local function loseHeart(tableState, seatIndex, reason)
 		end
 	elseif occ then
 		HeartHUDManager.setHearts(occ, tableState.hearts[seatIndex])
-		HeartUpdate:FireClient(occ, tableState.hearts[seatIndex])
+	end
+
+	-- A heart loss changes what BOTH players see (the loser's own count, and the
+	-- opponent's view of that count), so refresh both real players.
+	for i = 1, 2 do
+		sendClientHearts(tableState, i)
 	end
 
 	if tableState.hearts[seatIndex] <= 0 then

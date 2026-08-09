@@ -21,7 +21,8 @@ local EVENT_NAMES = {
 	"SubmitGuess",      -- Client -> Server : player submits a word
 	"TimerUpdate",      -- Server -> Client : round countdown tick
 	"Countdown",        -- Server -> Client : pre-match 3..2..1 countdown
-	"HeartUpdate",      -- Server -> Client : this player's heart count changed
+	"HeartUpdate",         -- Server -> Client : this player's heart count changed
+	"OpponentHeartUpdate", -- Server -> Client : the opponent's heart count changed
 	"RoundStart",       -- Server -> Client : new round data (bank, images, length)
 	"RoundEnd",         -- Server -> Client : round finished (correct/timeout)
 	"GameOver",         -- Server -> Client : match finished

@@ -23,9 +23,13 @@ src/
 │   ├── GameManager.server.luau     # seats, matches, rounds, bot, validation
 │   └── Hearts.server.luau          # above-head hearts BillboardGui
 ├── ServerStorage/
-│   └── Modules/Dictionary.luau     # server-only word/image dictionary
+│   └── Modules/
+│       ├── Dictionary.luau         # server-only word/image dictionary
+│       └── HeartHUDManager.luau    # server-side hearts for players + bot
+├── ReplicatedStorage/
+│   └── LetterImages.luau           # A-Z letter images for the UI
 └── StarterPlayerScripts/
-    └── InputHandler.client.luau    # hybrid click + keyboard input
+    └── InputHandler.client.luau    # hybrid click + keyboard input + UI
 ```
 
 ## Feature checklist
