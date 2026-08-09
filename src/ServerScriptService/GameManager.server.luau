@@ -52,6 +52,7 @@ local ROUND_TIME = 15            -- seconds per round
 local START_COUNTDOWN = 3        -- 3..2..1 before the match begins
 local BOT_THINK_TIME = 0.45      -- seconds between bot guesses
 local REMATCH_DELAY = 5          -- seconds before auto-rematch
+local POLL_INTERVAL = 0.2        -- how often we poll seats for a sitting player
 
 local TABLE_AREA = Workspace:WaitForChild("GameArea")
 
@@ -438,30 +439,51 @@ end
 
 -------------------------------------------------------------------------------
 -- SEAT DETECTION
+--
+-- NOTE: Seat:GetPropertyChangedSignal("Occupant") does NOT reliably fire when
+-- a humanoid sits, so we cannot rely on it alone. The source of truth is a
+-- reconciliation loop that polls each seat's `Seat.Occupant` every frame tick.
+-- That guarantees detection no matter how/when a player sits. The property
+-- signal is kept only as an instant fast-path (it's harmless to double-call
+-- because reconcileSeat is idempotent).
 -------------------------------------------------------------------------------
-local function bindSeat(tableState, seatIndex, seat)
-	-- Seat.Occupant changes whenever a Humanoid sits in / leaves the seat.
-	-- Covers both human players and the spawned bot rig.
-	local previouslySeated = nil
-	seat:GetPropertyChangedSignal("Occupant"):Connect(function()
-		local humanoid = seat.Occupant
-		if humanoid and humanoid.Parent then
-			previouslySeated = humanoid
-			local player = Players:GetPlayerFromCharacter(humanoid.Parent)
-			if player then
-				assignPlayer(tableState, seatIndex, player)
-			end
-		else
-			-- Seat just emptied (player stood up or left).
-			if previouslySeated and previouslySeated.Parent then
-				local player = Players:GetPlayerFromCharacter(previouslySeated.Parent)
-				if player then
-					releasePlayer(tableState, player)
-				end
-			end
-			previouslySeated = nil
+
+-- The real Player currently sitting on a seat, or nil.
+local function playerOnSeat(seat)
+	local humanoid = seat.Occupant
+	if humanoid and humanoid.Parent then
+		return Players:GetPlayerFromCharacter(humanoid.Parent)
+	end
+	return nil
+end
+
+-- Reconcile one seat against the tracked occupants. Idempotent, so it is safe
+-- to call both from the poll loop and from the (unreliable) Occupant signal.
+function reconcileSeat(tableState, seatIndex, seat)
+	local current = playerOnSeat(seat)
+	local stored = tableState.occupants[seatIndex]
+
+	if current then
+		-- A real player is sitting here.
+		if stored == current then
+			return -- no change
 		end
-	end)
+		-- The occupant changed to `current`: release whoever was here before
+		-- (a human that left, or a bot that got displaced), then assign.
+		if stored and stored ~= "BOT" then
+			releasePlayer(tableState, stored)
+		end
+		assignPlayer(tableState, seatIndex, current)
+	else
+		-- No real player in the seat. Could be a bot's humanoid, or empty.
+		if stored and stored ~= "BOT" then
+			-- A real player left this seat.
+			releasePlayer(tableState, stored)
+		elseif stored == "BOT" and not seat.Occupant then
+			-- A bot's seat emptied.
+			tableState.occupants[seatIndex] = nil
+		end
+	end
 end
 
 function assignPlayer(tableState, seatIndex, player)
@@ -469,8 +491,9 @@ function assignPlayer(tableState, seatIndex, player)
 		-- Already occupying this table (e.g. they stood up in a seat briefly).
 		return
 	end
-	if tableState.occupants[seatIndex] then
-		-- Seat taken (by the other player or a bot).
+	local existing = tableState.occupants[seatIndex]
+	if existing and existing ~= "BOT" then
+		-- Seat taken by another real player.
 		return
 	end
 
@@ -573,16 +596,29 @@ else
 	for name, ts in tableStates do
 		print("[GameManager] Watching", name, "with",
 			#ts.seats, "seats.")
-		-- Bind the Occupant signal once per seat. It fires whenever a humanoid
-		-- (player or bot) sits in / leaves the seat, for the lifetime of the place.
+		-- Fast-path: try the Occupant signal (may not fire for every sit).
+		-- The reconciliation poll loop above is the reliable source of truth.
 		for seatIndex, seat in ts.seats do
-			bindSeat(ts, seatIndex, seat)
+			seat:GetPropertyChangedSignal("Occupant"):Connect(function()
+				reconcileSeat(ts, seatIndex, seat)
+			end)
 		end
 	end
 end
 
 -- Keep the script alive; task.loop runs independently, but a bare loop protects
 -- against any unexpected yielding.
+task.spawn(function()
+	while true do
+		task.wait(POLL_INTERVAL)
+		for _, ts in tableStates do
+			for seatIndex, seat in ts.seats do
+				reconcileSeat(ts, seatIndex, seat)
+			end
+		end
+	end
+end)
+
 while true do
 	task.wait(1)
 end
