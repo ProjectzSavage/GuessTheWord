@@ -57,12 +57,40 @@ local PlayVsBotButton = InteractionFrame:WaitForChild("PlayVsBotButton")
 AnswerBox.TextEditable = false
 
 -------------------------------------------------------------------------------
+-- UI VISIBILITY
+-- NOTE: A Frame with Visible = false hides ALL of its children, regardless of
+-- whether a child's own Visible is true. So if a frame was set Visible = false
+-- in Studio, toggling a child does nothing. We therefore control the top-level
+-- frames' Visible here based on game state. You can leave them Visible = false
+-- in Studio; this script forces the right state at runtime.
+-------------------------------------------------------------------------------
+GameUI.Visible = true -- never want the whole screen hidden
+
+local function setWaitingUI(waiting)
+	-- Waiting-for-opponent state: only the "Play vs Bot" area is shown.
+	TopBar.Visible = false
+	PuzzleArea.Visible = false
+	InteractionFrame.Visible = waiting
+	PlayVsBotButton.Visible = waiting
+end
+
+local function setPlayingUI()
+	-- Active match state: show the timer + puzzle, hide the interaction frame.
+	TopBar.Visible = true
+	PuzzleArea.Visible = true
+	InteractionFrame.Visible = false
+end
+
+-------------------------------------------------------------------------------
 -- STATE
 -------------------------------------------------------------------------------
 local wordLength = 0
 local currentGuess = ""      -- letters typed so far
 local buttonMap = {}         -- button -> letter
 local roundActive = false
+
+-- Start with everything hidden until the server says otherwise.
+setWaitingUI(false)
 
 local function resetBank()
 	for _, child in ScrambledBank:GetChildren() do
@@ -195,6 +223,7 @@ end)
 -------------------------------------------------------------------------------
 -- Pre-match 3..2..1 countdown (shown in the timer label).
 Countdown.OnClientEvent:Connect(function(n)
+	setPlayingUI()
 	TimerLabel.Text = tostring(n)
 	AnswerBox.Text = ""
 end)
@@ -205,6 +234,7 @@ TimerUpdate.OnClientEvent:Connect(function(seconds)
 end)
 
 RoundStart.OnClientEvent:Connect(function(length, letterBank, images)
+	setPlayingUI()
 	wordLength = length
 	currentGuess = ""
 	roundActive = true
@@ -235,8 +265,8 @@ GameOver.OnClientEvent:Connect(function(winnerName, youWon, isDraw)
 end)
 
 OpponentState.OnClientEvent:Connect(function(waiting)
-	-- Show the "Play vs Bot" button only while waiting for an opponent.
-	PlayVsBotButton.Visible = waiting
+	-- Show the "Play vs Bot" area only while waiting for an opponent.
+	setWaitingUI(waiting)
 end)
 
 -------------------------------------------------------------------------------
@@ -246,6 +276,3 @@ PlayVsBotButton.Activated:Connect(function()
 	PlayVsBotButton.Visible = false
 	PlayVsBotRequest:FireServer()
 end)
-
--- Initial state: button hidden until server says we are waiting.
-PlayVsBotButton.Visible = false

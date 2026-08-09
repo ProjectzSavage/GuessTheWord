@@ -49,9 +49,31 @@ The `ScrambledBank` buttons and the above-head `HeartHUD` are handled by code �
 do not build those by hand (the billboard template in `ServerStorage` is the one
 exception; see `UI_HIERARCHY.md`).
 
+> **Frame visibility is managed by the script.** A Frame with `Visible = false`
+> hides all its children, so `InputHandler` sets the top-level frames'
+> `Visible` itself based on game state (timer/puzzle during play, the
+> `InteractionFrame` only while waiting for an opponent). You can leave them
+> `Visible = false` in Studio — the script forces the correct state at runtime.
+
 ---
 
-## 3. Workspace layout (already in your place)
+## 3. Optional bot rig (recommended)
+
+If you provide a rig in `ServerStorage` named **`BotRig`** (a Model with a
+`Humanoid` and a `Head`), the game clones it onto the empty seat when a player
+clicks **Play vs Bot**. The bot then has a visible body **and** hearts above its
+head. If no `BotRig` exists, a minimal transparent placeholder rig is used
+(no body, no hearts).
+
+```
+ServerStorage
+└── BotRig  (Model)   -- Humanoid + Head + HumanoidRootPart + visual parts
+```
+
+> Make sure the rig's PrimaryPart / HumanoidRootPart is set so it can `PivotTo`
+> the seat. The `Seat`/`VehicleSeat` must be reachable.
+
+## 4. Workspace layout (already in your place)
 
 ```
 Workspace

@@ -100,8 +100,10 @@ local function discoverTables()
 					matchActive = false,
 					currentWord = nil,
 					letterBank = {},
-					roundConn = nil,       -- timer connection
-					botConn = nil,         -- bot loop connection
+					roundConn = nil,       -- round timer thread
+					roundActive = false,   -- is the round timer running?
+					botConn = nil,         -- bot loop thread
+					botActive = false,     -- is the bot thinking loop running?
 					rematchConn = nil,     -- rematch timer
 					attemptedGuesses = {}, -- bot: tried permutations
 				}
@@ -136,13 +138,19 @@ local function opponentSeat(seatIndex)
 end
 
 local function broadcastHearts(tableState)
-	-- Update the above-head billboard hearts (server-side) for each real player,
-	-- and notify the client (for the TopBar heart containers).
+	-- Update the above-head billboard hearts (server-side) for each character
+	-- (player or bot), and notify real clients (for the TopBar heart containers).
 	for seatIndex, occ in tableState.occupants do
-		if occ ~= "BOT" and occ then
+		if occ then
 			local count = tableState.hearts[seatIndex] or 0
-			HeartHUDManager.setHearts(occ, count) -- shows billboard + sets count
-			HeartUpdate:FireClient(occ, count)    -- for client TopBar UI
+			if occ == "BOT" then
+				if tableState.botModel then
+					HeartHUDManager.setHearts(tableState.botModel, count)
+				end
+			else
+				HeartHUDManager.setHearts(occ, count) -- shows billboard + count
+				HeartUpdate:FireClient(occ, count)    -- for client TopBar UI
+			end
 		end
 	end
 end
@@ -159,25 +167,55 @@ end
 -------------------------------------------------------------------------------
 -- BOT
 -------------------------------------------------------------------------------
--- Build a minimal but valid rig so the bot can sit and stand out physically.
-local function buildBotRig(seat)
-	local model = Instance.new("Model")
-	model.Name = "Bot"
-	model.Parent = Workspace
+-- BOT RIG TEMPLATE
+-- If you provide a rig in ServerStorage named "BotRig" (a Model with a
+-- Humanoid + a "Head" part), it will be cloned and placed on the opponent seat.
+-- This is the recommended approach - it gives the bot a visible body AND a head
+-- (so the Hearts billboard can attach to it too). If no template exists, we
+-- fall back to a minimal programmatic rig (HumanoidRootPart + Humanoid) so the
+-- bot can still sit and guess, but it will have no visible body or hearts.
+local BotRigTemplate = ServerStorage:FindFirstChild("BotRig")
 
+local function buildBotRig(seat)
+	local model
+
+	if BotRigTemplate then
+		model = BotRigTemplate:Clone()
+		model.Name = "Bot"
+		model.Parent = Workspace
+		local humanoid = model:FindFirstChildOfClass("Humanoid")
+		if not humanoid then
+			warn("[GameManager] ServerStorage.BotRig has no Humanoid; " ..
+				"the bot cannot sit.")
+			model:Destroy()
+			return nil
+		end
+		humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+		-- Sit slightly above the seat so it looks seated, then sit it down.
+		model:PivotTo(seat.CFrame * CFrame.new(0, 1.2, 0))
+		model.Parent = Workspace
+		humanoid.Sit = true
+		-- Give the bot hearts above its head (if its rig has a Head part).
+		HeartHUDManager.register(model, model)
+		return humanoid
+	end
+
+	-- Fallback: minimal rig (no template provided).
 	local root = Instance.new("Part")
 	root.Name = "HumanoidRootPart"
 	root.Size = Vector3.new(2, 2, 1)
 	root.Anchored = false
 	root.CanCollide = false
 	root.Transparency = 0.5
-	root.Parent = model
-	model.PrimaryPart = root
 
 	local humanoid = Instance.new("Humanoid")
+
+	model = Instance.new("Model")
+	model.Name = "Bot"
+	model.PrimaryPart = root
+	root.Parent = model
 	humanoid.Parent = model
 
-	-- Place at the seat, slightly above so it looks seated.
 	local seatCFrame = seat.CFrame * CFrame.new(0, 1.2, 0)
 	model:PivotTo(seatCFrame)
 	humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
@@ -190,46 +228,68 @@ end
 -- The bot guesses a random permutation of the letter bank. It never knows the
 -- real answer - this is a placeholder "random guessing" AI (difficulty selection
 -- is a future update).
-local function startBotLoop(tableState, seatIndex)
+--
+-- NOTE: Roblox's `task` library has NO `task.loop`. Loops are run with
+-- `task.spawn` + a flag-controlled `while`, and stopped with `task.cancel`.
+local function stopBot(tableState)
+	tableState.botActive = false
 	if tableState.botConn then
-		tableState.botConn:Disconnect()
+		task.cancel(tableState.botConn)
+		tableState.botConn = nil
 	end
+end
+
+local function stopRound(tableState)
+	tableState.roundActive = false
+	if tableState.roundConn then
+		task.cancel(tableState.roundConn)
+		tableState.roundConn = nil
+	end
+end
+
+local function startBotLoop(tableState, seatIndex)
+	stopBot(tableState)
 
 	tableState.attemptedGuesses = {}
 	local bank = tableState.letterBank
+	tableState.botActive = true
 
-	local function botThink()
-		if not tableState.matchActive or not tableState.currentWord then
-			return
-		end
-		if tableState.hearts[seatIndex] and tableState.hearts[seatIndex] <= 0 then
-			return
-		end
+	tableState.botConn = task.spawn(function()
+		while tableState.botActive do
+			task.wait(BOT_THINK_TIME)
+			if not tableState.botActive then
+				break
+			end
+			if not tableState.matchActive or not tableState.currentWord then
+				break
+			end
+			if tableState.hearts[seatIndex] and tableState.hearts[seatIndex] <= 0 then
+				break
+			end
 
-		-- Build a random permutation of the bank (a candidate word).
-		local order = {}
-		for i = 1, #bank do
-			order[i] = i
-		end
-		for i = #order, 2, -1 do
-			local j = math.random(1, i)
-			order[i], order[j] = order[j], order[i]
-		end
+			-- Build a random permutation of the bank (a candidate word).
+			local order = {}
+			for i = 1, #bank do
+				order[i] = i
+			end
+			for i = #order, 2, -1 do
+				local j = math.random(1, i)
+				order[i], order[j] = order[j], order[i]
+			end
 
-		local candidate = ""
-		for _, idx in order do
-			candidate = candidate .. bank[idx]
-		end
+			local candidate = ""
+			for _, idx in order do
+				candidate = candidate .. bank[idx]
+			end
 
-		-- Avoid repeating a permutation the bot already tried this round.
-		if not tableState.attemptedGuesses[candidate] then
-			tableState.attemptedGuesses[candidate] = true
-			-- Same validation path as a real player (server side).
-			handleGuess(tableState, seatIndex, candidate)
+			-- Avoid repeating a permutation the bot already tried this round.
+			if not tableState.attemptedGuesses[candidate] then
+				tableState.attemptedGuesses[candidate] = true
+				-- Same validation path as a real player (server side).
+				handleGuess(tableState, seatIndex, candidate)
+			end
 		end
-	end
-
-	tableState.botConn = task.loop(BOT_THINK_TIME, botThink)
+	end)
 end
 
 -------------------------------------------------------------------------------
@@ -238,15 +298,8 @@ end
 function gameOver(tableState, winnerSeatIndex)
 	-- winnerSeatIndex = nil means a draw (both ran out of hearts on a timeout).
 	tableState.matchActive = false
-
-	if tableState.roundConn then
-		tableState.roundConn:Disconnect()
-		tableState.roundConn = nil
-	end
-	if tableState.botConn then
-		tableState.botConn:Disconnect()
-		tableState.botConn = nil
-	end
+	stopRound(tableState)
+	stopBot(tableState)
 
 	for seatIndex, occ in tableState.occupants do
 		if occ ~= "BOT" and occ then
@@ -279,7 +332,11 @@ local function loseHeart(tableState, seatIndex, reason)
 	tableState.hearts[seatIndex] = tableState.hearts[seatIndex] - 1
 
 	local occ = tableState.occupants[seatIndex]
-	if occ ~= "BOT" and occ then
+	if occ == "BOT" then
+		if tableState.botModel then
+			HeartHUDManager.setHearts(tableState.botModel, tableState.hearts[seatIndex])
+		end
+	elseif occ then
 		HeartHUDManager.setHearts(occ, tableState.hearts[seatIndex])
 		HeartUpdate:FireClient(occ, tableState.hearts[seatIndex])
 	end
@@ -292,14 +349,8 @@ end
 
 local function endRound(tableState, result, correctWord)
 	-- result: "correct" (guesserId) or "timeout"
-	if tableState.roundConn then
-		tableState.roundConn:Disconnect()
-		tableState.roundConn = nil
-	end
-	if tableState.botConn then
-		tableState.botConn:Disconnect()
-		tableState.botConn = nil
-	end
+	stopRound(tableState)
+	stopBot(tableState)
 
 	for _, occ in tableState.occupants do
 		if occ ~= "BOT" and occ then
@@ -345,10 +396,7 @@ function handleGuess(tableState, seatIndex, guess)
 end
 
 function startRound(tableState)
-	if tableState.roundConn then
-		tableState.roundConn:Disconnect()
-		tableState.roundConn = nil
-	end
+	stopRound(tableState)
 
 	local entry = Dictionary.randomEntry()
 	tableState.currentWord = entry.word
@@ -380,33 +428,43 @@ function startRound(tableState)
 		end
 	end
 
-	-- Countdown.
-	local timeLeft = ROUND_TIME
-	tableState.roundConn = task.loop(1, function()
-		timeLeft = timeLeft - 1
-		if timeLeft <= 0 then
-			-- Timeout: both players lose a heart.
-			tableState.roundConn:Disconnect()
-			tableState.roundConn = nil
-			endRound(tableState, "timeout", tableState.currentWord)
-
-			local dead1 = loseHeart(tableState, 1, "timeout")
-			local dead2 = loseHeart(tableState, 2, "timeout")
-
-			if dead1 and dead2 then
-				gameOver(tableState, nil) -- draw
-			elseif dead1 then
-				gameOver(tableState, 2)
-			elseif dead2 then
-				gameOver(tableState, 1)
-			else
-				task.wait(1.0)
-				startRound(tableState)
+	-- Round timer (15s countdown). Uses task.spawn + flag loop (no task.loop).
+	tableState.roundActive = true
+	tableState.roundConn = task.spawn(function()
+		local timeLeft = ROUND_TIME
+		while tableState.roundActive do
+			task.wait(1)
+			if not tableState.roundActive then
+				break
 			end
-		else
-			for _, occ in tableState.occupants do
-				if occ ~= "BOT" and occ then
-					TimerUpdate:FireClient(occ, timeLeft)
+			timeLeft = timeLeft - 1
+			if timeLeft <= 0 then
+				-- Timeout: both players lose a heart.
+				-- Clear the connection FIRST so endRound's stopRound() doesn't
+				-- task.cancel() this very thread (which would raise on the next
+				-- yield below). endRound is safe to call once roundConn is nil.
+				tableState.roundActive = false
+				tableState.roundConn = nil
+				endRound(tableState, "timeout", tableState.currentWord)
+
+				local dead1 = loseHeart(tableState, 1, "timeout")
+				local dead2 = loseHeart(tableState, 2, "timeout")
+
+				if dead1 and dead2 then
+					gameOver(tableState, nil) -- draw
+				elseif dead1 then
+					gameOver(tableState, 2)
+				elseif dead2 then
+					gameOver(tableState, 1)
+				else
+					task.wait(1.0)
+					startRound(tableState)
+				end
+			else
+				for _, occ in tableState.occupants do
+					if occ ~= "BOT" and occ then
+						TimerUpdate:FireClient(occ, timeLeft)
+					end
 				end
 			end
 		end
@@ -542,9 +600,13 @@ PlayVsBotRequest.OnServerEvent:Connect(function(player)
 			-- Only if the other seat is empty (no human, no bot yet).
 			if not tableState.occupants[otherIdx] then
 				local botHumanoid = buildBotRig(tableState.seats[otherIdx])
+				if not botHumanoid then
+					return -- bot rig failed to spawn
+				end
 				tableState.occupants[otherIdx] = "BOT"
-				-- Keep botHumanoid referenced so GC keeps it; store on state.
+				-- Keep references so GC keeps them; store on state.
 				tableState.botHumanoid = botHumanoid
+				tableState.botModel = botHumanoid.Parent
 				notifyWaiting(tableState)
 				startMatch(tableState)
 			end
@@ -606,8 +668,8 @@ else
 	end
 end
 
--- Keep the script alive; task.loop runs independently, but a bare loop protects
--- against any unexpected yielding.
+-- Keep the script alive; the spawned threads run independently, but a bare
+-- loop protects against any unexpected yielding.
 task.spawn(function()
 	while true do
 		task.wait(POLL_INTERVAL)
