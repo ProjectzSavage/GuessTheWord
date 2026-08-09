@@ -1,1 +1,39 @@
-# GuessTheWord
+# Guess The Word
+
+A 1v1 word-puzzle game for Roblox. Two players (or a player vs a bot) race to
+guess a word hidden behind 4 images within 15 seconds. Each player has 3 hearts;
+guess correctly to make your opponent lose one. First to 0 hearts loses.
+
+Built with a **server-authoritative** design — all word guesses are validated on
+the server against a server-side dictionary, never trusted from the client.
+
+## Getting started
+
+Follow **[`docs/SETUP.md`](docs/SETUP.md)** for step-by-step Studio setup.
+
+- **[`docs/UI_HIERARCHY.md`](docs/UI_HIERARCHY.md)** — the exact Instance
+  hierarchy and naming convention for `GameUI` and the `HeartHUD` billboard.
+
+## Project structure
+
+```
+src/
+├── ServerScriptService/
+│   ├── SetupEvents.server.luau     # auto-creates ReplicatedStorage.Events
+│   ├── GameManager.server.luau     # seats, matches, rounds, bot, validation
+│   └── Hearts.server.luau          # above-head hearts BillboardGui
+├── ServerStorage/
+│   └── Modules/Dictionary.luau     # server-only word/image dictionary
+└── StarterPlayerScripts/
+    └── InputHandler.client.luau    # hybrid click + keyboard input
+```
+
+## Feature checklist
+
+- [x] Seat detection via `Humanoid.Seated` / `Seat.Occupant`
+- [x] Immediate "Play vs Bot" (no timer wait) with a random-guessing bot
+- [x] 3 hearts, 15s rounds, correct→opponent −1, timeout→both −1
+- [x] Server-side guess validation against the dictionary
+- [x] Hearts above the head (BillboardGui) visible to all players
+- [x] Hybrid input: click scrambled letters, type on keyboard, backspace, auto-submit
+- [x] Multiple tables (`Table1`, `Table2`, …) auto-detected under `GameArea`
