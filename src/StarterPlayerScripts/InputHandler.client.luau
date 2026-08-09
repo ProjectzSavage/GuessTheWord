@@ -16,6 +16,8 @@
 
 	REQUIRED UI (see docs/UI_HIERARCHY.md) - must exist in StarterGui.GameUI:
 		GameUI
+		  ├── TopBar
+		  │     └── TimerLabel (TextLabel)   -- shows 3..2..1 then round countdown
 		  ├── PuzzleArea
 		  │     ├── AnswerBox (TextBox)
 		  │     └── ScrambledBank (Frame)
@@ -34,12 +36,16 @@ local Events = ReplicatedStorage:WaitForChild("Events")
 local SubmitGuess = Events:WaitForChild("SubmitGuess")
 local RoundStart = Events:WaitForChild("RoundStart")
 local RoundEnd = Events:WaitForChild("RoundEnd")
+local Countdown = Events:WaitForChild("Countdown")
+local TimerUpdate = Events:WaitForChild("TimerUpdate")
 local GameOver = Events:WaitForChild("GameOver")
 local OpponentState = Events:WaitForChild("OpponentState")
 local PlayVsBotRequest = Events:WaitForChild("PlayVsBotRequest")
 
 -- UI references (fail loudly if the hierarchy is wrong - easy to debug).
 local GameUI = PlayerGui:WaitForChild("GameUI")
+local TopBar = GameUI:WaitForChild("TopBar")
+local TimerLabel = TopBar:WaitForChild("TimerLabel")
 local PuzzleArea = GameUI:WaitForChild("PuzzleArea")
 local AnswerBox = PuzzleArea:WaitForChild("AnswerBox")
 local ScrambledBank = PuzzleArea:WaitForChild("ScrambledBank")
@@ -165,7 +171,9 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 			backspace()
 			return
 		end
-		if key == Enum.KeyCode.Enter and roundActive and #currentGuess > 0 then
+		-- Enter = Return (main key) or KeypadEnter (numpad).
+		if (key == Enum.KeyCode.Return or key == Enum.KeyCode.KeypadEnter)
+			and roundActive and #currentGuess > 0 then
 			-- Manual early submit (optional).
 			roundActive = false
 			SubmitGuess:FireServer(currentGuess)
@@ -185,6 +193,17 @@ end)
 -------------------------------------------------------------------------------
 -- GAME EVENTS -> UI
 -------------------------------------------------------------------------------
+-- Pre-match 3..2..1 countdown (shown in the timer label).
+Countdown.OnClientEvent:Connect(function(n)
+	TimerLabel.Text = tostring(n)
+	AnswerBox.Text = ""
+end)
+
+-- Round timer tick (15 -> 0).
+TimerUpdate.OnClientEvent:Connect(function(seconds)
+	TimerLabel.Text = tostring(seconds)
+end)
+
 RoundStart.OnClientEvent:Connect(function(length, letterBank, images)
 	wordLength = length
 	currentGuess = ""

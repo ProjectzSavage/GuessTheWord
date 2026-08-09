@@ -1,105 +1,50 @@
 --[[
 	Hearts.server.luau
 	----------------------------------------------------------------------------
-	Run this as a regular **Script** (server) in ServerScriptService.
+	Run this as a regular **Script** (server) in ServerScriptService (optionally
+	inside the "Scripts" folder).
 
 	PURPOSE
-	Clones a BillboardGui template from ServerStorage onto each player's
-	character Head, showing that player's 3 hearts above their head. Everyone in
-	the game (including the opponent) can see these hearts.
+	Handles the above-head hearts. On character spawn it registers the player
+	with HeartHUDManager, which clones a hidden BillboardGui from ServerStorage
+	onto the player's Head. The hearts stay HIDDEN until GameManager calls
+	HeartHUDManager.setHearts() when the match actually starts.
 
-	It listens to the HeartUpdate RemoteEvent (fired by GameManager) to keep the
-	BillboardGui's hearts in sync with the player's actual health (3 = all hearts
-	visible, 1 = only Heart1 visible).
+	This script does NOT listen to a RemoteEvent to update hearts. Because
+	GameManager (server) and this script (server) run on the same machine, they
+	share the HeartHUDManager module directly - a RemoteEvent's OnServerEvent only
+	receives client->server calls and would never fire for server->server updates.
 
 	REQUIRED TEMPLATE (create once, manually, in ServerStorage):
-		ServerStorage.HeartHUD  (BillboardGui)
+		ServerStorage.HeartHUD  (BillboardGui)  Enabled defaults to true in studio;
+		the module clones it and sets Enabled = false until the match starts.
 		   -- Size: UDim2.new(0, 150, 0, 40) ; StudsOffset: Vector3.new(0,3,0)
 		   -- AlwaysOnTop: true
 		   └── HeartFrame (Frame)  -- BackgroundTransparency 1
 		        ├── UIListLayout    (FillDirection = Horizontal, Padding = 6)
-		        ├── Heart1 (ImageLabel)  Image = rbxassetid://... your heart
-		        ├── Heart2 (ImageLabel)  Image = rbxassetid://... your heart
-		        └── Heart3 (ImageLabel)  Image = rbxassetid://... your heart
-
-	The template lives in ServerStorage (not the player) so it can be cloned
-	repeatedly and stays hidden from clients until attached to a character.
+		        ├── Heart1 (ImageLabel)
+		        ├── Heart2 (ImageLabel)
+		        └── Heart3 (ImageLabel)
 ]]
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local ServerStorage = game:GetService("ServerStorage")
 
-local Events = ReplicatedStorage:WaitForChild("Events")
-local HeartUpdate = Events:WaitForChild("HeartUpdate")
+local HeartHUDManager = require(ServerStorage.Modules.HeartHUDManager)
 
-local TEMPLATE = ServerStorage:WaitForChild("HeartHUD", 30)
-if not TEMPLATE then
-	warn("[Hearts] ServerStorage.HeartHUD (BillboardGui) was not found. " ..
-		"Create it before running this script.")
-	return
-end
-
--- Map player -> the BillboardGui currently attached to their head.
-local playerBillboards = {}
-
--- Set visible hearts based on count (clamp to 0..3).
-local function setHearts(billboard, heartCount)
-	heartCount = math.clamp(heartCount, 0, 3)
-	local frame = billboard:FindFirstChild("HeartFrame")
-	if not frame then
-		warn("[Hearts] HeartHUD template is missing 'HeartFrame'.")
-		return
-	end
-	for i = 1, 3 do
-		local heart = frame:FindFirstChild("Heart" .. i)
-		if heart then
-			heart.Visible = (i <= heartCount)
-		end
-	end
-end
-
--- Attach a cloned BillboardGui to a character's head.
-local function attachToCharacter(player, character)
-	local head = character:WaitForChild("Head", 10)
-	if not head then
-		return
-	end
-
-	-- Remove any previously attached billboard for this player.
-	local old = playerBillboards[player]
-	if old then
-		old:Destroy()
-		playerBillboards[player] = nil
-	end
-
-	local billboard = TEMPLATE:Clone()
-	billboard.Parent = head
-	playerBillboards[player] = billboard
-
-	-- Initialize at full hearts (3). GameManager will correct it shortly.
-	setHearts(billboard, 3)
-end
-
--- On character spawn, attach the billboard.
 Players.PlayerAdded:Connect(function(player)
+	-- Attach a fresh (hidden) billboard each time the character (re)spawns.
 	player.CharacterAdded:Connect(function(character)
-		attachToCharacter(player, character)
+		HeartHUDManager.register(player, character)
 	end)
 
 	-- In case the player already has a character on join.
 	if player.Character then
-		attachToCharacter(player, player.Character)
+		HeartHUDManager.register(player, player.Character)
 	end
 end)
 
--- Keep hearts in sync when GameManager fires HeartUpdate.
-HeartUpdate.OnServerEvent:Connect(function(player, heartCount)
-	if typeof(heartCount) ~= "number" then
-		return
-	end
-	local billboard = playerBillboards[player]
-	if billboard then
-		setHearts(billboard, heartCount)
-	end
+-- Cleanup if a player leaves.
+Players.PlayerRemoving:Connect(function(player)
+	HeartHUDManager.remove(player)
 end)

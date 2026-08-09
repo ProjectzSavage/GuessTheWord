@@ -31,11 +31,13 @@ local Workspace = game:GetService("Workspace")
 local ServerStorage = game:GetService("ServerStorage")
 
 local Dictionary = require(ServerStorage.Modules.Dictionary)
+local HeartHUDManager = require(ServerStorage.Modules.HeartHUDManager)
 
 local Events = ReplicatedStorage:WaitForChild("Events")
 local PlayVsBotRequest = Events:WaitForChild("PlayVsBotRequest")
 local SubmitGuess = Events:WaitForChild("SubmitGuess")
 local TimerUpdate = Events:WaitForChild("TimerUpdate")
+local Countdown = Events:WaitForChild("Countdown")
 local HeartUpdate = Events:WaitForChild("HeartUpdate")
 local RoundStart = Events:WaitForChild("RoundStart")
 local RoundEnd = Events:WaitForChild("RoundEnd")
@@ -47,6 +49,7 @@ local OpponentState = Events:WaitForChild("OpponentState")
 -------------------------------------------------------------------------------
 local HEARTS_PER_PLAYER = 3
 local ROUND_TIME = 15            -- seconds per round
+local START_COUNTDOWN = 3        -- 3..2..1 before the match begins
 local BOT_THINK_TIME = 0.45      -- seconds between bot guesses
 local REMATCH_DELAY = 5          -- seconds before auto-rematch
 
@@ -132,10 +135,13 @@ local function opponentSeat(seatIndex)
 end
 
 local function broadcastHearts(tableState)
-	-- Send each real player their own current heart count.
+	-- Update the above-head billboard hearts (server-side) for each real player,
+	-- and notify the client (for the TopBar heart containers).
 	for seatIndex, occ in tableState.occupants do
 		if occ ~= "BOT" and occ then
-			HeartUpdate:FireClient(occ, tableState.hearts[seatIndex] or 0)
+			local count = tableState.hearts[seatIndex] or 0
+			HeartHUDManager.setHearts(occ, count) -- shows billboard + sets count
+			HeartUpdate:FireClient(occ, count)    -- for client TopBar UI
 		end
 	end
 end
@@ -273,6 +279,7 @@ local function loseHeart(tableState, seatIndex, reason)
 
 	local occ = tableState.occupants[seatIndex]
 	if occ ~= "BOT" and occ then
+		HeartHUDManager.setHearts(occ, tableState.hearts[seatIndex])
 		HeartUpdate:FireClient(occ, tableState.hearts[seatIndex])
 	end
 
@@ -413,9 +420,19 @@ function startMatch(tableState)
 	tableState.matchActive = true
 	tableState.hearts[1] = HEARTS_PER_PLAYER
 	tableState.hearts[2] = HEARTS_PER_PLAYER
-	broadcastHearts(tableState)
-	notifyWaiting(tableState)
-	task.wait(0.75)
+	broadcastHearts(tableState) -- also reveals the above-head hearts
+	notifyWaiting(tableState)   -- hides the "Play vs Bot" button
+
+	-- 3..2..1 countdown before the match begins.
+	for i = START_COUNTDOWN, 1, -1 do
+		for _, occ in tableState.occupants do
+			if occ ~= "BOT" and occ then
+				Countdown:FireClient(occ, i)
+			end
+		end
+		task.wait(1)
+	end
+
 	startRound(tableState)
 end
 

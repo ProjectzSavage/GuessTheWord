@@ -19,7 +19,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local EVENT_NAMES = {
 	"PlayVsBotRequest", -- Client -> Server : player wants to play vs a bot
 	"SubmitGuess",      -- Client -> Server : player submits a word
-	"TimerUpdate",      -- Server -> Client : countdown tick
+	"TimerUpdate",      -- Server -> Client : round countdown tick
+	"Countdown",        -- Server -> Client : pre-match 3..2..1 countdown
 	"HeartUpdate",      -- Server -> Client : this player's heart count changed
 	"RoundStart",       -- Server -> Client : new round data (bank, images, length)
 	"RoundEnd",         -- Server -> Client : round finished (correct/timeout)

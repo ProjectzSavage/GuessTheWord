@@ -27,6 +27,7 @@ ServerScriptService
 | `src/ServerScriptService/GameManager.server.luau`               | `ServerScriptService > Scripts` | Script   |
 | `src/ServerScriptService/Hearts.server.luau`                    | `ServerScriptService > Scripts` | Script   |
 | `src/ServerStorage/Modules/Dictionary.luau`                     | `ServerStorage > Modules`   | ModuleScript |
+| `src/ServerStorage/Modules/HeartHUDManager.luau`                | `ServerStorage > Modules`   | ModuleScript |
 | `src/StarterPlayerScripts/InputHandler.client.luau`             | `StarterPlayerScripts`      | LocalScript |
 
 > **Tip:** For each file, right-click the target container in Studio →
@@ -72,13 +73,16 @@ Workspace
 
 1. A player sits in `Seat1`.
 2. Server fires `OpponentState(waiting=true)` → the `PlayVsBotButton` appears.
+   (Hearts above the head stay **hidden** until the match actually starts.)
 3. Either a second player sits in `Seat2` (normal 1v1), or the first player
    clicks **Play vs Bot** (a bot rig spawns in the empty seat immediately).
-4. `GameManager` picks a word, scrambles its letters, and sends
-   `RoundStart(wordLength, letterBank, images)`.
-5. Players click / type letters. On full length, `SubmitGuess` is fired.
-6. Server validates: correct → opponent −1 heart; timeout (15s) → both −1 heart.
-7. First to 0 hearts loses. Survivor (or draw) is announced, then auto-rematch.
+4. A **3-second countdown** (3…2…1) plays in the timer label, and the hearts
+   above the players' heads appear.
+5. `GameManager` picks a word, scrambles its letters, and sends
+   `RoundStart(wordLength, letterBank, images)`. The 15s round timer starts.
+6. Players click / type letters. On full length, `SubmitGuess` is fired.
+7. Server validates: correct → opponent −1 heart; timeout (15s) → both −1 heart.
+8. First to 0 hearts loses. Survivor (or draw) is announced, then auto-rematch.
 
 ---
 
