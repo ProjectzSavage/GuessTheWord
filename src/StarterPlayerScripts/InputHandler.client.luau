@@ -63,8 +63,10 @@ AnswerBox.TextEditable = false
 -- in Studio, toggling a child does nothing. We therefore control the top-level
 -- frames' Visible here based on game state. You can leave them Visible = false
 -- in Studio; this script forces the right state at runtime.
+--
+-- (GameUI is a ScreenGui, which uses `.Enabled` rather than `.Visible`.)
 -------------------------------------------------------------------------------
-GameUI.Visible = true -- never want the whole screen hidden
+GameUI.Enabled = true -- never hide the whole screen
 
 local function setWaitingUI(waiting)
 	-- Waiting-for-opponent state: only the "Play vs Bot" area is shown.
