@@ -65,19 +65,50 @@ OpponentHeartContainer          PlayerHeartContainer
 > `OpponentHeartContainer` accordingly. The above-head hearts
 > (`ServerStorage.HeartHUD`) are still driven server-side.
 
-## ScrambledBank (dynamic)
+## ScrambledBank (dynamic, template-based)
 
-Do **not** create tiles by hand. `InputHandler` creates `ImageButton` tiles
-(named `Tile1..N`) inside `ScrambledBank` on every `RoundStart`, lays them out
-with a `UIListLayout`, and wires click handling automatically. Each tile shows
-the letter as an image from `ReplicatedStorage.LetterImages`.
+You may set up a **template tile** inside `ScrambledBank` and the script will
+clone it once per letter (one tile per letter of the word):
+
+```
+PuzzleArea.ScrambledBank  (Frame)
+    ├── UIGridLayout            (optional but recommended - set CellSize, e.g. 44x44)
+    └── TileTemplate  (ImageButton)   Visible = false  (the script clones this)
+```
+
+On each `RoundStart`, `InputHandler`:
+1. clears all tiles except `TileTemplate`,
+2. ensures a `UIGridLayout` exists (yours is kept),
+3. clones `TileTemplate` once per letter, names them `Tile1..N`, sets each
+   tile's `Image` to that letter's image (from `ReplicatedStorage.LetterImages`),
+4. wires click handling (clicking appends the letter).
+
+If you don't create a `TileTemplate`, the script builds plain `ImageButton` tiles
+programmatically instead.
+
+## AnswerBox (centered letter stack)
+
+`AnswerBox` is a **Frame** containing one `ImageLabel` slot per letter, arranged
+by a **centered** `UIListLayout` (`HorizontalAlignment = Center`). That way the
+whole typed word stays centered in the box. Empty slots show the underscore
+image (`LetterImages.underscore`); filled slots show the letter image. As you
+type, the newest letter fills the next slot left-to-right — like a centered
+word stack. The script builds the slots itself; leave `AnswerBox` empty in
+Studio (only set its background/position).
 
 ## LetterImages module (in ReplicatedStorage)
 
-`InputHandler` reads `ReplicatedStorage.LetterImages` for the A-Z letter images.
-Open that ModuleScript and replace the placeholder `rbxassetid://...` values
-with **your** A-Z asset IDs. There's also an optional `underscore` image used for
-empty answer-box slots.
+`InputHandler` reads `ReplicatedStorage.LetterImages` for the A-Z letter images
+and the underscore image. Open that ModuleScript and replace the placeholder
+`rbxassetid://...` values with **your** asset IDs.
+
+## HoverFX (pop effect)
+
+- `ReplicatedStorage.HoverFX` — reusable module. `HoverFX.applyTo(guiObject, {scale, duration})`
+  animates a child `UIScale` so it pops/grows on hover without reflowing the layout.
+- `StarterPlayerScripts.HoverController` — LocalScript that applies the pop
+  effect to the 4 clue images (`ImageGrid.Clue1..Clue4`) and every scrambled-bank
+  tile (including ones created at runtime). Tune the `scale`/`duration` there.
 
 ## HeartHUD (above-head BillboardGui) — in ServerStorage
 

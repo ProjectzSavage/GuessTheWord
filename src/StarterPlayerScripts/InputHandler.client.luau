@@ -12,9 +12,16 @@
 	      automatically fires SubmitGuess to the server for validation.
 	* LETTER IMAGES: the scrambled bank tiles and the answer-box slots are shown
 	  as IMAGES (from ReplicatedStorage.LetterImages), not text.
+	* SCRAMBLED BANK: uses a UIGridLayout + a user-made "TileTemplate" (ImageButton)
+	  inside ScrambledBank; the script clones it once per letter (one tile per
+	  letter of the word) and wires clicks. If no template exists, tiles are
+	  built programmatically.
+	* ANSWER BOX: builds one slot per letter, laid out by a CENTERED UIListLayout
+	  so the whole word stays centered as you type. Empty slots show the
+	  underscore image; filled slots show the letter image. The newest letter
+	  fills the next slot left-to-right (like a centered word stack).
 	* TOPBAR HEARTS: fills PlayerHeartContainer (your hearts) and
 	  OpponentHeartContainer (the enemy's) from HeartUpdate / OpponentHeartUpdate.
-	* Builds the ScrambledBank tiles dynamically each round (RoundStart).
 
 	REQUIRED UI (see docs/UI_HIERARCHY.md) - must exist in StarterGui.GameUI:
 		GameUI  (ScreenGui)
@@ -25,6 +32,8 @@
 		  ├── PuzzleArea  (Frame)
 		  │     ├── AnswerBox (Frame)   -- slots are built here as ImageLabels
 		  │     └── ScrambledBank (Frame)
+		  │           ├── UIGridLayout  (optional, recommended)
+		  │           └── TileTemplate  (ImageButton, optional, Visible=false)
 		  └── InteractionFrame  (Frame)
 		        └── PlayVsBotButton (TextButton)
 ]]
@@ -94,6 +103,7 @@ end
 local wordLength = 0
 local currentGuess = ""      -- letters typed so far
 local buttonMap = {}         -- tile -> letter
+local slots = {}             -- index -> ImageLabel slot
 local roundActive = false
 
 setWaitingUI(false) -- start hidden until the server says otherwise
@@ -120,77 +130,100 @@ OpponentHeartUpdate.OnClientEvent:Connect(function(count)
 end)
 
 -------------------------------------------------------------------------------
--- LETTER-IMAGE BUILDERS
+-- SCRAMBLED BANK (template + UIGridLayout)
 -------------------------------------------------------------------------------
--- Scrambled bank: create one ImageButton tile per letter.
 local function buildBank(letterBank)
-	-- clear old tiles
+	-- Clear old tiles, but KEEP the user's TileTemplate (and any layout).
 	for _, child in ScrambledBank:GetChildren() do
-		if child:IsA("GuiObject") then
+		if child:IsA("GuiObject") and child.Name ~= "TileTemplate" then
 			child:Destroy()
 		end
 	end
 	buttonMap = {}
 
-	-- horizontal flow
-	local listLayout = Instance.new("UIListLayout")
-	listLayout.FillDirection = Enum.FillDirection.Horizontal
-	listLayout.Padding = UDim.new(0, 8)
-	listLayout.Parent = ScrambledBank
+	-- Ensure a UIGridLayout exists (use the user's if they added one).
+	if not ScrambledBank:FindFirstChildOfClass("UIGridLayout") then
+		local grid = Instance.new("UIGridLayout")
+		grid.CellSize = UDim2.new(0, 44, 0, 44)
+		grid.CellPadding = UDim2.new(0, 8, 0, 8)
+		grid.Parent = ScrambledBank
+	end
 
+	local template = ScrambledBank:FindFirstChild("TileTemplate")
+	if template and template:IsA("GuiButton") then
+		template.Visible = false -- never show the template itself
+	end
+
+	-- One tile per letter in the bank (one tile per letter of the word).
 	for i, letter in letterBank do
-		local tile = Instance.new("ImageButton")
+		local tile
+		if template then
+			tile = template:Clone()
+			tile.Visible = true -- clones inherit Visible=false; force it on
+		else
+			tile = Instance.new("ImageButton")
+			tile.BackgroundColor3 = Color3.fromRGB(70, 90, 140)
+			tile.BackgroundTransparency = 0.2
+			tile.AutoButtonColor = true
+		end
 		tile.Name = "Tile" .. i
-		tile.Size = UDim2.new(0, 44, 0, 44)
 		tile.Image = LetterImages[letter] or ""
-		tile.BackgroundColor3 = Color3.fromRGB(70, 90, 140)
-		tile.BackgroundTransparency = 0.2
 		tile.ScaleType = Enum.ScaleType.Fit
-		tile.AutoButtonColor = true
 		tile.Parent = ScrambledBank
 
 		buttonMap[tile] = letter
 	end
 end
 
--- Answer box: rebuild one slot Frame + ImageLabel per letter position.
-local function renderAnswer()
-	-- clear old slots
+-------------------------------------------------------------------------------
+-- ANSWER BOX (centered slots with underscore)
+-------------------------------------------------------------------------------
+-- Build one ImageLabel slot per letter, laid out by a CENTERED UIListLayout.
+-- Empty slots show the underscore image; filled slots show the letter image.
+local function buildSlots()
 	for _, child in AnswerBox:GetChildren() do
-		if child:IsA("Frame") then
+		if child:IsA("GuiObject") then
 			child:Destroy()
 		end
 	end
+	slots = {}
 
-	-- ensure a horizontal layout exists
+	-- Centered horizontal layout so the whole word stays centered.
 	if not AnswerBox:FindFirstChildOfClass("UIListLayout") then
-		local listLayout = Instance.new("UIListLayout")
-		listLayout.FillDirection = Enum.FillDirection.Horizontal
-		listLayout.Padding = UDim.new(0, 6)
-		listLayout.Parent = AnswerBox
+		local ll = Instance.new("UIListLayout")
+		ll.FillDirection = Enum.FillDirection.Horizontal
+		ll.HorizontalAlignment = Enum.HorizontalAlignment.Center
+		ll.VerticalAlignment = Enum.VerticalAlignment.Center
+		ll.Padding = UDim.new(0, 6)
+		ll.Parent = AnswerBox
 	end
 
 	for i = 1, wordLength do
-		local slot = Instance.new("Frame")
+		local slot = Instance.new("ImageLabel")
 		slot.Name = "Slot" .. i
 		slot.Size = UDim2.new(0, 48, 0, 48)
-		slot.BackgroundColor3 = Color3.fromRGB(35, 40, 60)
-		slot.BorderSizePixel = 2
-		slot.BorderColor3 = Color3.fromRGB(120, 130, 160)
+		slot.BackgroundTransparency = 1
+		slot.ScaleType = Enum.ScaleType.Fit
+		slot.Image = LetterImages.underscore or ""
 		slot.Parent = AnswerBox
+		slots[i] = slot
+	end
 
-		local img = Instance.new("ImageLabel")
-		img.Size = UDim2.new(1, -8, 1, -8)
-		img.Position = UDim2.new(0, 4, 0, 4)
-		img.BackgroundTransparency = 1
-		img.ScaleType = Enum.ScaleType.Fit
-		local ch = string.sub(currentGuess, i, i)
-		if ch ~= "" then
-			img.Image = LetterImages[ch] or ""
-		elseif LetterImages.underscore then
-			img.Image = LetterImages.underscore
+	refreshSlots()
+end
+
+-- Update each slot's image to match currentGuess (letter or underscore).
+local function refreshSlots()
+	for i = 1, wordLength do
+		local slot = slots[i]
+		if slot then
+			local ch = string.sub(currentGuess, i, i)
+			if ch ~= "" then
+				slot.Image = LetterImages[ch] or ""
+			else
+				slot.Image = LetterImages.underscore or ""
+			end
 		end
-		img.Parent = slot
 	end
 end
 
@@ -205,7 +238,7 @@ local function appendLetter(letter)
 		return
 	end
 	currentGuess = currentGuess .. letter
-	renderAnswer()
+	refreshSlots()
 
 	-- AUTO-SUBMIT: full length reached -> server validates.
 	if #currentGuess >= wordLength then
@@ -222,11 +255,11 @@ local function backspace()
 	end
 	if #currentGuess > 0 then
 		currentGuess = string.sub(currentGuess, 1, -2)
-		renderAnswer()
+		refreshSlots()
 	end
 end
 
--- CLICK: wire ScrambledBank tiles.
+-- CLICK: wire ScrambledBank tiles (both user template clones and fallbacks).
 ScrambledBank.ChildAdded:Connect(function(tile)
 	if not tile:IsA("ImageButton") then
 		return
@@ -287,7 +320,7 @@ RoundStart.OnClientEvent:Connect(function(length, letterBank, images)
 	currentGuess = ""
 	roundActive = true
 	buildBank(letterBank)
-	renderAnswer()
+	buildSlots()
 	-- (Optionally display `images` in PuzzleArea.ImageGrid here.)
 	PlayVsBotButton.Visible = false
 end)
@@ -297,7 +330,7 @@ RoundEnd.OnClientEvent:Connect(function(result, correctWord)
 	-- Reveal the word using letter images.
 	wordLength = #correctWord
 	currentGuess = correctWord
-	renderAnswer()
+	buildSlots()
 	TimerLabel.Text = "0"
 end)
 

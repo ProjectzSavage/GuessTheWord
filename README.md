@@ -27,9 +27,11 @@ src/
 │       ├── Dictionary.luau         # server-only word/image dictionary
 │       └── HeartHUDManager.luau    # server-side hearts for players + bot
 ├── ReplicatedStorage/
-│   └── LetterImages.luau           # A-Z letter images for the UI
+│   ├── LetterImages.luau           # A-Z letter images for the UI
+│   └── HoverFX.luau                # reusable hover/pop effect
 └── StarterPlayerScripts/
-    └── InputHandler.client.luau    # hybrid click + keyboard input + UI
+    ├── InputHandler.client.luau    # hybrid click + keyboard input + UI
+    └── HoverController.client.luau # applies HoverFX to clues + letter tiles
 ```
 
 ## Feature checklist
