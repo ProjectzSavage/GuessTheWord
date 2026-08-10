@@ -41,6 +41,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local Camera = workspace.CurrentCamera
 
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
@@ -109,7 +111,9 @@ end
 -- {0.5, 0} near the top). It slides DOWN→UP in, and UP→DOWN out.
 -------------------------------------------------------------------------------
 local topBarRestingPos = TopBar.Position
-local TOPBAR_SLIDE = 220 -- px the bar travels when sliding in/out
+-- Slide distance in SCALE (fraction of the screen height) so it looks the same
+-- on every display size.
+local TOPBAR_SLIDE_SCALE = 0.15
 
 local function slideTopBarIn()
 	if TopBar.Visible and TopBar.Position == topBarRestingPos then
@@ -117,7 +121,7 @@ local function slideTopBarIn()
 	end
 	TopBar.Visible = true
 	-- Start below the resting spot, then glide up to rest.
-	TopBar.Position = topBarRestingPos + UDim2.new(0, 0, 0, TOPBAR_SLIDE)
+	TopBar.Position = topBarRestingPos + UDim2.new(0, 0, TOPBAR_SLIDE_SCALE, 0)
 	TweenService:Create(
 		TopBar,
 		TweenInfo.new(0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
@@ -126,7 +130,7 @@ local function slideTopBarIn()
 end
 
 local function slideTopBarOut()
-	local endPos = topBarRestingPos + UDim2.new(0, 0, 0, TOPBAR_SLIDE)
+	local endPos = topBarRestingPos + UDim2.new(0, 0, TOPBAR_SLIDE_SCALE, 0)
 	local t = TweenService:Create(
 		TopBar,
 		TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.In),
@@ -140,15 +144,64 @@ local function slideTopBarOut()
 end
 
 -------------------------------------------------------------------------------
--- COUNTDOWN FRAME (3-2-1-GO! pulse)
+-- CINEMATIC EFFECT (background blur + FOV)
+-- When the PuzzleArea / CountdownFrame is active, blur the background and
+-- smoothly raise the camera FOV. When they close, ease it all back.
 -------------------------------------------------------------------------------
+local baseFOV = Camera and Camera.FieldOfView or 70
+local blurEffect = Lighting:FindFirstChildOfClass("BlurEffect")
+if not blurEffect then
+	blurEffect = Instance.new("BlurEffect")
+	blurEffect.Size = 0
+	blurEffect.Parent = Lighting
+end
+
+local cinematicActive = false
+
+local function setCinematic(active)
+	if cinematicActive == active then
+		return
+	end
+	cinematicActive = active
+
+	local targetBlur = active and 10 or 0
+	local targetFOV = active and math.min(baseFOV + 8, 90) or baseFOV
+
+	if blurEffect then
+		TweenService:Create(
+			blurEffect,
+			TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{ Size = targetBlur }
+		):Play()
+	end
+	if Camera then
+		TweenService:Create(
+			Camera,
+			TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{ FieldOfView = targetFOV }
+		):Play()
+	end
+end
+
+-------------------------------------------------------------------------------
+-- COUNTDOWN FRAME (3-2-1-GO! pulse + colors)
+-------------------------------------------------------------------------------
+local COUNTDOWN_COLORS = {
+	["3"] = Color3.fromRGB(255, 60, 60),   -- red
+	["2"] = Color3.fromRGB(255, 160, 50),  -- orange
+	["1"] = Color3.fromRGB(255, 220, 60),  -- yellow
+	["GO!"] = Color3.fromRGB(80, 255, 120), -- green
+}
+
 local function showCountdown(text)
 	if not CountdownFrame then
 		return
 	end
 	CountdownFrame.Visible = true
+	setCinematic(true)
 	if CountdownLabel then
 		CountdownLabel.Text = text
+		CountdownLabel.TextColor3 = COUNTDOWN_COLORS[text] or Color3.new(1, 1, 1)
 		local s = CountdownLabel:FindFirstChildOfClass("UIScale")
 		if not s then
 			s = Instance.new("UIScale")
@@ -168,11 +221,13 @@ local function hideCountdown()
 		return
 	end
 	CountdownFrame.Visible = false
+	setCinematic(false)
 end
 
 local function setWaitingUI(waiting)
 	hideCountdown()
 	if waiting then
+		setCinematic(false)
 		showFrame(InteractionFrame)
 		showFrame(PlayVsBotButton)
 		hideFrame(PuzzleArea)
@@ -188,6 +243,7 @@ local function revealRoundUI()
 	hideCountdown()
 	slideTopBarIn()
 	showFrame(PuzzleArea)
+	setCinematic(true)
 	hideFrame(InteractionFrame)
 end
 
@@ -197,6 +253,7 @@ local function showTopBarOnly()
 	hideCountdown()
 	slideTopBarIn()
 	PuzzleArea.Visible = false      -- immediate hide so the heart loss is visible
+	setCinematic(false)
 	hideFrame(InteractionFrame)
 end
 

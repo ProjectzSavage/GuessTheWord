@@ -5,6 +5,11 @@
 > scripts will error loudly on `WaitForChild` (which is intentional — it makes
 > mistakes obvious).
 
+> **Positioning:** set all top-level frame `Position`s in **Scale** (e.g.
+> `{0.5, 0},{0.42, 0}`) with an appropriate `AnchorPoint`, not offset pixels, so
+> the layout is consistent across screens. The in-script slide/tween animations
+> already use Scale.
+
 ## Top-level tree
 
 ```
@@ -23,7 +28,8 @@ StarterGui
     │       └── Heart3  (ImageLabel)
     │
     ├── CountdownFrame  (Frame)     full-screen overlay for the 3-2-1-GO! pulse
-    │   └── CountdownLabel (TextLabel)  big text; shown center-screen
+    │   └── CountdownLabel (TextLabel)  big text; center-screen. Color set by the
+    │                                  script: 3=red, 2=orange, 1=yellow, GO!=green
     ├── PuzzleArea  (Frame)      center of screen
     │   ├── ImageGrid  (Frame)   UIGridLayout: 2x2, 4 ImageLabels (clue images)
     │   │   ├── Clue1 (ImageLabel)

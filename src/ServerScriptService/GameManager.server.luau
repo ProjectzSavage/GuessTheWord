@@ -56,7 +56,6 @@ local START_COUNTDOWN = 3        -- 3..2..1 before the match begins
 -- To keep it clearly beatable, it guesses slowly and only ~50% of the time.
 local BOT_THINK_TIME = 1.1       -- seconds between bot guesses
 local BOT_GUESS_CHANCE = 0.5     -- probability the bot actually guesses each tick
-local REMATCH_DELAY = 5          -- seconds before auto-rematch
 local POLL_INTERVAL = 0.2        -- how often we poll seats for a sitting player
 -- Correct-answer dramatic beat: hide puzzle -> pause -> loser's heart blinks out
 -- -> pause -> show next round. Timings in seconds.
@@ -115,7 +114,6 @@ local function discoverTables()
 					roundGen = 0,          -- increments each round; kills stale threads
 					botConn = nil,         -- bot loop thread
 					botActive = false,     -- is the bot thinking loop running?
-					rematchConn = nil,     -- rematch timer
 					attemptedGuesses = {}, -- bot: tried permutations
 				}
 			end
@@ -224,13 +222,21 @@ local function buildBotRig(seat)
 		return humanoid
 	end
 
-	-- Fallback: minimal rig (no template provided).
+	-- Fallback: minimal rig (no template provided). Still gets a Head so the
+	-- Hearts billboard can attach (above-head hearts always work for the bot).
 	local root = Instance.new("Part")
 	root.Name = "HumanoidRootPart"
 	root.Size = Vector3.new(2, 2, 1)
 	root.Anchored = false
 	root.CanCollide = false
 	root.Transparency = 0.5
+
+	local head = Instance.new("Part")
+	head.Name = "Head"
+	head.Size = Vector3.new(1, 1, 1)
+	head.Transparency = 0.5
+	head.Anchored = false
+	head.CanCollide = false
 
 	local humanoid = Instance.new("Humanoid")
 
@@ -239,12 +245,15 @@ local function buildBotRig(seat)
 	model.PrimaryPart = root
 	root.Parent = model
 	humanoid.Parent = model
+	head.Parent = model
 
 	local seatCFrame = seat.CFrame * CFrame.new(0, 1.2, 0)
 	model:PivotTo(seatCFrame)
 	humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
 	model.Parent = Workspace
 	humanoid.Sit = true
+	-- Give the bot above-head hearts even with the fallback rig.
+	HeartHUDManager.register(model, model)
 
 	return humanoid
 end
@@ -358,13 +367,9 @@ function gameOver(tableState, winnerSeatIndex)
 		end
 	end
 
-	-- Auto-rematch: if both seats are still occupied after a short delay.
-	tableState.rematchConn = task.delay(REMATCH_DELAY, function()
-		local stillFull = tableState.occupants[1] and tableState.occupants[2]
-		if stillFull then
-			startMatch(tableState)
-		end
-	end)
+	-- NOTE: no auto-rematch. The match genuinely ENDS here (a player lost all 3
+	-- hearts). To play again, a player stands up and re-sits (a fresh match
+	-- starts once both seats are occupied again).
 
 	-- Dramatic end: winner stands up, loser ragdolls then respawns.
 	handleMatchEndDramatics(tableState, winnerSeatIndex)
@@ -584,10 +589,6 @@ function startRound(tableState)
 end
 
 function startMatch(tableState)
-	if tableState.rematchConn then
-		tableState.rematchConn:Disconnect()
-		tableState.rematchConn = nil
-	end
 	tableState.matchActive = true
 	tableState.hearts[1] = HEARTS_PER_PLAYER
 	tableState.hearts[2] = HEARTS_PER_PLAYER

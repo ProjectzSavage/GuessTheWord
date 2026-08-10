@@ -56,6 +56,19 @@ Build the exact tree in `docs/UI_HIERARCHY.md` **manually** in `StarterGui`:
 - Set `TopBar.AnchorPoint = {0.5, 0}` and its resting `Position` where you want
   it (e.g. top-center). The script slides it down→up when the round starts and
   up→down when it leaves.
+
+**Use SCALE, not offset, for all top-level frame positions.** Set each frame's
+`Position` with `{X, 0},{Y, 0}` (Scale) so the layout looks right on every
+screen size. Example for a top-center TopBar: `Position = {0.5, 0},{0, 0}`
+with `AnchorPoint = {0.5, 0}`. The in-script slide animation already uses Scale.
+
+**Raise the GUI** — the `PuzzleArea` is positioned in Studio; give it a slightly
+higher `Position` (e.g. `{0.5, 0},{0.42, 0}` with `AnchorPoint {0.5, 0.5}`) so it
+sits a touch above center.
+
+**Cinematic effects** — when the countdown or puzzle is on screen, the script
+automatically blurs the background (a `BlurEffect` in `Lighting`) and smoothly
+raises the camera FOV, easing back when they close.
 - Put your own heart textures and clue image asset IDs where the docs say.
 
 The `ScrambledBank` tiles, the `AnswerBox` slots, and the above-head `HeartHUD`
