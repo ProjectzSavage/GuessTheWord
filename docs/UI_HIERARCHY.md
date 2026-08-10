@@ -79,12 +79,15 @@ PuzzleArea.ScrambledBank  (Frame)
 On each `RoundStart`, `InputHandler`:
 1. clears all tiles except `TileTemplate`,
 2. ensures a `UIGridLayout` exists (yours is kept),
-3. clones `TileTemplate` once per letter, names them `Tile1..N`, sets each
-   tile's `Image` to that letter's image (from `ReplicatedStorage.LetterImages`),
-4. wires click handling (clicking appends the letter).
+3. clones `TileTemplate` once per letter — the server sends a **12-letter bank**
+   (the word's letters + 8 random fillers), so 12 tiles appear (`Tile1..12`),
+4. sets each tile's `Image` to that letter's image (`ReplicatedStorage.LetterImages`),
+5. wires click handling. Clicking a tile plays a **flying-letter animation**: a
+   copy of the tile tweens from the bank into the answer slot, then the slot updates.
 
 If you don't create a `TileTemplate`, the script builds plain `ImageButton` tiles
-programmatically instead.
+programmatically instead. With 12 tiles, make your `UIGridLayout` wide enough
+(e.g. 4 columns × 3 rows, or a single row of 12).
 
 ## AnswerBox (centered letter stack)
 

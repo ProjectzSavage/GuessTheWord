@@ -17,6 +17,9 @@
 
 local Dictionary = {}
 
+-- Total number of letters shown in the scrambled bank (fillers + word letters).
+Dictionary.BANK_LETTERS = 12
+
 Dictionary.Entries = {
 	{
 		word = "star",
@@ -153,6 +156,22 @@ function Dictionary.scrambleWord(word)
 		table.insert(letters, string.sub(word, i, i))
 	end
 	return shuffle(letters)
+end
+
+-- Builds the 12-letter scrambled bank shown to players. It always contains
+-- every letter of the word (so the answer is reachable) PLUS enough random
+-- filler letters to reach BANK_LETTERS total.
+function Dictionary.buildBank(word)
+	local bank = {}
+	for i = 1, #word do
+		table.insert(bank, string.sub(word, i, i))
+	end
+	local fillers = Dictionary.BANK_LETTERS - #bank
+	for i = 1, fillers do
+		-- Random lowercase a-z filler (duplicates are allowed and add challenge).
+		table.insert(bank, string.char(math.random(97, 122)))
+	end
+	return shuffle(bank)
 end
 
 -- Returns true if a given word exists in the dictionary (server-side validation).

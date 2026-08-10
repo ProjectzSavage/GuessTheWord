@@ -32,6 +32,7 @@ ServerScriptService
 | `src/ReplicatedStorage/HoverFX.luau`                          | `ReplicatedStorage`         | ModuleScript |
 | `src/StarterPlayerScripts/InputHandler.client.luau`             | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/HoverController.client.luau`          | `StarterPlayerScripts`      | LocalScript |
+| `src/StarterPlayerScripts/Preloader.client.luau`                | `StarterPlayerScripts`      | LocalScript |
 
 > **Tip:** For each file, right-click the target container in Studio →
 > **Insert Object** → choose the right type, name it, then paste the file's
@@ -102,7 +103,7 @@ Workspace
 
 ---
 
-## 4. Game flow (what to expect)
+## 5. Game flow (what to expect)
 
 1. A player sits in `Seat1`.
 2. Server fires `OpponentState(waiting=true)` → the `PlayVsBotButton` appears.
@@ -111,11 +112,28 @@ Workspace
    clicks **Play vs Bot** (a bot rig spawns in the empty seat immediately).
 4. A **3-second countdown** (3…2…1) plays in the timer label, and the hearts
    above the players' heads appear.
-5. `GameManager` picks a word, scrambles its letters, and sends
-   `RoundStart(wordLength, letterBank, images)`. The 15s round timer starts.
+5. `GameManager` picks a word, builds a **12-letter bank** (the word's letters
+   plus random fillers), and sends `RoundStart(wordLength, letterBank, images)`.
+   The 15s round timer starts.
 6. Players click / type letters. On full length, `SubmitGuess` is fired.
 7. Server validates: correct → opponent −1 heart; timeout (15s) → both −1 heart.
 8. First to 0 hearts loses. Survivor (or draw) is announced, then auto-rematch.
+
+**Correct-answer beat:** when the answer is found, the server hides the
+`PuzzleArea`, waits 2s, makes the loser's heart disappear, waits another 2s, then
+starts the next round (which reshores the puzzle). The heart fade is animated in
+`InputHandler`.
+
+**Filler letters:** the bank always contains 12 letters — the word's letters are
+guaranteed present, the rest are random `a–z` fillers (`Dictionary.BANK_LETTERS`
+= 12, adjustable).
+
+## 6. Asset preloading
+
+`Preloader.client.luau` preloads the letter images (A–Z + underscore), the TopBar
+heart images, and the clue images so they don't pop in mid-round. It uses
+`ContentProvider:PreloadAsync` in a background task. Add more assets to its
+`content`/`instances` lists as needed.
 
 ---
 

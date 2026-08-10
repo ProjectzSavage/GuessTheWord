@@ -54,6 +54,10 @@ local START_COUNTDOWN = 3        -- 3..2..1 before the match begins
 local BOT_THINK_TIME = 0.45      -- seconds between bot guesses
 local REMATCH_DELAY = 5          -- seconds before auto-rematch
 local POLL_INTERVAL = 0.2        -- how often we poll seats for a sitting player
+-- Correct-answer dramatic beat: hide puzzle -> pause -> loser's heart leaves ->
+-- pause -> show next round. Timings in seconds.
+local CORRECT_REVEAL_HIDE = 2.0
+local CORRECT_HEART_DELAY = 2.0
 
 local TABLE_AREA = Workspace:WaitForChild("GameArea")
 
@@ -248,16 +252,24 @@ end
 local function stopBot(tableState)
 	tableState.botActive = false
 	if tableState.botConn then
-		task.cancel(tableState.botConn)
+		local t = tableState.botConn
 		tableState.botConn = nil
+		-- Never cancel the CURRENTLY running thread (e.g. the bot's own loop when
+		-- it just guessed correctly -> endRound -> stopBot). That would error.
+		if t ~= coroutine.running() then
+			task.cancel(t)
+		end
 	end
 end
 
 local function stopRound(tableState)
 	tableState.roundActive = false
 	if tableState.roundConn then
-		task.cancel(tableState.roundConn)
+		local t = tableState.roundConn
 		tableState.roundConn = nil
+		if t ~= coroutine.running() then
+			task.cancel(t)
+		end
 	end
 end
 
@@ -281,7 +293,10 @@ local function startBotLoop(tableState, seatIndex)
 				break
 			end
 
-			-- Build a random permutation of the bank (a candidate word).
+			-- The bank holds 12 letters (word letters + fillers). The bot guesses
+			-- a word of the CORRECT length by picking `wordLen` distinct letters
+			-- from the bank in a random order. This keeps the answer reachable.
+			local wordLen = #tableState.currentWord
 			local order = {}
 			for i = 1, #bank do
 				order[i] = i
@@ -292,11 +307,11 @@ local function startBotLoop(tableState, seatIndex)
 			end
 
 			local candidate = ""
-			for _, idx in order do
-				candidate = candidate .. bank[idx]
+			for k = 1, wordLen do
+				candidate = candidate .. bank[order[k]]
 			end
 
-			-- Avoid repeating a permutation the bot already tried this round.
+			-- Avoid repeating a candidate the bot already tried this round.
 			if not tableState.attemptedGuesses[candidate] then
 				tableState.attemptedGuesses[candidate] = true
 				-- Same validation path as a real player (server side).
@@ -398,17 +413,21 @@ function handleGuess(tableState, seatIndex, guess)
 	local word = tableState.currentWord
 
 	if guess == word then
-		-- Guesser is correct -> opponent loses a heart.
+		-- Guesser is correct. Dramatic beat:
+		--   1) endRound fires "correct" -> clients hide the PuzzleArea.
+		--   2) pause, then the opponent loses a heart (that heart fades out).
+		--   3) pause again, then continue (or end the game).
 		local opponentIdx = opponentSeat(seatIndex)
 		endRound(tableState, "correct", word)
+
+		task.wait(CORRECT_REVEAL_HIDE)
 		local dead = loseHeart(tableState, opponentIdx, "guess")
 
+		task.wait(CORRECT_HEART_DELAY)
 		if dead then
 			gameOver(tableState, seatIndex)
 		else
-			-- Start next round with both still alive.
-			task.wait(1.2) -- short pause so players can read the answer
-			startRound(tableState)
+			startRound(tableState) -- clients reshow the PuzzleArea on RoundStart
 		end
 	end
 	-- Wrong guesses are simply ignored (no penalty) for now.
@@ -419,7 +438,7 @@ function startRound(tableState)
 
 	local entry = Dictionary.randomEntry()
 	tableState.currentWord = entry.word
-	tableState.letterBank = Dictionary.scrambleWord(entry.word)
+	tableState.letterBank = Dictionary.buildBank(entry.word)
 
 	local wordLength = #entry.word
 

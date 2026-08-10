@@ -5,23 +5,22 @@
 
 	RESPONSIBILITIES
 	* HYBRID INPUT:
-	    - CLICK: clicking a letter tile in PuzzleArea.ScrambledBank appends it.
+	    - CLICK: clicking a letter tile animates it flying into the answer box.
 	    - TYPE:  pressing a keyboard A-Z key appends that letter.
 	    - BACKSPACE removes the last letter.
 	    - SUBMIT: when the answer reaches the round's word length, it
 	      automatically fires SubmitGuess to the server for validation.
-	* LETTER IMAGES: the scrambled bank tiles and the answer-box slots are shown
-	  as IMAGES (from ReplicatedStorage.LetterImages), not text.
-	* SCRAMBLED BANK: uses a UIGridLayout + a user-made "TileTemplate" (ImageButton)
-	  inside ScrambledBank; the script clones it once per letter (one tile per
-	  letter of the word) and wires clicks. If no template exists, tiles are
-	  built programmatically.
-	* ANSWER BOX: builds one slot per letter, laid out by a CENTERED UIListLayout
-	  so the whole word stays centered as you type. Empty slots show the
-	  underscore image; filled slots show the letter image. The newest letter
-	  fills the next slot left-to-right (like a centered word stack).
-	* TOPBAR HEARTS: fills PlayerHeartContainer (your hearts) and
-	  OpponentHeartContainer (the enemy's) from HeartUpdate / OpponentHeartUpdate.
+	* SCRAMBLED BANK (12 letters): the server sends a 12-letter bank (the word's
+	  letters + random fillers). Tiles are built from a "TileTemplate" ImageButton
+	  inside a UIGridLayout (or programmatically if no template).
+	* ANSWER BOX: one centered slot per letter. Empty slots show the underscore
+	  image; filled slots show the letter image.
+	* FLYING LETTER ANIMATION: clicking a tile flies a copy of it to the target
+	  slot before the slot updates.
+	* TOPBAR HEARTS: fills PlayerHeartContainer + OpponentHeartContainer from
+	  HeartUpdate / OpponentHeartUpdate, animating the removed heart out.
+	* ROUND FLOW: on a correct answer the server hides the PuzzleArea, then the
+	  loser's heart leaves, then the next round reshores the puzzle.
 
 	REQUIRED UI (see docs/UI_HIERARCHY.md) - must exist in StarterGui.GameUI:
 		GameUI  (ScreenGui)
@@ -30,7 +29,7 @@
 		  │     ├── TimerLabel (TextLabel)
 		  │     └── PlayerHeartContainer (Folder)    Heart1/2/3 (ImageLabel)
 		  ├── PuzzleArea  (Frame)
-		  │     ├── AnswerBox (Frame)   -- slots are built here as ImageLabels
+		  │     ├── AnswerBox (Frame)
 		  │     └── ScrambledBank (Frame)
 		  │           ├── UIGridLayout  (optional, recommended)
 		  │           └── TileTemplate  (ImageButton, optional, Visible=false)
@@ -41,6 +40,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
@@ -79,8 +79,7 @@ end
 
 -------------------------------------------------------------------------------
 -- UI VISIBILITY
--- A Frame with Visible=false hides ALL its children, so we control the top-level
--- frames' Visible here. GameUI is a ScreenGui -> uses .Enabled, not .Visible.
+-- GameUI is a ScreenGui -> uses .Enabled. Frames use .Visible.
 -------------------------------------------------------------------------------
 GameUI.Enabled = true
 
@@ -97,6 +96,13 @@ local function setPlayingUI()
 	InteractionFrame.Visible = false
 end
 
+local function showTopBarOnly()
+	-- Used on correct answer / game over: keep the timer + hearts, hide the puzzle.
+	TopBar.Visible = true
+	PuzzleArea.Visible = false
+	InteractionFrame.Visible = false
+end
+
 -------------------------------------------------------------------------------
 -- STATE
 -------------------------------------------------------------------------------
@@ -105,18 +111,55 @@ local currentGuess = ""      -- letters typed so far
 local buttonMap = {}         -- tile -> letter
 local slots = {}             -- index -> ImageLabel slot
 local roundActive = false
+local flyingLetters = {}     -- in-flight flying clones (for cleanup)
 
 setWaitingUI(false) -- start hidden until the server says otherwise
+
+local function clearFlying()
+	for _, f in flyingLetters do
+		if f and f.Parent then
+			f:Destroy()
+		end
+	end
+	flyingLetters = {}
+end
 
 -------------------------------------------------------------------------------
 -- TOPBAR HEARTS
 -------------------------------------------------------------------------------
+local function animateHeartOut(heart)
+	if not heart:FindFirstChildOfClass("UIScale") then
+		local us = Instance.new("UIScale")
+		us.Parent = heart
+	end
+	local us = heart:FindFirstChildOfClass("UIScale")
+	local t = TweenService:Create(
+		us,
+		TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.In),
+		{ Scale = 0 }
+	)
+	t:Play()
+	t.Completed:Connect(function()
+		heart.Visible = false
+	end)
+end
+
 local function setHeartsInContainer(container, count)
 	count = math.clamp(count, 0, 3)
 	for i = 1, 3 do
 		local heart = container:FindFirstChild("Heart" .. i)
 		if heart then
-			heart.Visible = (i <= count)
+			if i <= count then
+				heart.Visible = true
+				local us = heart:FindFirstChildOfClass("UIScale")
+				if us then
+					us.Scale = 1
+				end
+			elseif heart.Visible then
+				animateHeartOut(heart)
+			else
+				heart.Visible = false
+			end
 		end
 	end
 end
@@ -130,10 +173,10 @@ OpponentHeartUpdate.OnClientEvent:Connect(function(count)
 end)
 
 -------------------------------------------------------------------------------
--- SCRAMBLED BANK (template + UIGridLayout)
+-- SCRAMBLED BANK (12-letter tiles)
 -------------------------------------------------------------------------------
 local function buildBank(letterBank)
-	-- Clear old tiles, but KEEP the user's TileTemplate (and any layout).
+	clearFlying()
 	for _, child in ScrambledBank:GetChildren() do
 		if child:IsA("GuiObject") and child.Name ~= "TileTemplate" then
 			child:Destroy()
@@ -151,15 +194,14 @@ local function buildBank(letterBank)
 
 	local template = ScrambledBank:FindFirstChild("TileTemplate")
 	if template and template:IsA("GuiButton") then
-		template.Visible = false -- never show the template itself
+		template.Visible = false
 	end
 
-	-- One tile per letter in the bank (one tile per letter of the word).
 	for i, letter in letterBank do
 		local tile
 		if template then
 			tile = template:Clone()
-			tile.Visible = true -- clones inherit Visible=false; force it on
+			tile.Visible = true
 		else
 			tile = Instance.new("ImageButton")
 			tile.BackgroundColor3 = Color3.fromRGB(70, 90, 140)
@@ -175,8 +217,14 @@ local function buildBank(letterBank)
 	end
 end
 
--- Update each slot's image to match currentGuess (letter or underscore).
+-------------------------------------------------------------------------------
+-- ANSWER BOX (centered slots with underscore)
+-- refreshSlots is declared BEFORE buildSlots (which calls it) to avoid the
+-- Luau forward-reference gotcha where a `local function` used earlier than its
+-- declaration silently becomes a global nil.
+-------------------------------------------------------------------------------
 local function refreshSlots()
+	clearFlying()
 	for i = 1, wordLength do
 		local slot = slots[i]
 		if slot then
@@ -190,12 +238,8 @@ local function refreshSlots()
 	end
 end
 
--------------------------------------------------------------------------------
--- ANSWER BOX (centered slots with underscore)
--------------------------------------------------------------------------------
--- Build one ImageLabel slot per letter, laid out by a CENTERED UIListLayout.
--- Empty slots show the underscore image; filled slots show the letter image.
 local function buildSlots()
+	clearFlying()
 	for _, child in AnswerBox:GetChildren() do
 		if child:IsA("GuiObject") then
 			child:Destroy()
@@ -203,7 +247,6 @@ local function buildSlots()
 	end
 	slots = {}
 
-	-- Centered horizontal layout so the whole word stays centered.
 	if not AnswerBox:FindFirstChildOfClass("UIListLayout") then
 		local ll = Instance.new("UIListLayout")
 		ll.FillDirection = Enum.FillDirection.Horizontal
@@ -227,25 +270,64 @@ local function buildSlots()
 	refreshSlots()
 end
 
+-------------------------------------------------------------------------------
+-- FLYING LETTER ANIMATION (bank tile -> answer slot)
+-------------------------------------------------------------------------------
+local function animateLetterToSlot(letter, fromTile, targetSlot)
+	refreshSlots() -- set all current letters (this one lands via animation)
 
+	local flying = Instance.new("ImageLabel")
+	flying.Name = "FlyingLetter"
+	flying.Image = LetterImages[letter] or ""
+	flying.ScaleType = Enum.ScaleType.Fit
+	flying.BackgroundTransparency = 1
+	flying.ZIndex = 100
+
+	local fromSize = fromTile.AbsoluteSize
+	flying.Size = UDim2.fromOffset(fromSize.X, fromSize.Y)
+	flying.Position = UDim2.fromOffset(fromTile.AbsolutePosition.X, fromTile.AbsolutePosition.Y)
+	flying.Parent = GameUI
+	table.insert(flyingLetters, flying)
+
+	local tp = targetSlot.AbsolutePosition
+	local tsz = targetSlot.AbsoluteSize
+	local center = tp + (tsz - fromSize) / 2
+
+	local tween = TweenService:Create(
+		flying,
+		TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
+		{
+			Position = UDim2.fromOffset(center.X, center.Y),
+			Size = UDim2.fromOffset(tsz.X, tsz.Y),
+		}
+	)
+	tween:Play()
+	tween.Completed:Connect(function()
+		if targetSlot then
+			targetSlot.Image = LetterImages[letter] or ""
+		end
+		flying:Destroy()
+	end)
+end
 
 -------------------------------------------------------------------------------
 -- INPUT
 -------------------------------------------------------------------------------
-local function appendLetter(letter)
+local function tryAppend(letter)
 	if not roundActive or wordLength == 0 then
-		return
+		return nil
 	end
 	if #currentGuess >= wordLength then
-		return
+		return nil
 	end
 	currentGuess = currentGuess .. letter
-	refreshSlots()
+	return #currentGuess
+end
 
-	-- AUTO-SUBMIT: full length reached -> server validates.
+local function checkAutoSubmit()
 	if #currentGuess >= wordLength then
 		roundActive = false -- lock input for this round
-		task.delay(0.2, function()
+		task.delay(0.3, function()
 			SubmitGuess:FireServer(currentGuess)
 		end)
 	end
@@ -261,15 +343,20 @@ local function backspace()
 	end
 end
 
--- CLICK: wire ScrambledBank tiles (both user template clones and fallbacks).
+-- CLICK: wire ScrambledBank tiles (fly the letter into the answer box).
 ScrambledBank.ChildAdded:Connect(function(tile)
 	if not tile:IsA("ImageButton") then
 		return
 	end
 	tile.Activated:Connect(function()
 		local letter = buttonMap[tile]
-		if letter then
-			appendLetter(letter)
+		if not letter then
+			return
+		end
+		local idx = tryAppend(letter)
+		if idx then
+			animateLetterToSlot(letter, tile, slots[idx])
+			checkAutoSubmit()
 		end
 	end)
 end)
@@ -285,7 +372,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 			backspace()
 			return
 		end
-		-- Enter = Return (main key) or KeypadEnter (numpad).
 		if (key == Enum.KeyCode.Return or key == Enum.KeyCode.KeypadEnter)
 			and roundActive and #currentGuess > 0 then
 			roundActive = false
@@ -296,7 +382,10 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if #code == 1 then
 			local ch = string.lower(code)
 			if ch:match("%a") then
-				appendLetter(ch)
+				if tryAppend(ch) then
+					refreshSlots()
+					checkAutoSubmit()
+				end
 			end
 		end
 	end
@@ -329,15 +418,21 @@ end)
 
 RoundEnd.OnClientEvent:Connect(function(result, correctWord)
 	roundActive = false
-	-- Reveal the word using letter images.
-	wordLength = #correctWord
-	currentGuess = correctWord
-	buildSlots()
-	TimerLabel.Text = "0"
+	if result == "correct" then
+		-- Correct answer: server hides the puzzle for the dramatic beat.
+		showTopBarOnly()
+	else
+		-- Timeout: reveal the word (puzzle stays visible).
+		wordLength = #correctWord
+		currentGuess = correctWord
+		buildSlots()
+		TimerLabel.Text = "0"
+	end
 end)
 
 GameOver.OnClientEvent:Connect(function(winnerName, youWon, isDraw)
 	roundActive = false
+	showTopBarOnly()
 	if isDraw then
 		TimerLabel.Text = "DRAW"
 	elseif youWon then
@@ -348,7 +443,6 @@ GameOver.OnClientEvent:Connect(function(winnerName, youWon, isDraw)
 end)
 
 OpponentState.OnClientEvent:Connect(function(waiting)
-	-- Show the "Play vs Bot" area only while waiting for an opponent.
 	setWaitingUI(waiting)
 end)
 
