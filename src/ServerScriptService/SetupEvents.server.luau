@@ -27,6 +27,7 @@ local EVENT_NAMES = {
 	"RoundEnd",         -- Server -> Client : round finished (correct/timeout)
 	"GameOver",         -- Server -> Client : match finished
 	"OpponentState",    -- Server -> Client : waiting-for-opponent flag
+	"WrongGuess",       -- Server -> Client : a full-length guess was wrong
 }
 
 -- Idempotent: if the folder already exists, reuse it (don't wipe manual setup).

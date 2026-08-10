@@ -87,10 +87,23 @@ On each `RoundStart`, `InputHandler`:
 4. sets each tile's `Image` to that letter's image (`ReplicatedStorage.LetterImages`),
 5. wires click handling. Clicking a tile plays a **flying-letter animation**: a
    copy of the tile tweens from the bank into the answer slot, then the slot updates.
+6. The used tile is then **grayed out** (marked used, non-clickable) so players
+   can see which letters are already placed. Tiles are reset when the player makes
+   a wrong full-length guess, so they can retry.
 
 If you don't create a `TileTemplate`, the script builds plain `ImageButton` tiles
 programmatically instead. With 12 tiles, make your `UIGridLayout` wide enough
 (e.g. 4 columns × 3 rows, or a single row of 12).
+
+## Wrong-guess penalty
+
+When a player submits a full-length guess that is wrong, the server fires the
+`WrongGuess` RemoteEvent (`ReplicatedStorage.Events`). The client then:
+- flashes the `AnswerBox` red and **shakes** it,
+- resets the answer and re-enables the used tiles so the player can retry.
+
+(No heart loss on a wrong guess — that only happens on a correct guess by the
+opponent or a timeout.)
 
 ## AnswerBox (centered letter stack)
 

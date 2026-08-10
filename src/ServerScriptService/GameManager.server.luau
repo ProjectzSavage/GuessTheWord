@@ -44,6 +44,7 @@ local RoundStart = Events:WaitForChild("RoundStart")
 local RoundEnd = Events:WaitForChild("RoundEnd")
 local GameOver = Events:WaitForChild("GameOver")
 local OpponentState = Events:WaitForChild("OpponentState")
+local WrongGuess = Events:WaitForChild("WrongGuess")
 
 -------------------------------------------------------------------------------
 -- CONFIG
@@ -111,6 +112,7 @@ local function discoverTables()
 					letterBank = {},
 					roundConn = nil,       -- round timer thread
 					roundActive = false,   -- is the round timer running?
+					roundGen = 0,          -- increments each round; kills stale threads
 					botConn = nil,         -- bot loop thread
 					botActive = false,     -- is the bot thinking loop running?
 					rematchConn = nil,     -- rematch timer
@@ -282,12 +284,17 @@ local function startBotLoop(tableState, seatIndex)
 
 	tableState.attemptedGuesses = {}
 	local bank = tableState.letterBank
+	local gen = tableState.roundGen   -- capture current round generation
 	tableState.botActive = true
 
 	tableState.botConn = task.spawn(function()
 		while tableState.botActive do
 			task.wait(BOT_THINK_TIME)
 			if not tableState.botActive then
+				break
+			end
+			-- If a new round has started, this stale bot thread must die.
+			if tableState.roundGen ~= gen then
 				break
 			end
 			if not tableState.matchActive or not tableState.currentWord then
@@ -489,12 +496,15 @@ function handleGuess(tableState, seatIndex, guess)
 		else
 			startRound(tableState) -- clients reshow the PuzzleArea on RoundStart
 		end
+		return true
 	end
-	-- Wrong guesses are simply ignored (no penalty) for now.
+	return false -- wrong guess (no heart loss; client shows a shake/flash)
 end
 
 function startRound(tableState)
 	stopRound(tableState)
+	tableState.roundGen = tableState.roundGen + 1 -- new generation
+	local gen = tableState.roundGen
 
 	local entry = Dictionary.randomEntry()
 	tableState.currentWord = entry.word
@@ -533,6 +543,10 @@ function startRound(tableState)
 		while tableState.roundActive do
 			task.wait(1)
 			if not tableState.roundActive then
+				break
+			end
+			-- If a new round replaced this one, this stale timer thread must die.
+			if tableState.roundGen ~= gen then
 				break
 			end
 			timeLeft = timeLeft - 1
@@ -727,7 +741,13 @@ SubmitGuess.OnServerEvent:Connect(function(player, guess)
 	for _, tableState in tableStates do
 		local seatIdx = seatOfPlayer(tableState, player)
 		if seatIdx then
-			handleGuess(tableState, seatIdx, guess)
+			-- Only send a wrong-guess signal for a NON-empty full-length guess
+			-- that did not win. (The bot never triggers this - it uses handleGuess
+			-- directly, and we only fire WrongGuess for real player submissions.)
+			if guess ~= "" and #guess >= #(tableState.currentWord or "")
+				and not handleGuess(tableState, seatIdx, guess) then
+				WrongGuess:FireClient(player)
+			end
 			return
 		end
 	end

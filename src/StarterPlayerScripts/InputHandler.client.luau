@@ -60,6 +60,7 @@ local OpponentHeartUpdate = Events:WaitForChild("OpponentHeartUpdate")
 local GameOver = Events:WaitForChild("GameOver")
 local OpponentState = Events:WaitForChild("OpponentState")
 local PlayVsBotRequest = Events:WaitForChild("PlayVsBotRequest")
+local WrongGuess = Events:WaitForChild("WrongGuess")
 
 -- UI references (fail loudly if the hierarchy is wrong - easy to debug).
 local GameUI = PlayerGui:WaitForChild("GameUI")
@@ -206,6 +207,7 @@ local wordLength = 0
 local currentGuess = ""      -- letters typed so far
 local buttonMap = {}         -- tile -> letter
 local slots = {}             -- index -> ImageLabel slot
+local usedTiles = {}         -- tiles already flown to the answer (grayed out)
 local roundActive = false
 local flyingLetters = {}     -- in-flight flying clones (for cleanup)
 
@@ -297,6 +299,7 @@ local function buildBank(letterBank)
 		end
 	end
 	buttonMap = {}
+	usedTiles = {}
 
 	-- Ensure a UIGridLayout exists (use the user's if they added one).
 	if not ScrambledBank:FindFirstChildOfClass("UIGridLayout") then
@@ -447,6 +450,14 @@ local function animateLetterToSlot(letter, fromTile, targetSlot)
 			targetSlot.Image = LetterImages[letter] or ""
 		end
 		flying:Destroy()
+		-- Gray out the source tile to show it was used (and disable it).
+		if fromTile and fromTile.Parent then
+			usedTiles[fromTile] = true
+			fromTile.ImageColor3 = Color3.fromRGB(90, 90, 90)
+			fromTile.ImageTransparency = 0.7
+			fromTile.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+			fromTile.AutoButtonColor = false
+		end
 	end)
 end
 
@@ -489,6 +500,9 @@ ScrambledBank.ChildAdded:Connect(function(tile)
 		return
 	end
 	tile.Activated:Connect(function()
+		if usedTiles[tile] then
+			return -- already used this round
+		end
 		local letter = buttonMap[tile]
 		if not letter then
 			return
@@ -575,6 +589,62 @@ RoundEnd.OnClientEvent:Connect(function(result, correctWord)
 		buildSlots()
 		TimerLabel.Text = "0"
 	end
+end)
+
+-- Re-enable all used (grayed-out) tiles so the player can retry after a wrong
+-- full-length guess.
+local function resetTiles()
+	for tile in pairs(usedTiles) do
+		if tile and tile.Parent then
+			tile.ImageColor3 = Color3.new(1, 1, 1)
+			tile.ImageTransparency = 0
+			tile.BackgroundColor3 = Color3.fromRGB(70, 90, 140)
+			tile.AutoButtonColor = true
+		end
+	end
+	usedTiles = {}
+end
+
+-- Wrong guess: shake the answer box, flash it red, reset the answer, and let
+-- the player retry (the full-length submit had locked input).
+WrongGuess.OnClientEvent:Connect(function()
+	if not AnswerBox.Visible then
+		return
+	end
+	-- Red flash via background color.
+	AnswerBox.BackgroundColor3 = Color3.fromRGB(180, 40, 50)
+	AnswerBox.BackgroundTransparency = 0.3
+	TweenService:Create(
+		AnswerBox,
+		TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ BackgroundTransparency = 1 }
+	):Play()
+
+	-- Horizontal shake.
+	local basePos = AnswerBox.Position
+	for i = 1, 3 do
+		local dir = (i % 2 == 0) and -1 or 1
+		task.delay(i * 0.05, function()
+			if AnswerBox.Parent then
+				AnswerBox.Position = basePos + UDim2.new(0, 8 * dir, 0, 0)
+			end
+		end)
+	end
+	task.delay(0.25, function()
+		if AnswerBox.Parent then
+			AnswerBox.Position = basePos
+			AnswerBox.BackgroundColor3 = Color3.fromRGB(35, 40, 60)
+			AnswerBox.BackgroundTransparency = 1
+		end
+	end)
+
+	-- Reset the answer so the player can retry, and re-enable the tiles.
+	task.delay(0.35, function()
+		currentGuess = ""
+		roundActive = true
+		refreshSlots()
+		resetTiles()
+	end)
 end)
 
 GameOver.OnClientEvent:Connect(function(winnerName, youWon, isDraw)

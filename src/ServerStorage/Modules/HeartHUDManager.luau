@@ -102,8 +102,45 @@ function HeartHUDManager.register(ownerKey, character)
 	billboards[ownerKey] = bb
 end
 
+-- Blink a heart (appear/disappear a few times), then shrink it out and hide it.
+-- Runs on the server; billboard changes replicate so every client sees it.
+local function blinkHeartThenHide(heart)
+	local us = heart:FindFirstChildOfClass("UIScale")
+	if not us then
+		us = Instance.new("UIScale")
+		us.Scale = 1
+		us.Parent = heart
+	end
+
+	local blinks = 3
+	local step = 0
+	heart.Visible = true
+
+	local function tick()
+		step = step + 1
+		if step <= blinks * 2 then
+			heart.Visible = (step % 2 == 0)
+			task.delay(0.12, tick)
+		else
+			-- Done blinking: shrink out and hide.
+			local t = game:GetService("TweenService"):Create(
+				us,
+				TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In),
+				{ Scale = 0 }
+			)
+			t:Play()
+			t.Completed:Connect(function()
+				heart.Visible = false
+				us.Scale = 1
+			end)
+		end
+	end
+	tick()
+end
+
 -- Reveal and set the heart count (0..3) on an owner's billboard.
--- Called by GameManager whenever the count changes.
+-- Called by GameManager whenever the count changes. A lost heart (one that must
+-- disappear) blinks out instead of vanishing instantly.
 function HeartHUDManager.setHearts(ownerKey, heartCount)
 	local bb = billboards[ownerKey]
 	if not bb then
@@ -124,7 +161,17 @@ function HeartHUDManager.setHearts(ownerKey, heartCount)
 	for i = 1, 3 do
 		local heart = frame:FindFirstChild("Heart" .. i)
 		if heart then
-			heart.Visible = (i <= heartCount)
+			if i <= heartCount then
+				heart.Visible = true
+				local us = heart:FindFirstChildOfClass("UIScale")
+				if us then
+					us.Scale = 1
+				end
+			elseif heart.Visible then
+				blinkHeartThenHide(heart)
+			else
+				heart.Visible = false
+			end
 		end
 	end
 end
