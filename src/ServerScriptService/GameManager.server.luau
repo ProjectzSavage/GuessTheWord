@@ -51,13 +51,16 @@ local OpponentState = Events:WaitForChild("OpponentState")
 local HEARTS_PER_PLAYER = 3
 local ROUND_TIME = 15            -- seconds per round
 local START_COUNTDOWN = 3        -- 3..2..1 before the match begins
-local BOT_THINK_TIME = 0.45      -- seconds between bot guesses
+-- Bot is a placeholder random-guessing opponent (difficulty is a future update).
+-- To keep it clearly beatable, it guesses slowly and only ~50% of the time.
+local BOT_THINK_TIME = 1.1       -- seconds between bot guesses
+local BOT_GUESS_CHANCE = 0.5     -- probability the bot actually guesses each tick
 local REMATCH_DELAY = 5          -- seconds before auto-rematch
 local POLL_INTERVAL = 0.2        -- how often we poll seats for a sitting player
--- Correct-answer dramatic beat: hide puzzle -> pause -> loser's heart leaves ->
--- pause -> show next round. Timings in seconds.
-local CORRECT_REVEAL_HIDE = 2.0
-local CORRECT_HEART_DELAY = 2.0
+-- Correct-answer dramatic beat: hide puzzle -> pause -> loser's heart blinks out
+-- -> pause -> show next round. Timings in seconds.
+local CORRECT_REVEAL_HIDE = 1.2
+local CORRECT_HEART_DELAY = 1.6
 
 local TABLE_AREA = Workspace:WaitForChild("GameArea")
 
@@ -293,30 +296,32 @@ local function startBotLoop(tableState, seatIndex)
 			if tableState.hearts[seatIndex] and tableState.hearts[seatIndex] <= 0 then
 				break
 			end
+			-- The bot hesitates sometimes (keeps it clearly beatable).
+			if math.random() <= BOT_GUESS_CHANCE then
+				-- The bank holds 12 letters (word letters + fillers). The bot
+				-- guesses a word of the CORRECT length by picking `wordLen`
+				-- distinct letters from the bank in a random order.
+				local wordLen = #tableState.currentWord
+				local order = {}
+				for i = 1, #bank do
+					order[i] = i
+				end
+				for i = #order, 2, -1 do
+					local j = math.random(1, i)
+					order[i], order[j] = order[j], order[i]
+				end
 
-			-- The bank holds 12 letters (word letters + fillers). The bot guesses
-			-- a word of the CORRECT length by picking `wordLen` distinct letters
-			-- from the bank in a random order. This keeps the answer reachable.
-			local wordLen = #tableState.currentWord
-			local order = {}
-			for i = 1, #bank do
-				order[i] = i
-			end
-			for i = #order, 2, -1 do
-				local j = math.random(1, i)
-				order[i], order[j] = order[j], order[i]
-			end
+				local candidate = ""
+				for k = 1, wordLen do
+					candidate = candidate .. bank[order[k]]
+				end
 
-			local candidate = ""
-			for k = 1, wordLen do
-				candidate = candidate .. bank[order[k]]
-			end
-
-			-- Avoid repeating a candidate the bot already tried this round.
-			if not tableState.attemptedGuesses[candidate] then
-				tableState.attemptedGuesses[candidate] = true
-				-- Same validation path as a real player (server side).
-				handleGuess(tableState, seatIndex, candidate)
+				-- Avoid repeating a candidate the bot already tried this round.
+				if not tableState.attemptedGuesses[candidate] then
+					tableState.attemptedGuesses[candidate] = true
+					-- Same validation path as a real player (server side).
+					handleGuess(tableState, seatIndex, candidate)
+				end
 			end
 		end
 	end)

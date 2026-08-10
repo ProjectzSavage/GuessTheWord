@@ -191,10 +191,11 @@ local function revealRoundUI()
 end
 
 local function showTopBarOnly()
-	-- Used on correct answer / game over: keep the timer + hearts, hide the puzzle.
+	-- Used on correct answer / game over: keep the timer + hearts, hide the
+	-- puzzle so everyone can watch the loser's heart blink out.
 	hideCountdown()
 	slideTopBarIn()
-	hideFrame(PuzzleArea)
+	PuzzleArea.Visible = false      -- immediate hide so the heart loss is visible
 	hideFrame(InteractionFrame)
 end
 
@@ -222,21 +223,39 @@ end
 -------------------------------------------------------------------------------
 -- TOPBAR HEARTS
 -------------------------------------------------------------------------------
-local function animateHeartOut(heart)
-	if not heart:FindFirstChildOfClass("UIScale") then
-		local us = Instance.new("UIScale")
+-- Blink the heart (appear/disappear a few times) then fade it out and hide.
+local function blinkHeartThenHide(heart)
+	local us = heart:FindFirstChildOfClass("UIScale")
+	if not us then
+		us = Instance.new("UIScale")
+		us.Scale = 1
 		us.Parent = heart
 	end
-	local us = heart:FindFirstChildOfClass("UIScale")
-	local t = TweenService:Create(
-		us,
-		TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.In),
-		{ Scale = 0 }
-	)
-	t:Play()
-	t.Completed:Connect(function()
-		heart.Visible = false
-	end)
+
+	local blinks = 3        -- how many times it appears/disappears
+	local step = 0
+	heart.Visible = true
+
+	local function tick()
+		step = step + 1
+		if step <= blinks * 2 then
+			heart.Visible = (step % 2 == 0)
+			task.delay(0.12, tick)
+		else
+			-- Done blinking: shrink out.
+			local t = TweenService:Create(
+				us,
+				TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In),
+				{ Scale = 0 }
+			)
+			t:Play()
+			t.Completed:Connect(function()
+				heart.Visible = false
+				us.Scale = 1
+			end)
+		end
+	end
+	tick()
 end
 
 local function setHeartsInContainer(container, count)
@@ -251,7 +270,7 @@ local function setHeartsInContainer(container, count)
 					us.Scale = 1
 				end
 			elseif heart.Visible then
-				animateHeartOut(heart)
+				blinkHeartThenHide(heart)
 			else
 				heart.Visible = false
 			end
