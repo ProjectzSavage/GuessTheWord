@@ -175,6 +175,21 @@ local function buildBank(letterBank)
 	end
 end
 
+-- Update each slot's image to match currentGuess (letter or underscore).
+local function refreshSlots()
+	for i = 1, wordLength do
+		local slot = slots[i]
+		if slot then
+			local ch = string.sub(currentGuess, i, i)
+			if ch ~= "" then
+				slot.Image = LetterImages[ch] or ""
+			else
+				slot.Image = LetterImages.underscore or ""
+			end
+		end
+	end
+end
+
 -------------------------------------------------------------------------------
 -- ANSWER BOX (centered slots with underscore)
 -------------------------------------------------------------------------------
@@ -212,20 +227,7 @@ local function buildSlots()
 	refreshSlots()
 end
 
--- Update each slot's image to match currentGuess (letter or underscore).
-local function refreshSlots()
-	for i = 1, wordLength do
-		local slot = slots[i]
-		if slot then
-			local ch = string.sub(currentGuess, i, i)
-			if ch ~= "" then
-				slot.Image = LetterImages[ch] or ""
-			else
-				slot.Image = LetterImages.underscore or ""
-			end
-		end
-	end
-end
+
 
 -------------------------------------------------------------------------------
 -- INPUT
