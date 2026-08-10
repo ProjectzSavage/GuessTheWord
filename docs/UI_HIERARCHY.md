@@ -11,6 +11,7 @@
 StarterGui
 └── GameUI  (ScreenGui)          IgnoreGuiInset = true
     ├── TopBar  (Frame)          AnchorPoint(0.5,0) Position(0.5,0) Size(0,64 x 0,64) BackgroundColor3 dark
+    │                            -- script slides this in/out (down→up in, up→down out)
     │   ├── OpponentHeartContainer (Folder)
     │   │   ├── Heart1  (ImageLabel)
     │   │   ├── Heart2  (ImageLabel)
@@ -21,6 +22,8 @@ StarterGui
     │       ├── Heart2  (ImageLabel)
     │       └── Heart3  (ImageLabel)
     │
+    ├── CountdownFrame  (Frame)     full-screen overlay for the 3-2-1-GO! pulse
+    │   └── CountdownLabel (TextLabel)  big text; shown center-screen
     ├── PuzzleArea  (Frame)      center of screen
     │   ├── ImageGrid  (Frame)   UIGridLayout: 2x2, 4 ImageLabels (clue images)
     │   │   ├── Clue1 (ImageLabel)

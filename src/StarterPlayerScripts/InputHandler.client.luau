@@ -72,6 +72,9 @@ local AnswerBox = PuzzleArea:WaitForChild("AnswerBox")
 local ScrambledBank = PuzzleArea:WaitForChild("ScrambledBank")
 local InteractionFrame = GameUI:WaitForChild("InteractionFrame")
 local PlayVsBotButton = InteractionFrame:WaitForChild("PlayVsBotButton")
+-- Countdown frame (big 3-2-1-GO!) - built into the hierarchy by you.
+local CountdownFrame = GameUI:FindFirstChild("CountdownFrame")
+local CountdownLabel = CountdownFrame and CountdownFrame:FindFirstChild("CountdownLabel")
 
 if AnswerBox:IsA("TextBox") then
 	warn("[InputHandler] AnswerBox must be a Frame (it now renders ImageLabels), " ..
@@ -99,27 +102,98 @@ local function hideFrame(gui)
 	end
 end
 
+-------------------------------------------------------------------------------
+-- TOPBAR SLIDE ANIMATION
+-- TopBar is anchored at its resting position (you set it, e.g. AnchorPoint
+-- {0.5, 0} near the top). It slides DOWN→UP in, and UP→DOWN out.
+-------------------------------------------------------------------------------
+local topBarRestingPos = TopBar.Position
+local TOPBAR_SLIDE = 220 -- px the bar travels when sliding in/out
+
+local function slideTopBarIn()
+	if TopBar.Visible and TopBar.Position == topBarRestingPos then
+		return -- already shown at rest
+	end
+	TopBar.Visible = true
+	-- Start below the resting spot, then glide up to rest.
+	TopBar.Position = topBarRestingPos + UDim2.new(0, 0, 0, TOPBAR_SLIDE)
+	TweenService:Create(
+		TopBar,
+		TweenInfo.new(0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+		{ Position = topBarRestingPos }
+	):Play()
+end
+
+local function slideTopBarOut()
+	local endPos = topBarRestingPos + UDim2.new(0, 0, 0, TOPBAR_SLIDE)
+	local t = TweenService:Create(
+		TopBar,
+		TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.In),
+		{ Position = endPos }
+	)
+	t:Play()
+	t.Completed:Connect(function()
+		TopBar.Visible = false
+		TopBar.Position = topBarRestingPos
+	end)
+end
+
+-------------------------------------------------------------------------------
+-- COUNTDOWN FRAME (3-2-1-GO! pulse)
+-------------------------------------------------------------------------------
+local function showCountdown(text)
+	if not CountdownFrame then
+		return
+	end
+	CountdownFrame.Visible = true
+	if CountdownLabel then
+		CountdownLabel.Text = text
+		local s = CountdownLabel:FindFirstChildOfClass("UIScale")
+		if not s then
+			s = Instance.new("UIScale")
+			s.Parent = CountdownLabel
+		end
+		s.Scale = 0
+		TweenService:Create(
+			s,
+			TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+			{ Scale = 1 }
+		):Play()
+	end
+end
+
+local function hideCountdown()
+	if not CountdownFrame then
+		return
+	end
+	CountdownFrame.Visible = false
+end
+
 local function setWaitingUI(waiting)
+	hideCountdown()
 	if waiting then
 		showFrame(InteractionFrame)
 		showFrame(PlayVsBotButton)
-		hideFrame(TopBar)
 		hideFrame(PuzzleArea)
+		slideTopBarOut()
 	else
 		hideFrame(InteractionFrame)
 		hideFrame(PlayVsBotButton)
 	end
 end
 
-local function setPlayingUI()
-	showFrame(TopBar)
+-- Only show PuzzleArea + TopBar AFTER the countdown finishes.
+local function revealRoundUI()
+	hideCountdown()
+	slideTopBarIn()
 	showFrame(PuzzleArea)
 	hideFrame(InteractionFrame)
 end
 
 local function showTopBarOnly()
 	-- Used on correct answer / game over: keep the timer + hearts, hide the puzzle.
-	showFrame(TopBar)
+	hideCountdown()
+	slideTopBarIn()
 	hideFrame(PuzzleArea)
 	hideFrame(InteractionFrame)
 end
@@ -325,11 +399,16 @@ local function animateLetterToSlot(letter, fromTile, targetSlot)
 	local tsz = targetSlot.AbsoluteSize
 	local center = tp + (tsz - fromSize) / 2
 
+	-- ImageLabel has no `Scale` property - use a UIScale child to scale it.
+	local flyScale = Instance.new("UIScale")
+	flyScale.Scale = 1
+	flyScale.Parent = flying
+
 	-- A quick "lift off" pop before the flight.
 	local lift = TweenService:Create(
-		flying,
+		flyScale,
 		TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{ Scale = 1.2, Rotation = -12 }
+		{ Scale = 1.2 }
 	)
 	lift:Play()
 
@@ -339,12 +418,12 @@ local function animateLetterToSlot(letter, fromTile, targetSlot)
 		{
 			Position = UDim2.fromOffset(center.X, center.Y),
 			Size = UDim2.fromOffset(tsz.X, tsz.Y),
-			Scale = 1,
 			Rotation = 0,
 		}
 	)
 	fly:Play()
 	fly.Completed:Connect(function()
+		-- Land: settle the scale back to 1.
 		if targetSlot then
 			targetSlot.Image = LetterImages[letter] or ""
 		end
@@ -436,10 +515,12 @@ end)
 -------------------------------------------------------------------------------
 -- GAME EVENTS -> UI
 -------------------------------------------------------------------------------
--- Pre-match 3..2..1 countdown (shown in the timer label).
+-- Pre-match 3..2..1 countdown. During the countdown, ONLY the CountdownFrame is
+-- shown (big pulsing numbers). PuzzleArea/TopBar are revealed after it's done.
 Countdown.OnClientEvent:Connect(function(n)
-	setPlayingUI()
-	TimerLabel.Text = tostring(n)
+	hideFrame(PuzzleArea)
+	slideTopBarOut()
+	showCountdown(tostring(n))
 end)
 
 -- Round timer tick (15 -> 0).
@@ -448,7 +529,6 @@ TimerUpdate.OnClientEvent:Connect(function(seconds)
 end)
 
 RoundStart.OnClientEvent:Connect(function(length, letterBank, images)
-	setPlayingUI()
 	wordLength = length
 	currentGuess = ""
 	roundActive = true
@@ -456,6 +536,12 @@ RoundStart.OnClientEvent:Connect(function(length, letterBank, images)
 	buildSlots()
 	-- (Optionally display `images` in PuzzleArea.ImageGrid here.)
 	PlayVsBotButton.Visible = false
+
+	-- Flash "GO!" on the countdown frame, then reveal the round UI.
+	showCountdown("GO!")
+	task.delay(0.7, function()
+		revealRoundUI()
+	end)
 end)
 
 RoundEnd.OnClientEvent:Connect(function(result, correctWord)

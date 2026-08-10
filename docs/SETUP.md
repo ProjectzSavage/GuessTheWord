@@ -45,11 +45,17 @@ ServerScriptService
 
 Build the exact tree in `docs/UI_HIERARCHY.md` **manually** in `StarterGui`:
 
-- `GameUI` ScreenGui with `TopBar`, `PuzzleArea`, `InteractionFrame`.
+- `GameUI` ScreenGui with `TopBar`, `CountdownFrame`, `PuzzleArea`,
+  `InteractionFrame`.
+- `CountdownFrame` (Frame) + `CountdownLabel` (TextLabel) — the 3-2-1-GO! pulse
+  overlay.
 - Heart `Folder`s with `ImageLabel`s named exactly `Heart1/2/3` (set each
   `HeartN.Image` to your heart texture).
 - `AnswerBox` (**Frame** — not a TextBox anymore), `ScrambledBank` (Frame),
   `PlayVsBotButton` (TextButton).
+- Set `TopBar.AnchorPoint = {0.5, 0}` and its resting `Position` where you want
+  it (e.g. top-center). The script slides it down→up when the round starts and
+  up→down when it leaves.
 - Put your own heart textures and clue image asset IDs where the docs say.
 
 The `ScrambledBank` tiles, the `AnswerBox` slots, and the above-head `HeartHUD`
