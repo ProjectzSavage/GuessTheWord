@@ -110,8 +110,19 @@ and the underscore image. Open that ModuleScript and replace the placeholder
 - `ReplicatedStorage.HoverFX` — reusable module. `HoverFX.applyTo(guiObject, {scale, duration})`
   animates a child `UIScale` so it pops/grows on hover without reflowing the layout.
 - `StarterPlayerScripts.HoverController` — LocalScript that applies the pop
-  effect to the 4 clue images (`ImageGrid.Clue1..Clue4`) and every scrambled-bank
-  tile (including ones created at runtime). Tune the `scale`/`duration` there.
+  effect to the 4 clue images (`ImageGrid.Clue1..Clue4`), every scrambled-bank
+  tile (including ones created at runtime), and the PlayVsBot button. Tune the
+  `scale`/`duration` there.
+
+## UIFX (open/close + intro animations)
+
+- `ReplicatedStorage.UIFX` — reusable module: `popIn`, `popOut`, `fadeIn`,
+  `staggerIn`. Used by `InputHandler` to animate:
+  - the scrambled-bank **round-start intro** (tiles cascade in),
+  - the TopBar / PuzzleArea opening and closing,
+  - the PlayVsBot button shrinking out when clicked,
+  - the flying-letter landing.
+  All use a child `UIScale`, so nothing reflows.
 
 ## HeartHUD (above-head BillboardGui) — in ServerStorage
 

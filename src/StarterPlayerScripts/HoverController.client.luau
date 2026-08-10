@@ -27,6 +27,7 @@ local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
 local GameUI = PlayerGui:WaitForChild("GameUI")
 local PuzzleArea = GameUI:WaitForChild("PuzzleArea")
+local InteractionFrame = GameUI:WaitForChild("InteractionFrame")
 
 local ImageGrid = PuzzleArea:WaitForChild("ImageGrid")
 local ScrambledBank = PuzzleArea:WaitForChild("ScrambledBank")
@@ -64,3 +65,11 @@ end
 ScrambledBank.ChildAdded:Connect(function(tile)
 	applyToTile(tile)
 end)
+
+-------------------------------------------------------------------------------
+-- PLAY VS BOT BUTTON
+-------------------------------------------------------------------------------
+local PlayVsBotButton = InteractionFrame:FindFirstChild("PlayVsBotButton")
+if PlayVsBotButton and PlayVsBotButton:IsA("GuiButton") then
+	HoverFX.applyTo(PlayVsBotButton, { scale = 1.15, duration = 0.18 })
+end

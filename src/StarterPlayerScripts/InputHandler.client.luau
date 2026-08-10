@@ -47,6 +47,7 @@ local PlayerGui = player:WaitForChild("PlayerGui")
 
 -- Letter images (fill in your asset IDs here).
 local LetterImages = require(ReplicatedStorage:WaitForChild("LetterImages"))
+local UIFX = require(ReplicatedStorage:WaitForChild("UIFX"))
 
 local Events = ReplicatedStorage:WaitForChild("Events")
 local SubmitGuess = Events:WaitForChild("SubmitGuess")
@@ -83,24 +84,44 @@ end
 -------------------------------------------------------------------------------
 GameUI.Enabled = true
 
+-- Visibility with open/close animations (via UIFX). These animate a UIScale, so
+-- they don't reflow layout. We only animate frames we have references to; the
+-- game still works if some are missing.
+local function showFrame(gui)
+	if gui and gui:IsA("GuiObject") then
+		UIFX.popIn(gui)
+	end
+end
+
+local function hideFrame(gui)
+	if gui and gui:IsA("GuiObject") then
+		UIFX.popOut(gui)
+	end
+end
+
 local function setWaitingUI(waiting)
-	TopBar.Visible = false
-	PuzzleArea.Visible = false
-	InteractionFrame.Visible = waiting
-	PlayVsBotButton.Visible = waiting
+	if waiting then
+		showFrame(InteractionFrame)
+		showFrame(PlayVsBotButton)
+		hideFrame(TopBar)
+		hideFrame(PuzzleArea)
+	else
+		hideFrame(InteractionFrame)
+		hideFrame(PlayVsBotButton)
+	end
 end
 
 local function setPlayingUI()
-	TopBar.Visible = true
-	PuzzleArea.Visible = true
-	InteractionFrame.Visible = false
+	showFrame(TopBar)
+	showFrame(PuzzleArea)
+	hideFrame(InteractionFrame)
 end
 
 local function showTopBarOnly()
 	-- Used on correct answer / game over: keep the timer + hearts, hide the puzzle.
-	TopBar.Visible = true
-	PuzzleArea.Visible = false
-	InteractionFrame.Visible = false
+	showFrame(TopBar)
+	hideFrame(PuzzleArea)
+	hideFrame(InteractionFrame)
 end
 
 -------------------------------------------------------------------------------
@@ -215,6 +236,15 @@ local function buildBank(letterBank)
 
 		buttonMap[tile] = letter
 	end
+
+	-- Round-start intro: tiles cascade in one by one.
+	local tiles = {}
+	for _, child in ScrambledBank:GetChildren() do
+		if child:IsA("ImageButton") then
+			table.insert(tiles, child)
+		end
+	end
+	UIFX.staggerIn(tiles, { duration = 0.24, stagger = 0.06 })
 end
 
 -------------------------------------------------------------------------------
@@ -274,13 +304,15 @@ end
 -- FLYING LETTER ANIMATION (bank tile -> answer slot)
 -------------------------------------------------------------------------------
 local function animateLetterToSlot(letter, fromTile, targetSlot)
-	refreshSlots() -- set all current letters (this one lands via animation)
-
+	-- NOTE: We do NOT refreshSlots() here. currentGuess already includes this
+	-- letter, but the target slot keeps showing the underscore until the flying
+	-- tile lands, so you SEE the letter fly and land into the empty slot.
 	local flying = Instance.new("ImageLabel")
 	flying.Name = "FlyingLetter"
 	flying.Image = LetterImages[letter] or ""
 	flying.ScaleType = Enum.ScaleType.Fit
 	flying.BackgroundTransparency = 1
+	flying.Rotation = -12
 	flying.ZIndex = 100
 
 	local fromSize = fromTile.AbsoluteSize
@@ -293,16 +325,26 @@ local function animateLetterToSlot(letter, fromTile, targetSlot)
 	local tsz = targetSlot.AbsoluteSize
 	local center = tp + (tsz - fromSize) / 2
 
-	local tween = TweenService:Create(
+	-- A quick "lift off" pop before the flight.
+	local lift = TweenService:Create(
 		flying,
-		TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
+		TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ Scale = 1.2, Rotation = -12 }
+	)
+	lift:Play()
+
+	local fly = TweenService:Create(
+		flying,
+		TweenInfo.new(0.32, Enum.EasingStyle.Quart, Enum.EasingDirection.InOut),
 		{
 			Position = UDim2.fromOffset(center.X, center.Y),
 			Size = UDim2.fromOffset(tsz.X, tsz.Y),
+			Scale = 1,
+			Rotation = 0,
 		}
 	)
-	tween:Play()
-	tween.Completed:Connect(function()
+	fly:Play()
+	fly.Completed:Connect(function()
 		if targetSlot then
 			targetSlot.Image = LetterImages[letter] or ""
 		end
@@ -450,6 +492,9 @@ end)
 -- PLAY VS BOT BUTTON (immediate - no timer wait)
 -------------------------------------------------------------------------------
 PlayVsBotButton.Activated:Connect(function()
-	PlayVsBotButton.Visible = false
-	PlayVsBotRequest:FireServer()
+	-- Animate the button out, then ask the server to start a bot match.
+	hideFrame(PlayVsBotButton)
+	task.delay(0.15, function()
+		PlayVsBotRequest:FireServer()
+	end)
 end)

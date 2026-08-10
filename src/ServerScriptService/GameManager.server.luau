@@ -68,7 +68,8 @@ local TABLE_AREA = Workspace:WaitForChild("GameArea")
 -- (and defining them below with plain `function ... =` style assignments)
 -- guarantees every name is in scope everywhere. Functions NOT listed here have
 -- no forward references and keep normal `local function` definitions.
-local handleGuess, gameOver, startRound, startMatch, assignPlayer, releasePlayer
+local handleGuess, gameOver, startRound, startMatch, assignPlayer, releasePlayer,
+	handleMatchEndDramatics
 
 
 -------------------------------------------------------------------------------
@@ -352,6 +353,60 @@ function gameOver(tableState, winnerSeatIndex)
 			startMatch(tableState)
 		end
 	end)
+
+	-- Dramatic end: winner stands up, loser ragdolls then respawns.
+	handleMatchEndDramatics(tableState, winnerSeatIndex)
+end
+
+-- Match-end drama:
+--   * The winning real player stands up (leaves the chair).
+--   * The losing real player ragdolls on the chair, then respawns.
+--   * A bot never "respaws" - if the bot loses it is simply left (cleaned on
+--     rematch); if the bot wins, the human loser ragdolls + respawns.
+function handleMatchEndDramatics(tableState, winnerSeatIndex)
+	local function playerCharacter(player)
+		return player.Character
+	end
+
+	local function standUp(player)
+		local character = playerCharacter(player)
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			humanoid.Sit = false
+		end
+	end
+
+	local function ragdollThenRespawn(player)
+		local character = playerCharacter(player)
+		if not character then
+			return
+		end
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			-- Pop the player off the seat and into a ragdoll fall.
+			humanoid.Sit = false
+			humanoid.PlatformStand = true
+			humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+		end
+		-- Let the ragdoll play out, then respawn the loser.
+		task.delay(1.6, function()
+			if player.Parent then
+				player:LoadCharacter()
+			end
+		end)
+	end
+
+	for seatIndex, occ in tableState.occupants do
+		if occ ~= "BOT" and occ then
+			if winnerSeatIndex == nil then
+				standUp(occ) -- draw: both stand
+			elseif seatIndex == winnerSeatIndex then
+				standUp(occ) -- winner stands
+			else
+				ragdollThenRespawn(occ) -- loser ragdolls + respawns
+			end
+		end
+	end
 end
 
 local function loseHeart(tableState, seatIndex, reason)

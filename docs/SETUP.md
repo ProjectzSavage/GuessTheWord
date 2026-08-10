@@ -30,6 +30,7 @@ ServerScriptService
 | `src/ServerStorage/Modules/HeartHUDManager.luau`                | `ServerStorage > Modules`   | ModuleScript |
 | `src/ReplicatedStorage/LetterImages.luau`                      | `ReplicatedStorage`         | ModuleScript |
 | `src/ReplicatedStorage/HoverFX.luau`                          | `ReplicatedStorage`         | ModuleScript |
+| `src/ReplicatedStorage/UIFX.luau`                            | `ReplicatedStorage`         | ModuleScript |
 | `src/StarterPlayerScripts/InputHandler.client.luau`             | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/HoverController.client.luau`          | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/Preloader.client.luau`                | `StarterPlayerScripts`      | LocalScript |
