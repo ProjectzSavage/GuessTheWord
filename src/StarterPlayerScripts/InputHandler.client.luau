@@ -317,7 +317,12 @@ local buttonMap = {}         -- tile -> letter
 local slots = {}             -- index -> ImageLabel slot
 local usedTiles = {}         -- tiles already flown to the answer (grayed out)
 local roundActive = false
+local matchInProgress = false -- true during an active match (jump locked)
 local flyingLetters = {}     -- in-flight flying clones (for cleanup)
+
+-- Forward declarations for jump-lock/seat-exit helpers (called early by the
+-- Countdown handler but defined later in the file).
+local lockJump, getHumanoid, onLeftSeat, setupCharacterJump
 
 setWaitingUI(false) -- start hidden until the server says otherwise
 
@@ -769,6 +774,65 @@ local function hidePauseScreen()
 	end
 end
 
+-------------------------------------------------------------------------------
+-- JUMP LOCK + SEAT EXIT
+-- During a match the player can't jump out of their chair. Before/after a match
+-- they can; when they leave the seat the relevant UI (bot toggle / pause)
+-- outros cleanly.
+-------------------------------------------------------------------------------
+local playerHumanoid = nil
+
+function getHumanoid()
+	local char = player.Character
+	if not char then
+		return nil
+	end
+	return char:FindFirstChildOfClass("Humanoid")
+end
+
+function lockJump(locked)
+	local h = getHumanoid()
+	if h then
+		h:SetStateEnabled(Enum.HumanoidStateType.Jumping, not locked)
+	end
+end
+
+-- Handle the local player leaving their seat.
+function onLeftSeat()
+	if matchInProgress then
+		-- Shouldn't happen (jump is locked), but re-seat defensively.
+		local h = getHumanoid()
+		if h then
+			h.Sit = true
+		end
+		return
+	end
+	-- Not in a match: hide the bot toggle and the pause overlay (outro).
+	setWaitingUI(false)
+	hidePauseScreen()
+end
+
+function setupCharacterJump(char)
+	local h = char:WaitForChild("Humanoid", 5)
+	if not h then
+		return
+	end
+	playerHumanoid = h
+	h.Seated:Connect(function(seated)
+		if not seated then
+			onLeftSeat()
+		end
+	end)
+end
+
+-- Watch for the character (re)spawning so we can re-apply the jump lock.
+player.CharacterAdded:Connect(function(char)
+	setupCharacterJump(char)
+end)
+if player.Character then
+	setupCharacterJump(player.Character)
+end
+
 -- Rematch button: start a new bot match (reuses the PlayVsBot request).
 if RematchButton then
 	RematchButton.Activated:Connect(function()
@@ -782,6 +846,10 @@ Countdown.OnClientEvent:Connect(function(n)
 	hideFrame(PuzzleArea)
 	slideTopBarOut()
 	showCountdown(tostring(n))
+	if n == 3 then
+		matchInProgress = true -- lock the player into their chair
+		lockJump(true)
+	end
 end)
 
 -- Round timer tick (15 -> 0). Also shrinks the TimerBar fill.
@@ -904,10 +972,19 @@ local function confettiBurst(count)
 				{ Position = UDim2.fromOffset(tx, ty), Rotation = piece.Rotation + math.random(180, 360) }
 			)
 			t:Play()
-			task.delay(1.2, function()
-				if piece then
-					piece:Destroy()
-				end
+			t.Completed:Connect(function()
+				-- Fade the piece out before removing it (smooth disappearance).
+				local fade = TweenService:Create(
+					piece,
+					TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
+					{ ImageTransparency = 1, BackgroundTransparency = 1 }
+				)
+				fade:Play()
+				fade.Completed:Connect(function()
+					if piece then
+						piece:Destroy()
+					end
+				end)
 			end)
 		end
 	end
@@ -1168,6 +1245,8 @@ end
 
 GameOver.OnClientEvent:Connect(function(winnerName, youWon, isDraw, isBotMatch)
 	roundActive = false
+	matchInProgress = false -- allow the player to jump out again
+	lockJump(false)
 	showCelebration(youWon, isDraw, isBotMatch)
 	if isDraw then
 		TimerLabel.Text = "DRAW"

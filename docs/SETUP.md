@@ -172,7 +172,9 @@ Workspace
    The 15s round timer starts.
 6. Players click / type letters. On full length, `SubmitGuess` is fired.
 7. Server validates: correct → opponent −1 heart; timeout (15s) → both −1 heart.
-8. First to 0 hearts loses. Survivor (or draw) is announced, then auto-rematch.
+8. First to 0 hearts loses. Survivor (or draw) is announced, and a win/lose
+   celebration plays. In a bot match a **Pause screen** ("Play vs Bot again")
+   appears so you can rematch from your chair.
 
 **Correct-answer beat:** when the answer is found, the server hides the
 `PuzzleArea`, waits 2s, makes the loser's heart disappear, waits another 2s, then
@@ -182,6 +184,16 @@ starts the next round (which reshores the puzzle). The heart fade is animated in
 **Filler letters:** the bank always contains 12 letters — the word's letters are
 guaranteed present, the rest are random `a–z` fillers (`Dictionary.BANK_LETTERS`
 = 12, adjustable).
+
+**Leaderboard:** every player gets `leaderstats` with **Wins** and **Streak**
+(consecutive wins). A win +1 Wins/+1 Streak; a loss or draw resets Streak.
+
+**Jump out of the chair:** before a match you can jump out (the Play vs Bot
+toggle outros). During an active match your jump is **locked** so you can't leave
+mid-game. After the match you can jump out again (the pause screen outros).
+
+**Opponent leaves mid-match:** if your opponent disconnects/leaves during a
+match, you **win it** exactly like a normal victory (Wins/Streak updated).
 
 ## 6. Sound effects
 

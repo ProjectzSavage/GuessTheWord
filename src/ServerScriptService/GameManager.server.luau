@@ -72,7 +72,7 @@ local TABLE_AREA = Workspace:WaitForChild("GameArea")
 -- guarantees every name is in scope everywhere. Functions NOT listed here have
 -- no forward references and keep normal `local function` definitions.
 local handleGuess, gameOver, startRound, startMatch, assignPlayer, releasePlayer,
-	handleMatchEndDramatics, despawnBot
+	handleMatchEndDramatics, despawnBot, awardMatchOutcome
 
 
 -------------------------------------------------------------------------------
@@ -378,6 +378,11 @@ function gameOver(tableState, winnerSeatIndex)
 			OpponentState:FireClient(occ, false) -- hide the toggle; game is over
 		end
 	end
+
+	-- Update the Wins/Streak leaderboard. This also covers "opponent left
+	-- mid-match" (releasePlayer calls gameOver with the remaining player as the
+	-- winner), so they win exactly like a normal victory.
+	awardMatchOutcome(tableState, winnerSeatIndex)
 
 	-- NOTE: no auto-rematch. The match genuinely ENDS here (a player lost all 3
 	-- hearts). The client shows a "Play vs Bot again" pause screen instead.
@@ -783,9 +788,78 @@ SubmitGuess.OnServerEvent:Connect(function(player, guess)
 end)
 
 -------------------------------------------------------------------------------
--- PLAYER LEAVE HOOKUP
+-- PLAYER JOIN / LEAVE HOOKUP
 -------------------------------------------------------------------------------
+-- Give every player a leaderboard: Wins and Streak (consecutive wins).
+local function ensureLeaderstats(player)
+	local leaderstats = player:FindFirstChild("leaderstats")
+	if not leaderstats then
+		leaderstats = Instance.new("Folder")
+		leaderstats.Name = "leaderstats"
+		leaderstats.Parent = player
+	end
+	local wins = leaderstats:FindFirstChild("Wins")
+	if not wins then
+		wins = Instance.new("IntValue")
+		wins.Name = "Wins"
+		wins.Value = 0
+		wins.Parent = leaderstats
+	end
+	local streak = leaderstats:FindFirstChild("Streak")
+	if not streak then
+		streak = Instance.new("IntValue")
+		streak.Name = "Streak"
+		streak.Value = 0
+		streak.Parent = leaderstats
+	end
+end
+
+-- Award Wins/Streak based on a finished match.
+-- winnerSeatIndex == nil => draw (streak resets). A bot winner awards nothing.
+function awardMatchOutcome(tableState, winnerSeatIndex)
+	if winnerSeatIndex == nil then
+		-- Draw: break any streaks for real players.
+		for _, occ in tableState.occupants do
+			if occ ~= "BOT" and occ then
+				local ls = occ:FindFirstChild("leaderstats")
+				if ls then
+					local streak = ls:FindFirstChild("Streak")
+					if streak then
+						streak.Value = 0
+					end
+				end
+			end
+		end
+		return
+	end
+
+	for seatIndex, occ in tableState.occupants do
+		if occ ~= "BOT" and occ then
+			local ls = occ:FindFirstChild("leaderstats")
+			if ls then
+				local wins = ls:FindFirstChild("Wins")
+				local streak = ls:FindFirstChild("Streak")
+				if seatIndex == winnerSeatIndex then
+					-- Winner: +1 win, +1 streak.
+					if wins then
+						wins.Value = wins.Value + 1
+					end
+					if streak then
+						streak.Value = streak.Value + 1
+					end
+				else
+					-- Loser: reset streak.
+					if streak then
+						streak.Value = 0
+					end
+				end
+			end
+		end
+	end
+end
+
 Players.PlayerAdded:Connect(function(player)
+	ensureLeaderstats(player)
 	player.CharacterRemoving:Connect(function(character)
 		-- If a player disconnects or respawns, free their seat.
 		for _, tableState in tableStates do
