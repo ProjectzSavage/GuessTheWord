@@ -740,6 +740,43 @@ end)
 -------------------------------------------------------------------------------
 -- Pre-match 3..2..1 countdown. During the countdown, ONLY the CountdownFrame is
 -- shown (big pulsing numbers). PuzzleArea/TopBar are revealed after it's done.
+
+-- Show the pause / rematch screen after the celebration (only for bot matches).
+local function showPauseScreen()
+	if not PauseOverlay then
+		return
+	end
+	PauseOverlay.Visible = true
+	if PauseLabel then
+		PauseLabel.Visible = true
+	end
+	if RematchButton then
+		RematchButton.Visible = true
+		UIFX.popIn(RematchButton)
+	end
+end
+
+local function hidePauseScreen()
+	if not PauseOverlay then
+		return
+	end
+	PauseOverlay.Visible = false
+	if PauseLabel then
+		PauseLabel.Visible = false
+	end
+	if RematchButton then
+		RematchButton.Visible = false
+	end
+end
+
+-- Rematch button: start a new bot match (reuses the PlayVsBot request).
+if RematchButton then
+	RematchButton.Activated:Connect(function()
+		hidePauseScreen()
+		PlayVsBotRequest:FireServer()
+	end)
+end
+
 Countdown.OnClientEvent:Connect(function(n)
 	hidePauseScreen()
 	hideFrame(PuzzleArea)
@@ -755,16 +792,16 @@ TimerUpdate.OnClientEvent:Connect(function(seconds)
 	if seconds > timerMax then
 		timerMax = seconds
 	end
-		if TimerFill then
-			local frac = (timerMax > 0) and (seconds / timerMax) or 0
-			-- Force left-anchor so the fill depletes right→left cleanly, no
-			-- matter how it was positioned in Studio.
-			TimerFill.AnchorPoint = Vector2.new(0, 0.5)
-			TimerFill.Position = UDim2.new(0, 0, 0.5, 0)
-			TimerFill.Size = UDim2.new(frac, 0, 1, 0)
-			-- Color shift: green -> yellow -> red as time runs out.
-			TimerFill.BackgroundColor3 = Color3.fromHSV(frac * 0.33, 1, 0.85)
-		end
+	if TimerFill then
+		local frac = (timerMax > 0) and (seconds / timerMax) or 0
+		-- Force left-anchor so the fill depletes right→left cleanly, no
+		-- matter how it was positioned in Studio.
+		TimerFill.AnchorPoint = Vector2.new(0, 0.5)
+		TimerFill.Position = UDim2.new(0, 0, 0.5, 0)
+		TimerFill.Size = UDim2.new(frac, 0, 1, 0)
+		-- Color shift: green -> yellow -> red as time runs out.
+		TimerFill.BackgroundColor3 = Color3.fromHSV(frac * 0.33, 1, 0.85)
+	end
 end)
 
 -- Display the 4 clue images (from the server's Dictionary entry) in ImageGrid,
@@ -819,6 +856,62 @@ RoundStart.OnClientEvent:Connect(function(length, letterBank, images)
 		revealRoundUI()
 	end)
 end)
+
+local CONFETTI_COLORS = {
+	Color3.fromRGB(255, 80, 80),
+	Color3.fromRGB(255, 200, 80),
+	Color3.fromRGB(120, 220, 90),
+	Color3.fromRGB(90, 160, 255),
+	Color3.fromRGB(200, 120, 255),
+	Color3.fromRGB(255, 120, 200),
+}
+
+-- A single confetti piece. Parented directly to the ScreenGui (GameUI) so the
+-- offset coordinates match the actual screen space (Camera.ViewportSize),
+-- keeping the burst centered regardless of the overlay frame's position/size.
+local function makeConfetti(x, y, size)
+	local piece = Instance.new("ImageLabel")
+	piece.Size = UDim2.fromOffset(size or 12, size or 12)
+	piece.BackgroundColor3 = CONFETTI_COLORS[(math.random(1, #CONFETTI_COLORS))]
+	piece.BackgroundTransparency = 0.1
+	piece.Rotation = math.random(0, 360)
+	piece.ZIndex = 100
+	piece.Position = UDim2.fromOffset(x, y)
+	piece.Parent = GameUI
+	return piece
+end
+
+-- A small confetti "burst" from the center of the screen (used on correct answer).
+local function confettiBurst(count)
+	local overlay = GameUI:FindFirstChild("CelebrationOverlay")
+	if not overlay or not Camera then
+		return
+	end
+	local w = math.max(Camera.ViewportSize.X, 1)
+	local h = math.max(Camera.ViewportSize.Y, 1)
+	local cx = w / 2
+	local cy = h / 2
+	for i = 1, count do
+		local piece = makeConfetti(cx - 6, cy - 6, 10)
+		if piece then
+			local ang = math.rad(math.random(0, 360))
+			local dist = math.random(120, 320)
+			local tx = cx + math.cos(ang) * dist
+			local ty = cy + math.sin(ang) * dist + math.random(-20, 40) -- fall after burst
+			local t = TweenService:Create(
+				piece,
+				TweenInfo.new(math.random(6, 9) / 10, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+				{ Position = UDim2.fromOffset(tx, ty), Rotation = piece.Rotation + math.random(180, 360) }
+			)
+			t:Play()
+			task.delay(1.2, function()
+				if piece then
+					piece:Destroy()
+				end
+			end)
+		end
+	end
+end
 
 RoundEnd.OnClientEvent:Connect(function(result, correctWord)
 	roundActive = false
@@ -937,30 +1030,6 @@ local function rainbowText(label, duration)
 	end)
 end
 
-local CONFETTI_COLORS = {
-	Color3.fromRGB(255, 80, 80),
-	Color3.fromRGB(255, 200, 80),
-	Color3.fromRGB(120, 220, 90),
-	Color3.fromRGB(90, 160, 255),
-	Color3.fromRGB(200, 120, 255),
-	Color3.fromRGB(255, 120, 200),
-}
-
--- A single confetti piece. Parented directly to the ScreenGui (GameUI) so the
--- offset coordinates match the actual screen space (Camera.ViewportSize),
--- keeping the burst centered regardless of the overlay frame's position/size.
-local function makeConfetti(x, y, size)
-	local piece = Instance.new("ImageLabel")
-	piece.Size = UDim2.fromOffset(size or 12, size or 12)
-	piece.BackgroundColor3 = CONFETTI_COLORS[(math.random(1, #CONFETTI_COLORS))]
-	piece.BackgroundTransparency = 0.1
-	piece.Rotation = math.random(0, 360)
-	piece.ZIndex = 100
-	piece.Position = UDim2.fromOffset(x, y)
-	piece.Parent = GameUI
-	return piece
-end
-
 -- Rain confetti from the top across the FULL screen width, centered.
 local function spawnConfetti(count)
 	local overlay = GameUI:FindFirstChild("CelebrationOverlay")
@@ -987,37 +1056,6 @@ local function spawnConfetti(count)
 	end
 end
 
--- A small confetti "burst" from the center of the screen (used on correct answer).
-local function confettiBurst(count)
-	local overlay = GameUI:FindFirstChild("CelebrationOverlay")
-	if not overlay or not Camera then
-		return
-	end
-	local w = math.max(Camera.ViewportSize.X, 1)
-	local h = math.max(Camera.ViewportSize.Y, 1)
-	local cx = w / 2
-	local cy = h / 2
-	for i = 1, count do
-		local piece = makeConfetti(cx - 6, cy - 6, 10)
-		if piece then
-			local ang = math.rad(math.random(0, 360))
-			local dist = math.random(120, 320)
-			local tx = cx + math.cos(ang) * dist
-			local ty = cy + math.sin(ang) * dist + math.random(-20, 40) -- fall after burst
-			local t = TweenService:Create(
-				piece,
-				TweenInfo.new(math.random(6, 9) / 10, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-				{ Position = UDim2.fromOffset(tx, ty), Rotation = piece.Rotation + math.random(180, 360) }
-			)
-			t:Play()
-			task.delay(1.2, function()
-				if piece then
-					piece:Destroy()
-				end
-			end)
-		end
-	end
-end
 
 -- Slide a heart container's hearts off the screen (left or right) at game end.
 local function animateHeartsAway(container, dir)
@@ -1042,41 +1080,7 @@ local function animateHeartsAway(container, dir)
 	end
 end
 
--- Show the pause / rematch screen after the celebration (only for bot matches).
-local function showPauseScreen()
-	if not PauseOverlay then
-		return
-	end
-	PauseOverlay.Visible = true
-	if PauseLabel then
-		PauseLabel.Visible = true
-	end
-	if RematchButton then
-		RematchButton.Visible = true
-		UIFX.popIn(RematchButton)
-	end
-end
 
-local function hidePauseScreen()
-	if not PauseOverlay then
-		return
-	end
-	PauseOverlay.Visible = false
-	if PauseLabel then
-		PauseLabel.Visible = false
-	end
-	if RematchButton then
-		RematchButton.Visible = false
-	end
-end
-
--- Rematch button: start a new bot match (reuses the PlayVsBot request).
-if RematchButton then
-	RematchButton.Activated:Connect(function()
-		hidePauseScreen()
-		PlayVsBotRequest:FireServer()
-	end)
-end
 
 local function showCelebration(youWon, isDraw, isBotMatch)
 	if celebrationActive then
