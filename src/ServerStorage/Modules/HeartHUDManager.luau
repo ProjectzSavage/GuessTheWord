@@ -176,6 +176,15 @@ function HeartHUDManager.setHearts(ownerKey, heartCount)
 	end
 end
 
+-- Hide (but keep) an owner's above-head hearts. Used at match end to return
+-- everything to normal without destroying the billboard.
+function HeartHUDManager.hide(ownerKey)
+	local bb = billboards[ownerKey]
+	if bb then
+		bb.Enabled = false
+	end
+end
+
 -- Cleanup when an owner leaves / character is destroyed.
 function HeartHUDManager.remove(ownerKey)
 	local bb = billboards[ownerKey]

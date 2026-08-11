@@ -154,8 +154,9 @@ guaranteed present, the rest are random `a–z` fillers (`Dictionary.BANK_LETTER
 `StarterPlayerScripts.SFX` is a LocalScript with a `SFX` table at the top. Fill
 in your `rbxassetid://...` sound IDs (leave unused ones as `""`), and it plays
 them at the right moments: countdown tick, GO!, correct/timeout, wrong guess,
-heart loss, and win/lose/draw. Optional letter/hover/click sounds are listed in
-the table for you to wire up if you want them.
+heart loss (plus a "about to lose" warning on your last heart), heart restore,
+win/lose/draw (+ win jingle), bot spawn/despawn, and letter/hover/click/standUp/
+ragdoll placeholders.
 
 ## 7. Asset preloading
 

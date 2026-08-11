@@ -194,13 +194,16 @@ local COUNTDOWN_COLORS = {
 	["GO!"] = Color3.fromRGB(80, 255, 120), -- green
 }
 
+-- A cool pulsing countdown pop: the label scales in with an overshoot, then
+-- "pulses" (bounces slightly) while on screen. Cinematic (blur+FOV) is active
+-- during the countdown too.
 local function showCountdown(text)
 	if not CountdownFrame then
 		return
 	end
 	CountdownFrame.Visible = true
-	-- NOTE: no setCinematic here - FOV/blur only kicks in when the round UI
-	-- actually reveals (revealRoundUI), not during the countdown.
+	setCinematic(true)
+
 	if CountdownLabel then
 		CountdownLabel.Text = text
 		CountdownLabel.TextColor3 = COUNTDOWN_COLORS[text] or Color3.new(1, 1, 1)
@@ -209,12 +212,40 @@ local function showCountdown(text)
 			s = Instance.new("UIScale")
 			s.Parent = CountdownLabel
 		end
-		s.Scale = 0
+
+		-- Pop in with a big overshoot.
+		s.Scale = 0.3
 		TweenService:Create(
 			s,
-			TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+			TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
 			{ Scale = 1 }
 		):Play()
+
+		-- Continuous gentle pulse while the number is on screen.
+		local pulses = 2
+		for i = 1, pulses do
+			task.delay(0.4 * i, function()
+				if CountdownLabel and CountdownLabel.Parent then
+					local us = CountdownLabel:FindFirstChildOfClass("UIScale")
+					if us then
+						TweenService:Create(
+							us,
+							TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+							{ Scale = 1.12 }
+						):Play()
+						task.delay(0.15, function()
+							if us then
+								TweenService:Create(
+									us,
+									TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
+									{ Scale = 1 }
+								):Play()
+							end
+						end)
+					end
+				end
+			end)
+		end
 	end
 end
 

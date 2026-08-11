@@ -27,13 +27,20 @@ local SFX = {
 	correct    = "", -- correct answer / reveal
 	timeout    = "", -- round timed out
 	wrong      = "", -- wrong full-length guess (with the shake)
+	heartDanger = "", -- when you're about to lose a heart (last one / warning)
 	heartLoss  = "", -- a heart blinks out and disappears
+	heartRestore = "", -- a new round's hearts refresh
 	win        = "", -- you win the match
 	lose       = "", -- you lose the match
 	draw       = "", -- the match was a draw
 	letter     = "", -- a letter flies into the answer box
 	hover      = "", -- hovering over a tile/button
 	click      = "", -- clicking the Play vs Bot button
+	botSpawn   = "", -- the bot rig spawns in the chair
+	botDespawn = "", -- the bot despawns after the match
+	winJingle  = "", -- victory fanfare after winning
+	standUp    = "", -- player stands up at match end
+	ragdoll    = "", -- loser ragdolls
 }
 
 -- ---------------------------------------------------------------------------
@@ -100,16 +107,32 @@ Events:WaitForChild("WrongGuess").OnClientEvent:Connect(function()
 	play("wrong")
 end)
 
+-- Heart sounds: on the first loss (3 -> 2) play heartLoss; on the last one
+-- (2 -> 1) also play heartDanger as the "about to lose" warning. Track state so
+-- we only fire once per transition, not on every heartbeat.
+local lastHeartCount = 3
 Events:WaitForChild("HeartUpdate").OnClientEvent:Connect(function(count)
-	if count < 3 then
+	count = count or 0
+	if count < lastHeartCount then
 		play("heartLoss")
+		if count <= 1 then
+			play("heartDanger")
+		end
+	elseif count > lastHeartCount then
+		play("heartRestore")
 	end
+	lastHeartCount = count
 end)
 
+local lastOppHeartCount = 3
 Events:WaitForChild("OpponentHeartUpdate").OnClientEvent:Connect(function(count)
-	if count < 3 then
+	count = count or 0
+	if count < lastOppHeartCount then
 		play("heartLoss")
+	elseif count > lastOppHeartCount then
+		play("heartRestore")
 	end
+	lastOppHeartCount = count
 end)
 
 Events:WaitForChild("GameOver").OnClientEvent:Connect(function(_, youWon, isDraw)
@@ -117,6 +140,7 @@ Events:WaitForChild("GameOver").OnClientEvent:Connect(function(_, youWon, isDraw
 		play("draw")
 	elseif youWon then
 		play("win")
+		play("winJingle")
 	else
 		play("lose")
 	end

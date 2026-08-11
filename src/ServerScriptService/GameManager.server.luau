@@ -72,7 +72,7 @@ local TABLE_AREA = Workspace:WaitForChild("GameArea")
 -- guarantees every name is in scope everywhere. Functions NOT listed here have
 -- no forward references and keep normal `local function` definitions.
 local handleGuess, gameOver, startRound, startMatch, assignPlayer, releasePlayer,
-	handleMatchEndDramatics
+	handleMatchEndDramatics, despawnBot
 
 
 -------------------------------------------------------------------------------
@@ -213,10 +213,16 @@ local function buildBotRig(seat)
 			return nil
 		end
 		humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
-		-- Sit slightly above the seat so it looks seated, then sit it down.
-		model:PivotTo(seat.CFrame * CFrame.new(0, 1.2, 0))
+		-- Place the rig ON the seat, then sit it down so the Seat grabs it.
+		model:PivotTo(seat.CFrame * CFrame.new(0, 0.5, 0))
 		model.Parent = Workspace
 		humanoid.Sit = true
+		-- Ensure it's anchored to the seat (re-assert after a tick).
+		task.delay(0.2, function()
+			if humanoid and humanoid.Parent then
+				humanoid.Sit = true
+			end
+		end)
 		-- Give the bot hearts above its head (if its rig has a Head part).
 		HeartHUDManager.register(model, model)
 		return humanoid
@@ -247,11 +253,17 @@ local function buildBotRig(seat)
 	humanoid.Parent = model
 	head.Parent = model
 
-	local seatCFrame = seat.CFrame * CFrame.new(0, 1.2, 0)
+	local seatCFrame = seat.CFrame * CFrame.new(0, 0.5, 0)
 	model:PivotTo(seatCFrame)
 	humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
 	model.Parent = Workspace
 	humanoid.Sit = true
+	-- Re-assert sitting so the rig rests on the chair.
+	task.delay(0.2, function()
+		if humanoid and humanoid.Parent then
+			humanoid.Sit = true
+		end
+	end)
 	-- Give the bot above-head hearts even with the fallback rig.
 	HeartHUDManager.register(model, model)
 
@@ -363,7 +375,7 @@ function gameOver(tableState, winnerSeatIndex)
 					or "Bot"
 				GameOver:FireClient(occ, winnerName, won, false)
 			end
-			OpponentState:FireClient(occ, true) -- allow sit-out/rematch UI
+			OpponentState:FireClient(occ, false) -- hide the toggle; game is over
 		end
 	end
 
@@ -373,6 +385,17 @@ function gameOver(tableState, winnerSeatIndex)
 
 	-- Dramatic end: winner stands up, loser ragdolls then respawns.
 	handleMatchEndDramatics(tableState, winnerSeatIndex)
+
+	-- After the drama, return everything to normal: despawn the bot, hide all
+	-- above-head hearts, and free the occupants so a fresh sit starts clean.
+	task.delay(2.5, function()
+		despawnBot(tableState)
+		for _, occ in tableState.occupants do
+			if occ ~= "BOT" and occ then
+				HeartHUDManager.hide(occ)
+			end
+		end
+	end)
 end
 
 -- Match-end drama:
@@ -422,6 +445,23 @@ function handleMatchEndDramatics(tableState, winnerSeatIndex)
 			else
 				ragdollThenRespawn(occ) -- loser ragdolls + respawns
 			end
+		end
+	end
+end
+
+-- Remove the bot rig and its hearts so the game returns to normal.
+function despawnBot(tableState)
+	if tableState.botModel then
+		HeartHUDManager.remove(tableState.botModel)
+		if tableState.botModel.Parent then
+			tableState.botModel:Destroy()
+		end
+		tableState.botModel = nil
+		tableState.botHumanoid = nil
+	end
+	for i, occ in tableState.occupants do
+		if occ == "BOT" then
+			tableState.occupants[i] = nil
 		end
 	end
 end
