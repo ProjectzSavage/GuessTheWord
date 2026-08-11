@@ -213,11 +213,12 @@ local function buildBotRig(seat)
 			return nil
 		end
 		humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
-		-- Place the rig just above the seat and make it take the seat explicitly.
-		model:PivotTo(seat.CFrame * CFrame.new(0, 0.8, 0))
+		-- Place the rig right on the seat, then Sit=true so the Humanoid finds
+		-- and sits in the nearest seat (there is no Humanoid:TakeSeat() in Roblox).
+		model:PivotTo(seat.CFrame * CFrame.new(0, 0.6, 0))
 		model.Parent = Workspace
-		task.wait(0.1)
-		humanoid:TakeSeat(seat)
+		task.wait(0.15)
+		humanoid.Sit = true
 		-- Give the bot hearts above its head (if its rig has a Head part).
 		HeartHUDManager.register(model, model)
 		return humanoid
@@ -248,12 +249,12 @@ local function buildBotRig(seat)
 	humanoid.Parent = model
 	head.Parent = model
 
-	local seatCFrame = seat.CFrame * CFrame.new(0, 0.8, 0)
+	local seatCFrame = seat.CFrame * CFrame.new(0, 0.6, 0)
 	model:PivotTo(seatCFrame)
 	humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
 	model.Parent = Workspace
-	task.wait(0.1)
-	humanoid:TakeSeat(seat)
+	task.wait(0.15)
+	humanoid.Sit = true
 	-- Give the bot above-head hearts even with the fallback rig.
 	HeartHUDManager.register(model, model)
 
