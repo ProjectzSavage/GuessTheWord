@@ -82,10 +82,11 @@ local function computeTarget()
 		return nil
 	end
 
-	-- Camera position: use CameraAnchor part if provided, else offset back.
+	-- Camera position: use CameraAnchor part if provided (its own CFrame gives
+	-- both position and orientation for fine aiming), else offset back.
 	local camAnchor = folder:FindFirstChild("CameraAnchor")
 	if camAnchor and camAnchor:IsA("BasePart") then
-		return CFrame.lookAt(camAnchor.Position, lookAt)
+		return camAnchor.CFrame
 	end
 
 	-- Default: place the camera behind/above the table looking at it.

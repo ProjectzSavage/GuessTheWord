@@ -472,6 +472,82 @@ local function refreshSlots()
 	end
 end
 
+-- Restore a used bank tile matching `letter` (un-gray it) so it can be reused.
+local function restoreTileFor(letter)
+	for tile, l in pairs(buttonMap) do
+		if l == letter and usedTiles[tile] then
+			usedTiles[tile] = nil
+			tile.ImageColor3 = Color3.new(1, 1, 1)
+			tile.ImageTransparency = 0
+			tile.BackgroundColor3 = Color3.fromRGB(70, 90, 140)
+			tile.AutoButtonColor = true
+			return tile
+		end
+	end
+	return nil
+end
+
+-- Fly a copy of the letter from an answer slot BACK to the bank.
+local function flyLetterBack(letter, fromSlot, toTile)
+	local flying = Instance.new("ImageLabel")
+	flying.Name = "FlyingLetter"
+	flying.Image = LetterImages[letter] or ""
+	flying.ScaleType = Enum.ScaleType.Fit
+	flying.BackgroundTransparency = 1
+	flying.ZIndex = 100
+
+	local fromSize = fromSlot.AbsoluteSize
+	flying.Size = UDim2.fromOffset(fromSize.X, fromSize.Y)
+	flying.Position = UDim2.fromOffset(fromSlot.AbsolutePosition.X, fromSlot.AbsolutePosition.Y)
+	flying.Parent = GameUI
+	table.insert(flyingLetters, flying)
+
+	-- Target: the restored tile, or the ScrambledBank center.
+	local tx, ty, tsz
+	if toTile and toTile.Parent then
+		local tp = toTile.AbsolutePosition
+		tsz = toTile.AbsoluteSize
+		tx, ty = tp.X, tp.Y
+	else
+		local bp = ScrambledBank.AbsolutePosition
+		tsz = fromSize
+		tx = bp.X + ScrambledBank.AbsoluteSize.X / 2 - fromSize.X / 2
+		ty = bp.Y + ScrambledBank.AbsoluteSize.Y / 2 - fromSize.Y / 2
+	end
+
+	local fly = TweenService:Create(
+		flying,
+		TweenInfo.new(0.32, Enum.EasingStyle.Quart, Enum.EasingDirection.InOut),
+		{
+			Position = UDim2.fromOffset(tx, ty),
+			Size = UDim2.fromOffset(tsz.X, tsz.Y),
+			Rotation = -12,
+		}
+	)
+	fly:Play()
+	fly.Completed:Connect(function()
+		flying:Destroy()
+	end)
+end
+
+-- Remove the letter at `index` in the answer, sending it back to the bank.
+local function removeLetterAt(index)
+	if not roundActive or index < 1 or index > wordLength then
+		return
+	end
+	local ch = string.sub(currentGuess, index, index)
+	if ch == "" then
+		return
+	end
+	currentGuess = string.sub(currentGuess, 1, index - 1) .. string.sub(currentGuess, index + 1)
+	local fromSlot = slots[index]
+	local toTile = restoreTileFor(ch)
+	if fromSlot then
+		flyLetterBack(ch, fromSlot, toTile)
+	end
+	refreshSlots()
+end
+
 local function buildSlots()
 	clearFlying()
 	for _, child in AnswerBox:GetChildren() do
@@ -491,7 +567,9 @@ local function buildSlots()
 	end
 
 	for i = 1, wordLength do
-		local slot = Instance.new("ImageLabel")
+		-- Use an ImageButton so the player can CLICK a placed letter to send it
+		-- back to the bank (with a fly-back animation).
+		local slot = Instance.new("ImageButton")
 		slot.Name = "Slot" .. i
 		slot.Size = UDim2.new(0, 48, 0, 48)
 		slot.BackgroundTransparency = 1
@@ -499,6 +577,10 @@ local function buildSlots()
 		slot.Image = LetterImages.underscore or ""
 		slot.Parent = AnswerBox
 		slots[i] = slot
+
+		slot.Activated:Connect(function()
+			removeLetterAt(i)
+		end)
 	end
 
 	refreshSlots()
@@ -680,6 +762,8 @@ TimerUpdate.OnClientEvent:Connect(function(seconds)
 			TimerFill.AnchorPoint = Vector2.new(0, 0.5)
 			TimerFill.Position = UDim2.new(0, 0, 0.5, 0)
 			TimerFill.Size = UDim2.new(frac, 0, 1, 0)
+			-- Color shift: green -> yellow -> red as time runs out.
+			TimerFill.BackgroundColor3 = Color3.fromHSV(frac * 0.33, 1, 0.85)
 		end
 end)
 
@@ -862,20 +946,18 @@ local CONFETTI_COLORS = {
 	Color3.fromRGB(255, 120, 200),
 }
 
--- A single confetti piece on the CelebrationOverlay.
+-- A single confetti piece. Parented directly to the ScreenGui (GameUI) so the
+-- offset coordinates match the actual screen space (Camera.ViewportSize),
+-- keeping the burst centered regardless of the overlay frame's position/size.
 local function makeConfetti(x, y, size)
-	local overlay = GameUI:FindFirstChild("CelebrationOverlay")
-	if not overlay then
-		return
-	end
 	local piece = Instance.new("ImageLabel")
 	piece.Size = UDim2.fromOffset(size or 12, size or 12)
 	piece.BackgroundColor3 = CONFETTI_COLORS[(math.random(1, #CONFETTI_COLORS))]
 	piece.BackgroundTransparency = 0.1
 	piece.Rotation = math.random(0, 360)
-	piece.ZIndex = 10
+	piece.ZIndex = 100
 	piece.Position = UDim2.fromOffset(x, y)
-	piece.Parent = overlay
+	piece.Parent = GameUI
 	return piece
 end
 
