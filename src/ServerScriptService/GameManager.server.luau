@@ -355,30 +355,39 @@ function gameOver(tableState, winnerSeatIndex)
 	stopRound(tableState)
 	stopBot(tableState)
 
+	-- Was this match against a bot? (drives the "Play vs Bot again" pause button)
+	local isBotMatch = false
+	for _, occ in tableState.occupants do
+		if occ == "BOT" then
+			isBotMatch = true
+			break
+		end
+	end
+
 	for seatIndex, occ in tableState.occupants do
 		if occ ~= "BOT" and occ then
 			if winnerSeatIndex == nil then
-				GameOver:FireClient(occ, "", false, true) -- draw
+				GameOver:FireClient(occ, "", false, true, isBotMatch) -- draw
 			else
 				local won = (seatIndex == winnerSeatIndex)
 				local winnerName = tableState.occupants[winnerSeatIndex] ~= "BOT"
 					and (tableState.occupants[winnerSeatIndex] :: Player).Name
 					or "Bot"
-				GameOver:FireClient(occ, winnerName, won, false)
+				GameOver:FireClient(occ, winnerName, won, false, isBotMatch)
 			end
 			OpponentState:FireClient(occ, false) -- hide the toggle; game is over
 		end
 	end
 
 	-- NOTE: no auto-rematch. The match genuinely ENDS here (a player lost all 3
-	-- hearts). To play again, a player stands up and re-sits (a fresh match
-	-- starts once both seats are occupied again).
+	-- hearts). The client shows a "Play vs Bot again" pause screen instead.
 
-	-- Dramatic end: winner stands up, loser ragdolls then respawns.
+	-- Dramatic end: only the loser ragdolls then respawns. The winner stays in
+	-- their chair (a fresh bot match starts from the pause button).
 	handleMatchEndDramatics(tableState, winnerSeatIndex)
 
 	-- After the drama, return everything to normal: despawn the bot, hide all
-	-- above-head hearts, and free the occupants so a fresh sit starts clean.
+	-- above-head hearts.
 	task.delay(2.5, function()
 		despawnBot(tableState)
 		for _, occ in tableState.occupants do
@@ -395,20 +404,14 @@ end
 --   * A bot never "respaws" - if the bot loses it is simply left (cleaned on
 --     rematch); if the bot wins, the human loser ragdolls + respawns.
 function handleMatchEndDramatics(tableState, winnerSeatIndex)
-	local function playerCharacter(player)
-		return player.Character
-	end
-
-	local function standUp(player)
-		local character = playerCharacter(player)
-		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-		if humanoid then
-			humanoid.Sit = false
-		end
+	-- Only the loser (when there's a clear winner) ragdolls + respawns. The
+	-- winner stays seated in their chair for the rematch.
+	if winnerSeatIndex == nil then
+		return -- draw: no drama, everyone stays seated
 	end
 
 	local function ragdollThenRespawn(player)
-		local character = playerCharacter(player)
+		local character = player.Character
 		if not character then
 			return
 		end
@@ -428,14 +431,8 @@ function handleMatchEndDramatics(tableState, winnerSeatIndex)
 	end
 
 	for seatIndex, occ in tableState.occupants do
-		if occ ~= "BOT" and occ then
-			if winnerSeatIndex == nil then
-				standUp(occ) -- draw: both stand
-			elseif seatIndex == winnerSeatIndex then
-				standUp(occ) -- winner stands
-			else
-				ragdollThenRespawn(occ) -- loser ragdolls + respawns
-			end
+		if occ ~= "BOT" and occ and seatIndex ~= winnerSeatIndex then
+			ragdollThenRespawn(occ) -- loser ragdolls + respawns
 		end
 	end
 end

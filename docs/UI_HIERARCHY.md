@@ -22,6 +22,8 @@ StarterGui
     │   │   ├── Heart2  (ImageLabel)
     │   │   └── Heart3  (ImageLabel)
     │   ├── TimerLabel (TextLabel)      centered, shows "15"
+    │   ├── TimerBar  (Frame)     -- shrinking round timer bar (under TimerLabel)
+    │   │   └── TimerFill  (Frame)    -- the fill that shrinks (left→right)
     │   └── PlayerHeartContainer (Folder)
     │       ├── Heart1  (ImageLabel)
     │       ├── Heart2  (ImageLabel)
@@ -39,8 +41,16 @@ StarterGui
     │   ├── AnswerBox  (Frame)   -- letter slots are built here as ImageLabels
     │   └── ScrambledBank  (Frame)   letter tiles are created here as ImageButtons
     │
-    └── InteractionFrame  (Frame)  lower area
-        └── PlayVsBotButton  (TextButton)   "Play vs Bot", Visible = false initially
+    ├── InteractionFrame  (Frame)  lower area
+    │   └── PlayVsBotButton  (TextButton)   "Play vs Bot", Visible = false initially
+    │
+    ├── CelebrationOverlay  (Frame)   full-screen, transparent, Visible=false
+    │   └── CelebrationText  (TextLabel)   big "YOU WON! / LOSER / DRAW!" text.
+    │                                    Script sets .Text, colors, rainbow, pop.
+    │
+    └── PauseOverlay  (Frame)      full-screen, transparent, Visible=false
+        ├── PauseLabel  (TextLabel)      "Waiting for rematch..."
+        └── RematchButton  (TextButton)  "Play vs Bot again" (fires a new bot match)
 ```
 
 > **`AnswerBox` is now a `Frame`, not a `TextBox`.** The guessed letters are shown
@@ -160,6 +170,19 @@ ServerStorage
         ├── Heart2  (ImageLabel)  24x24
         └── Heart3  (ImageLabel)  24x24
 ```
+
+## Celebration, Pause, and TimerBar notes
+
+- **CelebrationOverlay / CelebrationText** — you build these; the script only
+  sets the text ("YOU WON!" / "LOSER" / "DRAW!"), colors (rainbow on win), pop-in,
+  confetti, and screen shake. Make the text big (TextScaled).
+- **PauseOverlay** (shown after the celebration, only in bot matches) — contains
+  `PauseLabel` ("Waiting for rematch...") and `RematchButton` ("Play vs Bot
+  again"). Clicking `RematchButton` fires `PlayVsBotRequest` to start a new bot
+  match. The winner stays seated; a fresh bot spawns in the empty seat.
+- **TimerBar / TimerFill** — `TimerBar` is the background, `TimerFill` the fill.
+  The script shrinks `TimerFill.Size.X` from full to 0 as the round counts down.
+  Anchor `TimerFill` to the left (AnchorPoint `{0,0.5}`) so it shrinks right→left.
 
 ## Heart image resolution (256px vs 512px)
 

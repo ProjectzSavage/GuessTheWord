@@ -79,6 +79,16 @@ local PlayVsBotButton = InteractionFrame:WaitForChild("PlayVsBotButton")
 -- Countdown frame (big 3-2-1-GO!) - built into the hierarchy by you.
 local CountdownFrame = GameUI:FindFirstChild("CountdownFrame")
 local CountdownLabel = CountdownFrame and CountdownFrame:FindFirstChild("CountdownLabel")
+-- Round timer bar (shrinks under the TimerLabel).
+local TimerBar = TopBar:FindFirstChild("TimerBar")
+local TimerFill = TimerBar and TimerBar:FindFirstChild("TimerFill")
+-- Celebration overlay + text (built by you - the script only animates them).
+local CelebrationOverlay = GameUI:FindFirstChild("CelebrationOverlay")
+local CelebrationText = CelebrationOverlay and CelebrationOverlay:FindFirstChild("CelebrationText")
+-- Pause / rematch overlay.
+local PauseOverlay = GameUI:FindFirstChild("PauseOverlay")
+local PauseLabel = PauseOverlay and PauseOverlay:FindFirstChild("PauseLabel")
+local RematchButton = PauseOverlay and PauseOverlay:FindFirstChild("RematchButton")
 
 if AnswerBox:IsA("TextBox") then
 	warn("[InputHandler] AnswerBox must be a Frame (it now renders ImageLabels), " ..
@@ -649,14 +659,24 @@ end)
 -- Pre-match 3..2..1 countdown. During the countdown, ONLY the CountdownFrame is
 -- shown (big pulsing numbers). PuzzleArea/TopBar are revealed after it's done.
 Countdown.OnClientEvent:Connect(function(n)
+	hidePauseScreen()
 	hideFrame(PuzzleArea)
 	slideTopBarOut()
 	showCountdown(tostring(n))
 end)
 
--- Round timer tick (15 -> 0).
+-- Round timer tick (15 -> 0). Also shrinks the TimerBar fill.
+local timerMax = 0
 TimerUpdate.OnClientEvent:Connect(function(seconds)
+	seconds = seconds or 0
 	TimerLabel.Text = tostring(seconds)
+	if seconds > timerMax then
+		timerMax = seconds
+	end
+	if TimerFill then
+		local frac = (timerMax > 0) and (seconds / timerMax) or 0
+		TimerFill.Size = UDim2.new(frac, 0, 1, 0)
+	end
 end)
 
 -- Display the 4 clue images (from the server's Dictionary entry) in ImageGrid,
@@ -699,6 +719,7 @@ RoundStart.OnClientEvent:Connect(function(length, letterBank, images)
 	wordLength = length
 	currentGuess = ""
 	roundActive = true
+	timerMax = 0
 	buildBank(letterBank)
 	buildSlots()
 	setClueImages(images) -- show the 4 clue images for this word
@@ -867,49 +888,95 @@ local function spawnConfetti(count)
 	end
 end
 
-local function showCelebration(youWon, isDraw)
+-- Slide a heart container's hearts off the screen (left or right) at game end.
+local function animateHeartsAway(container, dir)
+	if not container then
+		return
+	end
+	for i = 1, 3 do
+		local heart = container:FindFirstChild("Heart" .. i)
+		if heart and heart.Visible then
+			local base = heart.Position
+			local t = TweenService:Create(
+				heart,
+				TweenInfo.new(0.55, Enum.EasingStyle.Back, Enum.EasingDirection.In),
+				{ Position = base + UDim2.new(0, 140 * dir, 0, 0) }
+			)
+			t:Play()
+			t.Completed:Connect(function()
+				heart.Visible = false
+				heart.Position = base
+			end)
+		end
+	end
+end
+
+-- Show the pause / rematch screen after the celebration (only for bot matches).
+local function showPauseScreen()
+	if not PauseOverlay then
+		return
+	end
+	PauseOverlay.Visible = true
+	if PauseLabel then
+		PauseLabel.Visible = true
+	end
+	if RematchButton then
+		RematchButton.Visible = true
+		UIFX.popIn(RematchButton)
+	end
+end
+
+local function hidePauseScreen()
+	if not PauseOverlay then
+		return
+	end
+	PauseOverlay.Visible = false
+	if PauseLabel then
+		PauseLabel.Visible = false
+	end
+	if RematchButton then
+		RematchButton.Visible = false
+	end
+end
+
+-- Rematch button: start a new bot match (reuses the PlayVsBot request).
+if RematchButton then
+	RematchButton.Activated:Connect(function()
+		hidePauseScreen()
+		PlayVsBotRequest:FireServer()
+	end)
+end
+
+local function showCelebration(youWon, isDraw, isBotMatch)
 	if celebrationActive then
 		return
 	end
 	celebrationActive = true
 	showTopBarOnly()
 
-	-- Build the full-screen overlay once.
-	local overlay = GameUI:FindFirstChild("CelebrationOverlay")
-	if not overlay then
-		overlay = Instance.new("Frame")
-		overlay.Name = "CelebrationOverlay"
-		overlay.Size = UDim2.new(1, 0, 1, 0)
-		overlay.BackgroundTransparency = 1
-		overlay.ZIndex = 20
-		overlay.Visible = false
-		overlay.Parent = GameUI
+	-- The overlay + text are BUILT BY YOU in the hierarchy. The script only
+	-- animates them.
+	if CelebrationOverlay then
+		CelebrationOverlay.Visible = true
 	end
-
-	local text = overlay:FindFirstChild("CelebrationText")
-	if not text then
-		text = Instance.new("TextLabel")
-		text.Name = "CelebrationText"
-		text.Size = UDim2.new(1, 0, 0, 120)
-		text.Position = UDim2.new(0, 0, 0, 0.3)
-		text.BackgroundTransparency = 1
-		text.Font = Enum.Font.GothamBlack
-		text.TextScaled = true
-		text.TextStrokeTransparency = 0.2
-		text.ZIndex = 30
-		text.Parent = overlay
+	if not CelebrationText then
+		celebrationActive = false
+		return
 	end
 
 	local message = isDraw and "DRAW!" or (youWon and "YOU WON!" or "LOSER")
-	text.Text = message
-	text.Visible = true
-	overlay.Visible = true
+	CelebrationText.Text = message
+	CelebrationText.Visible = true
+
+	-- Animate the TopBar hearts sliding away (player left, opponent right).
+	animateHeartsAway(PlayerHeartContainer, -1)
+	animateHeartsAway(OpponentHeartContainer, 1)
 
 	-- Entrance pop.
-	local us = text:FindFirstChildOfClass("UIScale")
+	local us = CelebrationText:FindFirstChildOfClass("UIScale")
 	if not us then
 		us = Instance.new("UIScale")
-		us.Parent = text
+		us.Parent = CelebrationText
 	end
 	us.Scale = 0
 	TweenService:Create(
@@ -920,7 +987,7 @@ local function showCelebration(youWon, isDraw)
 
 	if youWon and not isDraw then
 		-- WIN: rainbow text, confetti, screen shake, FOV punch then back.
-		rainbowText(text, 2.5)
+		rainbowText(CelebrationText, 2.5)
 		spawnConfetti(70)
 		shakeCamera(1.2, 0.8)
 		if Camera then
@@ -944,26 +1011,29 @@ local function showCelebration(youWon, isDraw)
 	else
 		-- LOSE: smaller shake.
 		shakeCamera(0.6, 0.4)
-		text.TextColor3 = Color3.fromRGB(220, 60, 60)
+		CelebrationText.TextColor3 = Color3.fromRGB(220, 60, 60)
 	end
 
-	-- Let it play, then hide and slide the TopBar out to return to normal.
+	-- Let it play, then hide the overlay, slide the TopBar out, and show the
+	-- pause screen (if it was a bot match).
 	task.delay(3, function()
 		celebrationActive = false
-		if overlay then
-			overlay.Visible = false
+		if CelebrationOverlay then
+			CelebrationOverlay.Visible = false
 		end
-		if text then
-			text.Visible = false
-		end
+		CelebrationText.Visible = false
+		CelebrationText.TextColor3 = Color3.new(1, 1, 1)
 		slideTopBarOut()
 		setCinematic(0)
+		if isBotMatch then
+			showPauseScreen()
+		end
 	end)
 end
 
-GameOver.OnClientEvent:Connect(function(winnerName, youWon, isDraw)
+GameOver.OnClientEvent:Connect(function(winnerName, youWon, isDraw, isBotMatch)
 	roundActive = false
-	showCelebration(youWon, isDraw)
+	showCelebration(youWon, isDraw, isBotMatch)
 	if isDraw then
 		TimerLabel.Text = "DRAW"
 	elseif youWon then
