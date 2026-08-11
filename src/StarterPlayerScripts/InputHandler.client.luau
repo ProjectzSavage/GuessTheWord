@@ -157,28 +157,35 @@ if not blurEffect then
 	blurEffect.Parent = Lighting
 end
 
-local cinematicActive = false
+-- Cinematic intensity: 0 = off, 1 = countdown, 2 = round in-play. Always
+-- re-tweens (no guard) so the FOV visibly ramps up at each stage and eases back
+-- to normal when it goes off.
+local cinematicLevel = 0
 
-local function setCinematic(active)
-	if cinematicActive == active then
-		return
-	end
-	cinematicActive = active
+local CINEMATIC_PRESETS = {
+	[0] = { blur = 0,   fov = 0 },          -- normal
+	[1] = { blur = 6,   fov = 3 },          -- countdown
+	[2] = { blur = 12,  fov = 9 },          -- round in-play
+}
 
-	local targetBlur = active and 10 or 0
-	local targetFOV = active and math.min(baseFOV + 8, 90) or baseFOV
+local function setCinematic(level)
+	level = level or 0
+	cinematicLevel = level
+	local p = CINEMATIC_PRESETS[level] or CINEMATIC_PRESETS[0]
+	local targetBlur = p.blur
+	local targetFOV = math.min(baseFOV + p.fov, 90)
 
 	if blurEffect then
 		TweenService:Create(
 			blurEffect,
-			TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 			{ Size = targetBlur }
 		):Play()
 	end
 	if Camera then
 		TweenService:Create(
 			Camera,
-			TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 			{ FieldOfView = targetFOV }
 		):Play()
 	end
@@ -202,7 +209,7 @@ local function showCountdown(text)
 		return
 	end
 	CountdownFrame.Visible = true
-	setCinematic(true)
+	setCinematic(1)
 
 	if CountdownLabel then
 		CountdownLabel.Text = text
@@ -261,7 +268,7 @@ end
 local function setWaitingUI(waiting)
 	hideCountdown()
 	if waiting then
-		setCinematic(false)
+		setCinematic(0)
 		showFrame(InteractionFrame)
 		showFrame(PlayVsBotButton)
 		hideFrame(PuzzleArea)
@@ -277,7 +284,7 @@ local function revealRoundUI()
 	hideCountdown()
 	slideTopBarIn()
 	showFrame(PuzzleArea)
-	setCinematic(true)
+	setCinematic(2) -- round in-play: FOV punches in further
 	hideFrame(InteractionFrame)
 end
 
@@ -287,7 +294,7 @@ local function showTopBarOnly()
 	hideCountdown()
 	slideTopBarIn()
 	PuzzleArea.Visible = false      -- immediate hide so the heart loss is visible
-	setCinematic(false)
+	setCinematic(0)
 	hideFrame(InteractionFrame)
 end
 
@@ -652,7 +659,8 @@ TimerUpdate.OnClientEvent:Connect(function(seconds)
 	TimerLabel.Text = tostring(seconds)
 end)
 
--- Display the 4 clue images (from the server's Dictionary entry) in ImageGrid.
+-- Display the 4 clue images (from the server's Dictionary entry) in ImageGrid,
+-- with a staggered pop/fade-in animation.
 local function setClueImages(images)
 	if not ImageGrid or type(images) ~= "table" then
 		return
@@ -661,6 +669,28 @@ local function setClueImages(images)
 		local clue = ImageGrid:FindFirstChild("Clue" .. i)
 		if clue and clue:IsA("ImageLabel") then
 			clue.Image = images[i] or ""
+			-- Entrance animation: fade + scale from a tile.
+			local us = clue:FindFirstChildOfClass("UIScale")
+			if not us then
+				us = Instance.new("UIScale")
+				us.Parent = clue
+			end
+			clue.ImageTransparency = 1
+			us.Scale = 0
+			task.delay(0.12 * i, function()
+				if clue and clue.Parent then
+					TweenService:Create(
+						clue,
+						TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+						{ ImageTransparency = 0 }
+					):Play()
+					TweenService:Create(
+						us,
+						TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+						{ Scale = 1 }
+					):Play()
+				end
+			end)
 		end
 	end
 end
@@ -751,9 +781,189 @@ WrongGuess.OnClientEvent:Connect(function()
 	end)
 end)
 
+-------------------------------------------------------------------------------
+-- WIN / LOSE CELEBRATION
+-------------------------------------------------------------------------------
+local celebrationActive = false
+
+local function shakeCamera(intensity, duration)
+	if not Camera then
+		return
+	end
+	local base = Camera.CFrame
+	local steps = math.floor(duration / 0.05)
+	for i = 1, steps do
+		task.delay(i * 0.05, function()
+			if Camera and Camera.Parent then
+				local dx = (math.random() * 2 - 1) * intensity
+				local dy = (math.random() * 2 - 1) * intensity
+				Camera.CFrame = base * CFrame.new(dx, dy, 0)
+			end
+		end)
+	end
+	task.delay(duration, function()
+		if Camera and Camera.Parent then
+			Camera.CFrame = base
+		end
+	end)
+end
+
+-- Rainbow the text label's color for `duration` seconds.
+local function rainbowText(label, duration)
+	local start = os.clock()
+	task.spawn(function()
+		while os.clock() - start < duration do
+			local t = (os.clock() - start) / duration
+			local hue = (t * 360) % 360
+			if label and label.Parent then
+				label.TextColor3 = Color3.fromHSV(hue / 360, 1, 1)
+			end
+			task.wait(0.03)
+		end
+		if label and label.Parent then
+			label.TextColor3 = Color3.new(1, 1, 1)
+		end
+	end)
+end
+
+-- Spawn confetti (small colored squares) that fall across the screen.
+local function spawnConfetti(count)
+	local overlay = GameUI:FindFirstChild("CelebrationOverlay")
+	if not overlay then
+		return
+	end
+	local confettiColors = {
+		Color3.fromRGB(255, 80, 80),
+		Color3.fromRGB(255, 200, 80),
+		Color3.fromRGB(120, 220, 90),
+		Color3.fromRGB(90, 160, 255),
+		Color3.fromRGB(200, 120, 255),
+		Color3.fromRGB(255, 120, 200),
+	}
+	local w = GameUI.AbsoluteSize.X
+	local h = GameUI.AbsoluteSize.Y
+	for i = 1, count do
+		local piece = Instance.new("ImageLabel")
+		piece.Size = UDim2.fromOffset(12, 12)
+		piece.BackgroundColor3 = confettiColors[(i % #confettiColors) + 1]
+		piece.BackgroundTransparency = 0.1
+		piece.Rotation = math.random(0, 360)
+		piece.ZIndex = 10
+		piece.Position = UDim2.fromOffset(math.random(0, w), math.random(-120, -20))
+		piece.Parent = overlay
+
+		-- Fall + rotate to the bottom of the screen.
+		local fall = TweenService:Create(
+			piece,
+			TweenInfo.new(math.random(1, 2), Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
+			{ Position = UDim2.fromOffset(math.random(0, w), h + 40), Rotation = piece.Rotation + 360 }
+		)
+		fall:Play()
+		task.delay(2.4, function()
+			if piece then
+				piece:Destroy()
+			end
+		end)
+	end
+end
+
+local function showCelebration(youWon, isDraw)
+	if celebrationActive then
+		return
+	end
+	celebrationActive = true
+	showTopBarOnly()
+
+	-- Build the full-screen overlay once.
+	local overlay = GameUI:FindFirstChild("CelebrationOverlay")
+	if not overlay then
+		overlay = Instance.new("Frame")
+		overlay.Name = "CelebrationOverlay"
+		overlay.Size = UDim2.new(1, 0, 1, 0)
+		overlay.BackgroundTransparency = 1
+		overlay.ZIndex = 20
+		overlay.Visible = false
+		overlay.Parent = GameUI
+	end
+
+	local text = overlay:FindFirstChild("CelebrationText")
+	if not text then
+		text = Instance.new("TextLabel")
+		text.Name = "CelebrationText"
+		text.Size = UDim2.new(1, 0, 0, 120)
+		text.Position = UDim2.new(0, 0, 0, 0.3)
+		text.BackgroundTransparency = 1
+		text.Font = Enum.Font.GothamBlack
+		text.TextScaled = true
+		text.TextStrokeTransparency = 0.2
+		text.ZIndex = 30
+		text.Parent = overlay
+	end
+
+	local message = isDraw and "DRAW!" or (youWon and "YOU WON!" or "LOSER")
+	text.Text = message
+	text.Visible = true
+	overlay.Visible = true
+
+	-- Entrance pop.
+	local us = text:FindFirstChildOfClass("UIScale")
+	if not us then
+		us = Instance.new("UIScale")
+		us.Parent = text
+	end
+	us.Scale = 0
+	TweenService:Create(
+		us,
+		TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+		{ Scale = 1 }
+	):Play()
+
+	if youWon and not isDraw then
+		-- WIN: rainbow text, confetti, screen shake, FOV punch then back.
+		rainbowText(text, 2.5)
+		spawnConfetti(70)
+		shakeCamera(1.2, 0.8)
+		if Camera then
+			TweenService:Create(
+				Camera,
+				TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{ FieldOfView = math.min(baseFOV + 14, 90) }
+			):Play()
+			task.delay(1.2, function()
+				if Camera then
+					TweenService:Create(
+						Camera,
+						TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
+						{ FieldOfView = baseFOV }
+					):Play()
+				end
+			end)
+		end
+	elseif isDraw then
+		shakeCamera(0.5, 0.4)
+	else
+		-- LOSE: smaller shake.
+		shakeCamera(0.6, 0.4)
+		text.TextColor3 = Color3.fromRGB(220, 60, 60)
+	end
+
+	-- Let it play, then hide and slide the TopBar out to return to normal.
+	task.delay(3, function()
+		celebrationActive = false
+		if overlay then
+			overlay.Visible = false
+		end
+		if text then
+			text.Visible = false
+		end
+		slideTopBarOut()
+		setCinematic(0)
+	end)
+end
+
 GameOver.OnClientEvent:Connect(function(winnerName, youWon, isDraw)
 	roundActive = false
-	showTopBarOnly()
+	showCelebration(youWon, isDraw)
 	if isDraw then
 		TimerLabel.Text = "DRAW"
 	elseif youWon then

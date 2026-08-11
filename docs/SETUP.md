@@ -6,6 +6,33 @@ and build the UI.
 
 ---
 
+## ⚡ QUICK SETUP CHECKLIST (what YOU must do in Studio)
+
+Everything below is something the scripts **do not** auto-create — you have to
+build it once. The full details are further down.
+
+1. **UI (`StarterGui`)** — build the `GameUI` ScreenGui from `docs/UI_HIERARCHY.md`:
+   `TopBar`, `CountdownFrame` (+`CountdownLabel`), `PuzzleArea`
+   (`ImageGrid` with `Clue1..4`, `AnswerBox` Frame, `ScrambledBank`), and
+   `InteractionFrame` (+`PlayVsBotButton`).
+   - **Set top-level frame positions in Scale, not offset**, with AnchorPoints.
+   - Set the 6 TopBar `HeartN.Image`s to your heart texture.
+   - `AnswerBox` must be a **Frame** (not a TextBox).
+2. **Letter images** — in `ReplicatedStorage.LetterImages`, replace every
+   `rbxassetid://...` with your A–Z + underscore image IDs.
+3. **Word/clue images** — in `ServerStorage.Modules.Dictionary`, replace the
+   placeholder `rbxassetid://...` clue images (they feed `Clue1..4`).
+4. **Above-head hearts** — `ServerStorage.HeartHUD` (BillboardGui with
+   `HeartFrame` + `Heart1/2/3`). Auto-created if missing (text ♥ default).
+5. **Bot rig (recommended)** — `ServerStorage.BotRig` (a Model with a `Humanoid`
+   + `Head`) if you want a visible bot body.
+6. **SFX** — fill the `SFX` table in `StarterPlayerScripts.SFX.client.luau`
+   with your sound IDs (optional; unused ones are skipped).
+7. **Workspace** — `Workspace.GameArea.Table1` (Folder) containing your `Table`
+   + 2 `Seat`/`VehicleSeat` instances.
+
+---
+
 ## 1. File-to-Studio mapping
 
 You may (and should, for organization) put the server scripts in a folder named

@@ -213,16 +213,11 @@ local function buildBotRig(seat)
 			return nil
 		end
 		humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
-		-- Place the rig ON the seat, then sit it down so the Seat grabs it.
-		model:PivotTo(seat.CFrame * CFrame.new(0, 0.5, 0))
+		-- Place the rig just above the seat and make it take the seat explicitly.
+		model:PivotTo(seat.CFrame * CFrame.new(0, 0.8, 0))
 		model.Parent = Workspace
-		humanoid.Sit = true
-		-- Ensure it's anchored to the seat (re-assert after a tick).
-		task.delay(0.2, function()
-			if humanoid and humanoid.Parent then
-				humanoid.Sit = true
-			end
-		end)
+		task.wait(0.1)
+		humanoid:TakeSeat(seat)
 		-- Give the bot hearts above its head (if its rig has a Head part).
 		HeartHUDManager.register(model, model)
 		return humanoid
@@ -253,17 +248,12 @@ local function buildBotRig(seat)
 	humanoid.Parent = model
 	head.Parent = model
 
-	local seatCFrame = seat.CFrame * CFrame.new(0, 0.5, 0)
+	local seatCFrame = seat.CFrame * CFrame.new(0, 0.8, 0)
 	model:PivotTo(seatCFrame)
 	humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
 	model.Parent = Workspace
-	humanoid.Sit = true
-	-- Re-assert sitting so the rig rests on the chair.
-	task.delay(0.2, function()
-		if humanoid and humanoid.Parent then
-			humanoid.Sit = true
-		end
-	end)
+	task.wait(0.1)
+	humanoid:TakeSeat(seat)
 	-- Give the bot above-head hearts even with the fallback rig.
 	HeartHUDManager.register(model, model)
 
