@@ -30,6 +30,11 @@ build it once. The full details are further down.
    with your sound IDs (optional; unused ones are skipped).
 7. **Workspace** — `Workspace.GameArea.Table1` (Folder) containing your `Table`
    + 2 `Seat`/`VehicleSeat` instances.
+8. **CameraAnchor (recommended for 2-player view)** — add a Part named
+   `CameraAnchor` inside each `TableN` folder, positioned where the camera
+   should sit (above/behind the table). When a match starts, both players'
+   cameras focus there. If absent, the camera falls back to behind the `Table`
+   model, then to the midpoint of the two seats.
 
 ---
 
@@ -62,6 +67,7 @@ ServerScriptService
 | `src/StarterPlayerScripts/HoverController.client.luau`          | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/Preloader.client.luau`                | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/SFX.client.luau`                      | `StarterPlayerScripts`      | LocalScript |
+| `src/StarterPlayerScripts/CameraController.client.luau`         | `StarterPlayerScripts`      | LocalScript |
 
 > **Tip:** For each file, right-click the target container in Studio →
 > **Insert Object** → choose the right type, name it, then paste the file's
@@ -141,7 +147,8 @@ Workspace
     └── Table1  (Folder)
         ├── Table        (existing part/model)
         ├── Seat1        (existing Seat)
-        └── Seat2        (existing Seat)
+        ├── Seat2        (existing Seat)
+        └── CameraAnchor (Part, optional)  -- where the match camera sits
 ```
 
 - `GameManager` auto-detects any `GameArea` child folder whose name starts with

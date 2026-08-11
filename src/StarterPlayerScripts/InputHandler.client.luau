@@ -673,10 +673,14 @@ TimerUpdate.OnClientEvent:Connect(function(seconds)
 	if seconds > timerMax then
 		timerMax = seconds
 	end
-	if TimerFill then
-		local frac = (timerMax > 0) and (seconds / timerMax) or 0
-		TimerFill.Size = UDim2.new(frac, 0, 1, 0)
-	end
+		if TimerFill then
+			local frac = (timerMax > 0) and (seconds / timerMax) or 0
+			-- Force left-anchor so the fill depletes right→left cleanly, no
+			-- matter how it was positioned in Studio.
+			TimerFill.AnchorPoint = Vector2.new(0, 0.5)
+			TimerFill.Position = UDim2.new(0, 0, 0.5, 0)
+			TimerFill.Size = UDim2.new(frac, 0, 1, 0)
+		end
 end)
 
 -- Display the 4 clue images (from the server's Dictionary entry) in ImageGrid,
@@ -735,7 +739,9 @@ end)
 RoundEnd.OnClientEvent:Connect(function(result, correctWord)
 	roundActive = false
 	if result == "correct" then
-		-- Correct answer: server hides the puzzle for the dramatic beat.
+		-- Correct answer: server hides the puzzle for the dramatic beat, and a
+		-- small confetti burst pops from the center.
+		confettiBurst(30)
 		showTopBarOnly()
 	else
 		-- Timeout: reveal the word (puzzle stays visible).
@@ -847,44 +853,87 @@ local function rainbowText(label, duration)
 	end)
 end
 
--- Spawn confetti (small colored squares) that fall across the screen.
-local function spawnConfetti(count)
+local CONFETTI_COLORS = {
+	Color3.fromRGB(255, 80, 80),
+	Color3.fromRGB(255, 200, 80),
+	Color3.fromRGB(120, 220, 90),
+	Color3.fromRGB(90, 160, 255),
+	Color3.fromRGB(200, 120, 255),
+	Color3.fromRGB(255, 120, 200),
+}
+
+-- A single confetti piece on the CelebrationOverlay.
+local function makeConfetti(x, y, size)
 	local overlay = GameUI:FindFirstChild("CelebrationOverlay")
 	if not overlay then
 		return
 	end
-	local confettiColors = {
-		Color3.fromRGB(255, 80, 80),
-		Color3.fromRGB(255, 200, 80),
-		Color3.fromRGB(120, 220, 90),
-		Color3.fromRGB(90, 160, 255),
-		Color3.fromRGB(200, 120, 255),
-		Color3.fromRGB(255, 120, 200),
-	}
-	local w = GameUI.AbsoluteSize.X
-	local h = GameUI.AbsoluteSize.Y
-	for i = 1, count do
-		local piece = Instance.new("ImageLabel")
-		piece.Size = UDim2.fromOffset(12, 12)
-		piece.BackgroundColor3 = confettiColors[(i % #confettiColors) + 1]
-		piece.BackgroundTransparency = 0.1
-		piece.Rotation = math.random(0, 360)
-		piece.ZIndex = 10
-		piece.Position = UDim2.fromOffset(math.random(0, w), math.random(-120, -20))
-		piece.Parent = overlay
+	local piece = Instance.new("ImageLabel")
+	piece.Size = UDim2.fromOffset(size or 12, size or 12)
+	piece.BackgroundColor3 = CONFETTI_COLORS[(math.random(1, #CONFETTI_COLORS))]
+	piece.BackgroundTransparency = 0.1
+	piece.Rotation = math.random(0, 360)
+	piece.ZIndex = 10
+	piece.Position = UDim2.fromOffset(x, y)
+	piece.Parent = overlay
+	return piece
+end
 
-		-- Fall + rotate to the bottom of the screen.
-		local fall = TweenService:Create(
-			piece,
-			TweenInfo.new(math.random(1, 2), Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
-			{ Position = UDim2.fromOffset(math.random(0, w), h + 40), Rotation = piece.Rotation + 360 }
-		)
-		fall:Play()
-		task.delay(2.4, function()
-			if piece then
-				piece:Destroy()
-			end
-		end)
+-- Rain confetti from the top across the FULL screen width, centered.
+local function spawnConfetti(count)
+	local overlay = GameUI:FindFirstChild("CelebrationOverlay")
+	if not overlay or not Camera then
+		return
+	end
+	local w = math.max(Camera.ViewportSize.X, 1)
+	local h = math.max(Camera.ViewportSize.Y, 1)
+	for i = 1, count do
+		local piece = makeConfetti(math.random(-20, w + 20), math.random(-120, -20))
+		if piece then
+			local fall = TweenService:Create(
+				piece,
+				TweenInfo.new(math.random(1, 2), Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
+				{ Position = UDim2.fromOffset(math.random(-20, w + 20), h + 40), Rotation = piece.Rotation + 360 }
+			)
+			fall:Play()
+			task.delay(2.4, function()
+				if piece then
+					piece:Destroy()
+				end
+			end)
+		end
+	end
+end
+
+-- A small confetti "burst" from the center of the screen (used on correct answer).
+local function confettiBurst(count)
+	local overlay = GameUI:FindFirstChild("CelebrationOverlay")
+	if not overlay or not Camera then
+		return
+	end
+	local w = math.max(Camera.ViewportSize.X, 1)
+	local h = math.max(Camera.ViewportSize.Y, 1)
+	local cx = w / 2
+	local cy = h / 2
+	for i = 1, count do
+		local piece = makeConfetti(cx - 6, cy - 6, 10)
+		if piece then
+			local ang = math.rad(math.random(0, 360))
+			local dist = math.random(120, 320)
+			local tx = cx + math.cos(ang) * dist
+			local ty = cy + math.sin(ang) * dist + math.random(-20, 40) -- fall after burst
+			local t = TweenService:Create(
+				piece,
+				TweenInfo.new(math.random(6, 9) / 10, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+				{ Position = UDim2.fromOffset(tx, ty), Rotation = piece.Rotation + math.random(180, 360) }
+			)
+			t:Play()
+			task.delay(1.2, function()
+				if piece then
+					piece:Destroy()
+				end
+			end)
+		end
 	end
 end
 
@@ -989,7 +1038,7 @@ local function showCelebration(youWon, isDraw, isBotMatch)
 		-- WIN: rainbow text, confetti, screen shake, FOV punch then back.
 		rainbowText(CelebrationText, 2.5)
 		spawnConfetti(70)
-		shakeCamera(1.2, 0.8)
+		shakeCamera(2.6, 1.0) -- aggressive win shake
 		if Camera then
 			TweenService:Create(
 				Camera,
