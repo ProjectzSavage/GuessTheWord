@@ -34,6 +34,7 @@ ServerScriptService
 | `src/StarterPlayerScripts/InputHandler.client.luau`             | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/HoverController.client.luau`          | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/Preloader.client.luau`                | `StarterPlayerScripts`      | LocalScript |
+| `src/StarterPlayerScripts/SFX.client.luau`                      | `StarterPlayerScripts`      | LocalScript |
 
 > **Tip:** For each file, right-click the target container in Studio →
 > **Insert Object** → choose the right type, name it, then paste the file's
@@ -148,7 +149,15 @@ starts the next round (which reshores the puzzle). The heart fade is animated in
 guaranteed present, the rest are random `a–z` fillers (`Dictionary.BANK_LETTERS`
 = 12, adjustable).
 
-## 6. Asset preloading
+## 6. Sound effects
+
+`StarterPlayerScripts.SFX` is a LocalScript with a `SFX` table at the top. Fill
+in your `rbxassetid://...` sound IDs (leave unused ones as `""`), and it plays
+them at the right moments: countdown tick, GO!, correct/timeout, wrong guess,
+heart loss, and win/lose/draw. Optional letter/hover/click sounds are listed in
+the table for you to wire up if you want them.
+
+## 7. Asset preloading
 
 `Preloader.client.luau` preloads the letter images (A–Z + underscore), the TopBar
 heart images, and the clue images so they don't pop in mid-round. It uses
@@ -157,7 +166,7 @@ heart images, and the clue images so they don't pop in mid-round. It uses
 
 ---
 
-## 5. Adding your own words
+## 8. Adding your own words
 
 Open `Dictionary.luau` and add entries like:
 
@@ -178,7 +187,7 @@ Open `Dictionary.luau` and add entries like:
 
 ---
 
-## 6. Tuning
+## 9. Tuning
 
 Everything is configurable at the top of `GameManager.server.luau`:
 
@@ -191,7 +200,7 @@ local REMATCH_DELAY = 5
 
 ---
 
-## 7. Troubleshooting
+## 10. Troubleshooting
 
 - **"No 'Table*' folders found…"** — make sure the Table folder is directly
   under `GameArea` and named `Table1` (etc.), with two Seats inside.

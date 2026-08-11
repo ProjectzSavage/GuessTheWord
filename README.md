@@ -31,7 +31,9 @@ src/
 │   └── HoverFX.luau                # reusable hover/pop effect
 └── StarterPlayerScripts/
     ├── InputHandler.client.luau    # hybrid click + keyboard input + UI
-    └── HoverController.client.luau # applies HoverFX to clues + letter tiles
+    ├── HoverController.client.luau # applies HoverFX to clues + letter tiles
+    ├── Preloader.client.luau       # preloads image assets
+    └── SFX.client.luau             # sound effects (fill in IDs)
 ```
 
 ## Feature checklist

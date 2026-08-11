@@ -71,6 +71,7 @@ local TimerLabel = TopBar:WaitForChild("TimerLabel")
 local PlayerHeartContainer = TopBar:WaitForChild("PlayerHeartContainer")
 local OpponentHeartContainer = TopBar:WaitForChild("OpponentHeartContainer")
 local PuzzleArea = GameUI:WaitForChild("PuzzleArea")
+local ImageGrid = PuzzleArea:FindFirstChild("ImageGrid")
 local AnswerBox = PuzzleArea:WaitForChild("AnswerBox")
 local ScrambledBank = PuzzleArea:WaitForChild("ScrambledBank")
 local InteractionFrame = GameUI:WaitForChild("InteractionFrame")
@@ -198,7 +199,8 @@ local function showCountdown(text)
 		return
 	end
 	CountdownFrame.Visible = true
-	setCinematic(true)
+	-- NOTE: no setCinematic here - FOV/blur only kicks in when the round UI
+	-- actually reveals (revealRoundUI), not during the countdown.
 	if CountdownLabel then
 		CountdownLabel.Text = text
 		CountdownLabel.TextColor3 = COUNTDOWN_COLORS[text] or Color3.new(1, 1, 1)
@@ -221,7 +223,8 @@ local function hideCountdown()
 		return
 	end
 	CountdownFrame.Visible = false
-	setCinematic(false)
+	-- NOTE: no setCinematic(false) here - the cinematic should persist through
+	-- the countdown->round transition and only ease out at game end.
 end
 
 local function setWaitingUI(waiting)
@@ -618,13 +621,26 @@ TimerUpdate.OnClientEvent:Connect(function(seconds)
 	TimerLabel.Text = tostring(seconds)
 end)
 
+-- Display the 4 clue images (from the server's Dictionary entry) in ImageGrid.
+local function setClueImages(images)
+	if not ImageGrid or type(images) ~= "table" then
+		return
+	end
+	for i = 1, 4 do
+		local clue = ImageGrid:FindFirstChild("Clue" .. i)
+		if clue and clue:IsA("ImageLabel") then
+			clue.Image = images[i] or ""
+		end
+	end
+end
+
 RoundStart.OnClientEvent:Connect(function(length, letterBank, images)
 	wordLength = length
 	currentGuess = ""
 	roundActive = true
 	buildBank(letterBank)
 	buildSlots()
-	-- (Optionally display `images` in PuzzleArea.ImageGrid here.)
+	setClueImages(images) -- show the 4 clue images for this word
 	PlayVsBotButton.Visible = false
 
 	-- Flash "GO!" on the countdown frame, then reveal the round UI.
