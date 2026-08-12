@@ -355,6 +355,12 @@ function gameOver(tableState, winnerSeatIndex)
 	stopRound(tableState)
 	stopBot(tableState)
 
+	-- Update the Wins/Streak leaderboard BEFORE firing GameOver, so clients read
+	-- the fresh streak in their celebration. Also covers "opponent left
+	-- mid-match" (releasePlayer calls gameOver with the remaining player as the
+	-- winner), so they win exactly like a normal victory.
+	awardMatchOutcome(tableState, winnerSeatIndex)
+
 	-- Was this match against a bot? (drives the "Play vs Bot again" pause button)
 	local isBotMatch = false
 	for _, occ in tableState.occupants do
@@ -378,11 +384,6 @@ function gameOver(tableState, winnerSeatIndex)
 			OpponentState:FireClient(occ, false) -- hide the toggle; game is over
 		end
 	end
-
-	-- Update the Wins/Streak leaderboard. This also covers "opponent left
-	-- mid-match" (releasePlayer calls gameOver with the remaining player as the
-	-- winner), so they win exactly like a normal victory.
-	awardMatchOutcome(tableState, winnerSeatIndex)
 
 	-- NOTE: no auto-rematch. The match genuinely ENDS here (a player lost all 3
 	-- hearts). The client shows a "Play vs Bot again" pause screen instead.

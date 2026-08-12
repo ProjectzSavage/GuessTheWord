@@ -21,7 +21,8 @@ src/
 ├── ServerScriptService/
 │   ├── SetupEvents.server.luau     # auto-creates ReplicatedStorage.Events
 │   ├── GameManager.server.luau     # seats, matches, rounds, bot, validation
-│   └── Hearts.server.luau          # above-head hearts BillboardGui
+│   ├── Hearts.server.luau          # above-head hearts BillboardGui
+│   └── Nametag.server.luau         # name + 🔥win-streak BillboardGui
 ├── ServerStorage/
 │   └── Modules/
 │       ├── Dictionary.luau         # server-only word/image dictionary

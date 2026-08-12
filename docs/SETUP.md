@@ -35,6 +35,9 @@ build it once. The full details are further down.
    should sit (above/behind the table). When a match starts, both players'
    cameras focus there. If absent, the camera falls back to behind the `Table`
    model, then to the midpoint of the two seats.
+9. **Nametag (optional, automatic)** — `Nametag.server.luau` builds its own
+   BillboardGui in code (name + "🔥N" streak). No Studio setup needed. Just add
+   the script to `ServerScriptService > Scripts`.
 
 ---
 
@@ -58,6 +61,7 @@ ServerScriptService
 | `src/ServerScriptService/SetupEvents.server.luau`               | `ServerScriptService > Scripts` | Script   |
 | `src/ServerScriptService/GameManager.server.luau`               | `ServerScriptService > Scripts` | Script   |
 | `src/ServerScriptService/Hearts.server.luau`                    | `ServerScriptService > Scripts` | Script   |
+| `src/ServerScriptService/Nametag.server.luau`                   | `ServerScriptService > Scripts` | Script   |
 | `src/ServerStorage/Modules/Dictionary.luau`                     | `ServerStorage > Modules`   | ModuleScript |
 | `src/ServerStorage/Modules/HeartHUDManager.luau`                | `ServerStorage > Modules`   | ModuleScript |
 | `src/ReplicatedStorage/LetterImages.luau`                      | `ReplicatedStorage`         | ModuleScript |
@@ -231,6 +235,12 @@ Open `Dictionary.luau` and add entries like:
 
 > Keep `word` lowercase. The server compares the normalized guess to it, so the
 > client can never fake a correct answer.
+
+**Yes — that's all you need to do.** Adding a word is just copying this table
+entry (word + 4 clue image IDs) into the `Dictionary.Entries` array. No other
+code needs editing: `randomEntry`, `buildBank` (12-letter scramble), the clue
+feed to `Clue1..4`, and server validation all read from this same array
+automatically. Just make sure each entry has a unique `word` and 4 image IDs.
 
 ---
 

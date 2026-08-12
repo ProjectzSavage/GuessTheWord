@@ -289,13 +289,26 @@ local function setWaitingUI(waiting)
 	end
 end
 
--- Only show PuzzleArea + TopBar AFTER the countdown finishes.
+-- Only show PuzzleArea + TopBar AFTER the countdown finishes. This is also
+-- where the puzzle's entrance animations play (now that it's actually visible).
 local function revealRoundUI()
 	hideCountdown()
 	slideTopBarIn()
 	showFrame(PuzzleArea)
 	setCinematic(2) -- round in-play: FOV punches in further
 	hideFrame(InteractionFrame)
+
+	-- Tile cascade intro.
+	local tiles = {}
+	for _, child in ScrambledBank:GetChildren() do
+		if child:IsA("ImageButton") then
+			table.insert(tiles, child)
+		end
+	end
+	UIFX.staggerIn(tiles, { duration = 0.24, stagger = 0.06 })
+
+	-- Clue image pop/fade intro.
+	animateClueIntro()
 end
 
 local function showTopBarOnly()
@@ -446,14 +459,8 @@ local function buildBank(letterBank)
 		buttonMap[tile] = letter
 	end
 
-	-- Round-start intro: tiles cascade in one by one.
-	local tiles = {}
-	for _, child in ScrambledBank:GetChildren() do
-		if child:IsA("ImageButton") then
-			table.insert(tiles, child)
-		end
-	end
-	UIFX.staggerIn(tiles, { duration = 0.24, stagger = 0.06 })
+	-- NOTE: tile cascade intro is triggered in revealRoundUI() (after the
+	-- puzzle is actually visible), not here - otherwise it plays while hidden.
 end
 
 -------------------------------------------------------------------------------
@@ -872,17 +879,31 @@ TimerUpdate.OnClientEvent:Connect(function(seconds)
 	end
 end)
 
--- Display the 4 clue images (from the server's Dictionary entry) in ImageGrid,
--- with a staggered pop/fade-in animation.
+-- The clue images for the current round (shown with an intro on reveal).
+local pendingClueImages = {}
+
+-- Set the 4 clue images in ImageGrid (no animation - just assign).
 local function setClueImages(images)
-	if not ImageGrid or type(images) ~= "table" then
+	pendingClueImages = type(images) == "table" and images or {}
+	if not ImageGrid then
 		return
 	end
 	for i = 1, 4 do
 		local clue = ImageGrid:FindFirstChild("Clue" .. i)
 		if clue and clue:IsA("ImageLabel") then
-			clue.Image = images[i] or ""
-			-- Entrance animation: fade + scale from a tile.
+			clue.Image = pendingClueImages[i] or ""
+		end
+	end
+end
+
+-- Staggered pop/fade-in for the clue images (called on reveal, so it's visible).
+local function animateClueIntro()
+	if not ImageGrid then
+		return
+	end
+	for i = 1, 4 do
+		local clue = ImageGrid:FindFirstChild("Clue" .. i)
+		if clue and clue:IsA("ImageLabel") then
 			local us = clue:FindFirstChildOfClass("UIScale")
 			if not us then
 				us = Instance.new("UIScale")
@@ -1177,6 +1198,16 @@ local function showCelebration(youWon, isDraw, isBotMatch)
 	end
 
 	local message = isDraw and "DRAW!" or (youWon and "YOU WON!" or "LOSER")
+
+	-- On a win, show the current streak ("YOU WON! — Streak ×3 🔥").
+	if youWon and not isDraw then
+		local ls = player:FindFirstChild("leaderstats")
+		local streak = ls and ls:FindFirstChild("Streak")
+		if streak and streak.Value > 0 then
+			message = message .. "\nStreak ×" .. streak.Value .. " 🔥"
+		end
+	end
+
 	CelebrationText.Text = message
 	CelebrationText.Visible = true
 
