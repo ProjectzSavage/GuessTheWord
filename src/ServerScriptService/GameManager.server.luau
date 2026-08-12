@@ -45,6 +45,7 @@ local RoundEnd = Events:WaitForChild("RoundEnd")
 local GameOver = Events:WaitForChild("GameOver")
 local OpponentState = Events:WaitForChild("OpponentState")
 local WrongGuess = Events:WaitForChild("WrongGuess")
+local PreloadClueImages = Events:WaitForChild("PreloadClueImages")
 
 -------------------------------------------------------------------------------
 -- CONFIG
@@ -861,6 +862,25 @@ end
 
 Players.PlayerAdded:Connect(function(player)
 	ensureLeaderstats(player)
+
+	-- Send every unique clue image ID so the client preloads them all up front
+	-- (instant display instead of popping in mid-round).
+	task.spawn(function()
+		local seen = {}
+		local ids = {}
+		for _, entry in Dictionary.Entries do
+			if entry.images then
+				for _, id in entry.images do
+					if not seen[id] then
+						seen[id] = true
+						table.insert(ids, id)
+					end
+				end
+			end
+		end
+		PreloadClueImages:FireClient(player, ids)
+	end)
+
 	player.CharacterRemoving:Connect(function(character)
 		-- If a player disconnects or respawns, free their seat.
 		for _, tableState in tableStates do

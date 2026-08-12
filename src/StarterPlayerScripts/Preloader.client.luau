@@ -21,10 +21,9 @@ local ContentProvider = game:GetService("ContentProvider")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
--- Preload an array of content strings (e.g. "rbxassetid://...") AND/OR instances
--- (their content properties, like Image, are preloaded).
+-- Preload an array of content strings (e.g. "rbxassetid://...") AND/OR instances.
 local function preload(content)
-	if #content == 0 then
+	if type(content) ~= "table" or #content == 0 then
 		return
 	end
 	task.spawn(function()
@@ -98,3 +97,30 @@ end
 preload(all)
 
 print("[Preloader] Queued", #all, "assets to preload.")
+
+-- Preload all clue image IDs the server sends at join (so clue images are
+-- already cached when a round starts).
+local Events = ReplicatedStorage:WaitForChild("Events")
+Events:WaitForChild("PreloadClueImages").OnClientEvent:Connect(function(ids)
+	preload(ids)
+end)
+
+-- Also preload a round's clue images + letter bank the moment they arrive.
+Events:WaitForChild("RoundStart").OnClientEvent:Connect(function(_, letterBank, images)
+	local toPreload = {}
+	if type(images) == "table" then
+		for _, id in images do
+			table.insert(toPreload, id)
+		end
+	end
+	if type(letterBank) == "table" then
+		local LetterImages = require(ReplicatedStorage:WaitForChild("LetterImages"))
+		for _, ch in letterBank do
+			local id = LetterImages[ch]
+			if type(id) == "string" and id ~= "" then
+				table.insert(toPreload, id)
+			end
+		end
+	end
+	preload(toPreload)
+end)

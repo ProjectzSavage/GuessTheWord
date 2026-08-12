@@ -171,6 +171,22 @@ ServerStorage
         └── Heart3  (ImageLabel)  24x24
 ```
 
+### Moving the hearts up/down (position Y)
+
+The hearts sit **above the head** via the billboard's `StudsOffset`. To move them
+higher or lower:
+
+- **Option 1 (recommended):** change `HEART_OFFSET_Y` at the top of
+  `ServerStorage.Modules.HeartHUDManager` (currently `3.0` studs). Raise it to
+  move the hearts higher, lower it to move them closer to the head. This is
+  applied to every billboard on clone.
+- **Option 2:** edit `StudsOffset` on your `ServerStorage.HeartHUD` template —
+  but the module overrides `Y` with `HEART_OFFSET_Y`, so use Option 1 for the
+  reliable knob.
+
+(The **TopBar** heart containers are regular GUI frames — move them with their
+`Position` in Studio, in Scale.)
+
 ## Celebration, Pause, and TimerBar notes
 
 - **CelebrationOverlay / CelebrationText** — you build these; the script only

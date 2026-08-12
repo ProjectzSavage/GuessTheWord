@@ -333,9 +333,9 @@ local roundActive = false
 local matchInProgress = false -- true during an active match (jump locked)
 local flyingLetters = {}     -- in-flight flying clones (for cleanup)
 
--- Forward declarations for jump-lock/seat-exit helpers (called early by the
--- Countdown handler but defined later in the file).
-local lockJump, getHumanoid, onLeftSeat, setupCharacterJump
+-- Forward declarations for helpers that are CALLED early (by revealRoundUI /
+-- the Countdown handler) but DEFINED later in the file.
+local lockJump, getHumanoid, onLeftSeat, setupCharacterJump, animateClueIntro
 
 setWaitingUI(false) -- start hidden until the server says otherwise
 
@@ -897,7 +897,7 @@ local function setClueImages(images)
 end
 
 -- Staggered pop/fade-in for the clue images (called on reveal, so it's visible).
-local function animateClueIntro()
+function animateClueIntro()
 	if not ImageGrid then
 		return
 	end

@@ -31,6 +31,10 @@ local ServerStorage = game:GetService("ServerStorage")
 
 local HeartHUDManager = {}
 
+-- How high above the head the hearts sit (studs). Raise/lower to move the
+-- hearts up or down. Applied to every billboard on clone.
+local HEART_OFFSET_Y = 3.0
+
 -- The preferred TEMPLATE lives in ServerStorage (see docs/UI_HIERARCHY.md).
 -- If you have NOT created it yet, we auto-build a working default so hearts
 -- still show (using a text "♥" glyph instead of an Image). Providing your own
@@ -98,6 +102,9 @@ function HeartHUDManager.register(ownerKey, character)
 
 	local bb = TEMPLATE:Clone()
 	bb.Enabled = false -- hidden until the match starts
+	-- Control the vertical position of the hearts above the head.
+	local off = bb.StudsOffset or Vector3.new()
+	bb.StudsOffset = Vector3.new(off.X, HEART_OFFSET_Y, off.Z)
 	bb.Parent = head
 	billboards[ownerKey] = bb
 end

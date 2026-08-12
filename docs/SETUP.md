@@ -35,9 +35,11 @@ build it once. The full details are further down.
    should sit (above/behind the table). When a match starts, both players'
    cameras focus there. If absent, the camera falls back to behind the `Table`
    model, then to the midpoint of the two seats.
-9. **Nametag (optional, automatic)** — `Nametag.server.luau` builds its own
-   BillboardGui in code (name + "🔥N" streak). No Studio setup needed. Just add
-   the script to `ServerScriptService > Scripts`.
+9. **Nametag (optional)** — `Nametag.server.luau` uses a **BillboardGui template
+   named `Nametag`** you build as a child of the script (with `PlayerName`,
+   optional `Icons` frame with `Premium`/`Owner`/`Admin`). If you don't build
+   one, it auto-creates a simple name + "🔥N" streak tag. Add the script to
+   `ServerScriptService > Scripts`.
 
 ---
 
