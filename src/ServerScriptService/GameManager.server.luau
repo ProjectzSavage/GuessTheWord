@@ -72,6 +72,7 @@ local CASH_REWARDS = {
 	{ value = 5000, weight = 1 }, -- rarest: 1%
 }
 local REROLL_DURATION = 3 -- seconds the client shows the reroll animation
+local REWARD_SHOW_WAIT = 1.5 -- extra wait after the reward is revealed before the round starts
 -- Correct-answer dramatic beat: hide puzzle -> pause -> loser's heart blinks out
 -- -> pause -> show next round. Timings in seconds.
 local CORRECT_REVEAL_HIDE = 1.2
@@ -123,6 +124,7 @@ local function discoverTables()
 					hearts = {},           -- seatIndex -> number
 					matchActive = false,
 					cooldownUntil = 0,      -- time before a fresh auto-match can start
+					cashPrize = 0,          -- rolled cash prize (awarded to the winner)
 					currentWord = nil,
 					letterBank = {},
 					roundConn = nil,       -- round timer thread
@@ -686,14 +688,18 @@ end
 
 -- Run the cash reroll: tell clients to animate, then after the animation award
 -- the chosen cash to every real player seated.
--- Play the cash reroll animation, then (after it finishes) award the cash and
--- start the round. Returns the chosen reward value.
+-- Play the cash reroll animation, then (after it finishes and the reward is
+-- shown) wait a little before the round starts. The rolled amount becomes the
+-- match PRIZE: it is stored here and awarded to the match WINNER at the end
+-- (not to everyone). Returns the chosen reward value.
 local function runCashReroll(tableState)
 	local reward = pickCashReward()
 	local rewardList = {}
 	for _, r in CASH_REWARDS do
 		table.insert(rewardList, r.value)
 	end
+
+	tableState.cashPrize = reward -- the winner collects this at match end
 
 	-- Fire the animation to each seated real player.
 	for _, occ in tableState.occupants do
@@ -702,20 +708,9 @@ local function runCashReroll(tableState)
 		end
 	end
 
-	-- Wait for the animation to finish.
-	task.wait(REROLL_DURATION)
-
-	-- Award cash and confirm the winner amount.
-	for _, occ in tableState.occupants do
-		if occ ~= "BOT" and occ then
-			local ls = occ:FindFirstChild("leaderstats")
-			local cash = ls and ls:FindFirstChild("Cash")
-			if cash then
-				cash.Value = cash.Value + reward
-			end
-			CashAwarded:FireClient(occ, reward)
-		end
-	end
+	-- Wait for the animation to finish, then a little more so the reward is
+	-- clearly shown before the game starts.
+	task.wait(REROLL_DURATION + REWARD_SHOW_WAIT)
 
 	return reward
 end
@@ -970,21 +965,27 @@ function awardMatchOutcome(tableState, winnerSeatIndex)
 		return
 	end
 
+	local prize = tableState.cashPrize or 0
+
 	for seatIndex, occ in tableState.occupants do
 		if occ ~= "BOT" and occ then
 			local ls = occ:FindFirstChild("leaderstats")
 			local wins = ls and ls:FindFirstChild("Wins")
+			local cash = ls and ls:FindFirstChild("Cash")
 			local streak = playerStreak(occ)
 			if seatIndex == winnerSeatIndex then
-				-- Winner: +1 win, +1 streak.
+				-- Winner: +1 win, +1 streak, and collects the cash prize.
 				if wins then
 					wins.Value = wins.Value + 1
 				end
 				if streak then
 					streak.Value = streak.Value + 1
 				end
+				if cash then
+					cash.Value = cash.Value + prize
+				end
 			else
-				-- Loser: reset streak.
+				-- Loser: reset streak (no cash).
 				if streak then
 					streak.Value = 0
 				end

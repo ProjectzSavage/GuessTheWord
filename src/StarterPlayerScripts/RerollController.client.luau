@@ -142,7 +142,24 @@ local function sparkle(model)
 	end)
 end
 
+-- Cleanup a previous animation if one is still running.
+local activeConn = nil
+local activeEntries = {}
+local function clearActive()
+	if activeConn then
+		activeConn:Disconnect()
+		activeConn = nil
+	end
+	for _, e in activeEntries do
+		if e.model and e.model.Parent then
+			e.model:Destroy()
+		end
+	end
+	activeEntries = {}
+end
+
 local function runReroll(chosen, rewardList)
+	clearActive() -- stop any previous reroll first
 	local folder = findTableFolder()
 	local anchor = folder and folder:FindFirstChild("CashAnchor")
 	if not anchor or not anchor:IsA("BasePart") or not CashRewardsFolder then
@@ -153,6 +170,7 @@ local function runReroll(chosen, rewardList)
 	if #entries == 0 then
 		return
 	end
+	activeEntries = entries
 
 	-- Hide the countdown frame so the countdown "ends" before the roll.
 	local gameUI = PlayerGui:FindFirstChild("GameUI")
@@ -178,7 +196,10 @@ local function runReroll(chosen, rewardList)
 	conn = game:GetService("RunService").Heartbeat:Connect(function()
 		local progress = (os.clock() - t) / REROLL_DURATION
 		if progress >= 1 then
-			conn:Disconnect()
+			if conn then
+				conn:Disconnect()
+				activeConn = nil
+			end
 			-- LAND on the chosen reward.
 			local winner
 			for _, e in entries do
@@ -193,12 +214,14 @@ local function runReroll(chosen, rewardList)
 			end
 			-- OUTRO: hold the winner ~1s, then fade/sink all models away.
 			task.delay(1.0, function()
-				-- Fade parts + sink via a lightweight heartbeat loop.
 				local sinkStart = os.clock()
-				local sink = game:GetService("RunService").Heartbeat:Connect(function()
+				local sink
+				sink = game:GetService("RunService").Heartbeat:Connect(function()
 					local p = (os.clock() - sinkStart) / 0.5
 					if p >= 1 then
-						sink:Disconnect()
+						if sink then
+							sink:Disconnect()
+						end
 						for _, e in entries do
 							setPartsTransparency(e.parts, 1)
 							e.model:PivotTo(e.basePivot)
@@ -216,6 +239,7 @@ local function runReroll(chosen, rewardList)
 							e.model:Destroy()
 						end
 					end
+					activeEntries = {}
 				end)
 			end)
 			return
@@ -229,6 +253,7 @@ local function runReroll(chosen, rewardList)
 			showIndex(idx)
 		end
 	end)
+	activeConn = conn
 end
 
 -- Start the roll when the server says so.
