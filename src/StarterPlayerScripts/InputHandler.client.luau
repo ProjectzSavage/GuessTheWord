@@ -290,6 +290,56 @@ local function setWaitingUI(waiting)
 	end
 end
 
+-- The clue images for the current round (shown with an intro on reveal).
+local pendingClueImages = {}
+
+-- Set the 4 clue images in ImageGrid (no animation - just assign).
+local function setClueImages(images)
+	pendingClueImages = type(images) == "table" and images or {}
+	if not ImageGrid then
+		return
+	end
+	for i = 1, 4 do
+		local clue = ImageGrid:FindFirstChild("Clue" .. i)
+		if clue and clue:IsA("ImageLabel") then
+			clue.Image = pendingClueImages[i] or ""
+		end
+	end
+end
+
+-- Staggered pop/fade-in for the clue images (called on reveal, so it's visible).
+function animateClueIntro()
+	if not ImageGrid then
+		return
+	end
+	for i = 1, 4 do
+		local clue = ImageGrid:FindFirstChild("Clue" .. i)
+		if clue and clue:IsA("ImageLabel") then
+			local us = clue:FindFirstChildOfClass("UIScale")
+			if not us then
+				us = Instance.new("UIScale")
+				us.Parent = clue
+			end
+			clue.ImageTransparency = 1
+			us.Scale = 0
+			task.delay(0.12 * i, function()
+				if clue and clue.Parent then
+					TweenService:Create(
+						clue,
+						TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+						{ ImageTransparency = 0 }
+					):Play()
+					TweenService:Create(
+						us,
+						TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+						{ Scale = 1 }
+					):Play()
+				end
+			end)
+		end
+	end
+end
+
 -- Only show PuzzleArea + TopBar AFTER the countdown finishes. This is also
 -- where the puzzle's entrance animations play (now that it's actually visible).
 local function revealRoundUI()
@@ -883,56 +933,6 @@ TimerUpdate.OnClientEvent:Connect(function(seconds)
 		TimerFill.BackgroundColor3 = Color3.fromHSV(frac * 0.33, 1, 0.85)
 	end
 end)
-
--- The clue images for the current round (shown with an intro on reveal).
-local pendingClueImages = {}
-
--- Set the 4 clue images in ImageGrid (no animation - just assign).
-local function setClueImages(images)
-	pendingClueImages = type(images) == "table" and images or {}
-	if not ImageGrid then
-		return
-	end
-	for i = 1, 4 do
-		local clue = ImageGrid:FindFirstChild("Clue" .. i)
-		if clue and clue:IsA("ImageLabel") then
-			clue.Image = pendingClueImages[i] or ""
-		end
-	end
-end
-
--- Staggered pop/fade-in for the clue images (called on reveal, so it's visible).
-function animateClueIntro()
-	if not ImageGrid then
-		return
-	end
-	for i = 1, 4 do
-		local clue = ImageGrid:FindFirstChild("Clue" .. i)
-		if clue and clue:IsA("ImageLabel") then
-			local us = clue:FindFirstChildOfClass("UIScale")
-			if not us then
-				us = Instance.new("UIScale")
-				us.Parent = clue
-			end
-			clue.ImageTransparency = 1
-			us.Scale = 0
-			task.delay(0.12 * i, function()
-				if clue and clue.Parent then
-					TweenService:Create(
-						clue,
-						TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-						{ ImageTransparency = 0 }
-					):Play()
-					TweenService:Create(
-						us,
-						TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-						{ Scale = 1 }
-					):Play()
-				end
-			end)
-		end
-	end
-end
 
 RoundStart.OnClientEvent:Connect(function(length, letterBank, images)
 	wordLength = length
