@@ -36,10 +36,11 @@ build it once. The full details are further down.
    should sit (above/behind the table). When a match starts, both players'
    cameras focus there. If absent, the camera falls back to behind the `Table`
    model, then to the midpoint of the two seats.
-9. **Cash reward models** — in each `TableN` folder add 6 models named
-   `Cash100`, `Cash350`, `Cash750`, `Cash1500`, `Cash3500`, `Cash5000` (the
-   reroll animation cycles these on the table). `RerollController.client.luau`
-   plays the animation; if models are missing it just skips (cash still awards).
+9. **Cash reward models** — put the 6 models (`Cash100`…`Cash5000`) in
+   `ReplicatedStorage.CashRewards` (NOT in the table folders), and add a single
+   `CashAnchor` part in each `TableN` folder. `RerollController.client.luau`
+   clones the models to the anchor and animates the reroll (winner sparkles +
+   "+$X" flash). If missing, it skips (cash still awards).
 10. **Nametag + streak (optional)** — `Nametag.server.luau` uses a **BillboardGui
    template named `Nametag`** as a child of the script (`PlayerName`, optional
    `Icons` frame with `Premium`/`Owner`/`Admin`, optional `StreakRow` with
@@ -165,12 +166,18 @@ Workspace
         ├── Seat1        (existing Seat)
         ├── Seat2        (existing Seat)
         ├── CameraAnchor (Part, optional)  -- where the match camera sits
-        ├── Cash100      (Model, cash reroll reward)
-        ├── Cash350      (Model, cash reroll reward)
-        ├── Cash750      (Model, cash reroll reward)
-        ├── Cash1500     (Model, cash reroll reward)
-        ├── Cash3500     (Model, cash reroll reward)
-        └── Cash5000     (Model, cash reroll reward)
+        └── CashAnchor   (Part)            -- block where the cash reroll happens
+
+Cash reward models do NOT go in the table folders. Put them in:
+    ReplicatedStorage
+    └── CashRewards  (Folder)
+        ├── Cash100   (Model)
+        ├── Cash350   (Model)
+        ├── Cash750   (Model)
+        ├── Cash1500  (Model)
+        ├── Cash3500  (Model)
+        └── Cash5000  (Model)
+RerollController clones them and animates them at each table's `CashAnchor`.
 ```
 
 - `GameManager` auto-detects any `GameArea` child folder whose name starts with

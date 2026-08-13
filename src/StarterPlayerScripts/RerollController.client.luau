@@ -4,21 +4,17 @@
 	Run this as a **LocalScript** in StarterPlayerScripts.
 
 	PURPOSE
-	Plays the cash-reward REROLL animation on the table (like opening a lucky
-	block): after the countdown, the 6 reward models cycle/swap around, then the
-	chosen reward is highlighted, then the GUI pops up. The actual Cash is
-	awarded server-side (see GameManager.runCashReroll).
+	Plays the cash-reward REROLL animation on the table (like a lucky block):
+	after the countdown, the 6 reward models cycle at the table's CashAnchor
+	block, then the chosen one is highlighted with sparkles and a "+$X" flash.
+	Actual Cash is awarded server-side (GameManager.runCashReroll).
 
-	HOW TO SET UP YOUR MODELS
-	Inside each Table folder (Workspace.GameArea.Table1, Table2, ...) add 6
-	models/parts named exactly:
-	    Cash100, Cash350, Cash750, Cash1500, Cash3500, Cash5000
-	They can be small pickup-looking models (coin stacks, cash bundles, etc.).
-	The script hides all of them, then shows them one at a time as the reroll
-	cycles, ending on the winning one (which gets a highlight + scale pop).
-
-	If the models aren't found, the script falls back to showing a simple
-	screen message instead (so nothing errors).
+	SETUP (no models inside each table folder!)
+	* Put your 6 reward models in ReplicatedStorage.CashRewards, named:
+	      Cash100, Cash350, Cash750, Cash1500, Cash3500, Cash5000
+	* In each TableN folder, add ONE part named `CashAnchor` (a block where the
+	  reroll happens). The script clones the models there for the animation.
+	If either is missing, the script silently skips (cash still awards).
 ]]
 
 local Players = game:GetService("Players")
@@ -26,7 +22,11 @@ local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
+local PlayerGui = player:WaitForChild("PlayerGui")
 local Events = ReplicatedStorage:WaitForChild("Events")
+
+-- The central pool of cash reward models.
+local CashRewardsFolder = ReplicatedStorage:FindFirstChild("CashRewards")
 
 -- Find the "TableN" folder the local player is seated at.
 local function findTableFolder()
@@ -46,92 +46,167 @@ local function findTableFolder()
 	return nil
 end
 
--- Collect the 6 cash models from a table folder by name.
-local function collectRewardModels(folder, rewardList)
-	local models = {}
+-- Clone the reward models from ReplicatedStorage.CashRewards at the anchor.
+local function spawnRewards(anchor, rewardList)
+	local spawned = {}
 	for _, value in rewardList do
-		local m = folder and folder:FindFirstChild("Cash" .. value)
-		if m then
-			table.insert(models, { value = value, model = m })
+		if CashRewardsFolder then
+			local template = CashRewardsFolder:FindFirstChild("Cash" .. value)
+			if template then
+				local clone = template:Clone()
+				clone.Name = "CashReward"
+				-- Place at the anchor block.
+				clone:PivotTo(anchor.CFrame * CFrame.new(0, 1, 0))
+				clone.Parent = workspace
+				table.insert(spawned, { value = value, model = clone })
+			end
 		end
 	end
-	return models
+	return spawned
 end
 
--- Make a model look "highlighted" (scale up + lift) vs normal.
-local function setModelHighlight(model, on)
+-- Highlight (scale up + lift) a model.
+local function setHighlight(model, on, baseCF)
 	if not model then
 		return
 	end
+	local cf = baseCF or model:GetPivot()
 	if on then
 		TweenService:Create(model, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-			{ Size = model.Size * 1.6 }):Play()
+			{ CFrame = cf * CFrame.new(0, 0.6, 0) }):Play()
 	else
 		TweenService:Create(model, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{ Size = model.Size }):Play()
+			{ CFrame = cf }):Play()
 	end
 end
 
-local function setModelVisible(model, visible)
+-- Burst of sparkle particles on the winning model.
+local function sparkle(model)
 	if not model then
 		return
 	end
-	if model:IsA("Model") then
-		model:PivotTo(model:GetPivot() * CFrame.new(0, visible and 0 or -10, 0))
-	elseif model:IsA("BasePart") then
-		model.CFrame = model.CFrame * CFrame.new(0, visible and 0 or -10, 0)
+	local primary = model.PrimaryPart
+	if not primary then
+		primary = model:FindFirstChildWhichIsA("BasePart")
 	end
-end
-
--- Run the reroll animation. rewardList is the cycle order; chosen is the winner.
-local function runReroll(chosen, rewardList)
-	local folder = findTableFolder()
-	local models = collectRewardModels(folder, rewardList)
-
-	if #models == 0 then
-		-- Fallback: nothing to animate; do nothing (server still awards cash).
+	if not primary then
 		return
 	end
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Texture = "rbxassetid://243660179" -- star sparkle
+	emitter.Enabled = true
+	emitter.Rate = 200
+	emitter.Lifetime = NumberRange.new(0.6, 1)
+	emitter.Speed = NumberRange.new(4, 9)
+	emitter.SpreadAngle = Vector2.new(0, 360)
+	emitter.Size = NumberSequence.new(0.4)
+	emitter.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(1, 1) })
+	emitter.Parent = primary
+	task.delay(0.6, function()
+		emitter.Rate = 0
+	end)
+	task.delay(1.5, function()
+		if emitter then
+			emitter:Destroy()
+		end
+	end)
+end
 
-	-- Reset all models to the table at normal size.
-	for _, m in models do
-		setModelVisible(m.model, true)
-		setModelHighlight(m.model, false)
+-- Flash "+$X" in the middle of the screen.
+local function flashCash(value)
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "CashFlash"
+	gui.IgnoreGuiInset = true
+	gui.Parent = PlayerGui
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(0.5, 0, 0.15, 0)
+	label.Position = UDim2.new(0.25, 0, 0.4, 0)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.GothamBlack
+	label.Text = "+$" .. value
+	label.TextColor3 = Color3.fromRGB(80, 255, 120)
+	label.TextScaled = true
+	label.TextStrokeTransparency = 0.3
+	label.ZIndex = 50
+	label.Parent = gui
+
+	local us = Instance.new("UIScale")
+	us.Scale = 0
+	us.Parent = label
+
+	-- Pop in, float up, fade out.
+	TweenService:Create(us, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+		{ Scale = 1 }):Play()
+	local up = TweenService:Create(label, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ Position = UDim2.new(0.25, 0, 0.32, 0) })
+	up:Play()
+	task.delay(1.1, function()
+		TweenService:Create(label, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
+			{ TextTransparency = 1 }):Play()
+	end)
+	task.delay(1.6, function()
+		gui:Destroy()
+	end)
+end
+
+-- Run the reroll animation.
+local function runReroll(chosen, rewardList)
+	local folder = findTableFolder()
+	local anchor = folder and folder:FindFirstChild("CashAnchor")
+	if not anchor or not anchor:IsA("BasePart") or not CashRewardsFolder then
+		return -- nothing to animate; server still awards cash
+	end
+
+	local spawned = spawnRewards(anchor, rewardList)
+	if #spawned == 0 then
+		return
+	end
+	local baseCFs = {}
+	for _, m in spawned do
+		baseCFs[m.model] = m.model:GetPivot()
 	end
 
 	local current = 1
-	local cycles = math.max(8, #models * 2)
 	local t = os.clock()
 	local duration = 3 -- match REROLL_DURATION on the server
 
-	-- Cycle through the models quickly, decelerating.
 	local conn
 	conn = game:GetService("RunService").Heartbeat:Connect(function()
 		local progress = (os.clock() - t) / duration
 		if progress >= 1 then
 			conn:Disconnect()
-			-- Land on the chosen reward, highlight it.
-			for _, m in models do
-				setModelHighlight(m.model, m.value == chosen)
+			-- Land on the chosen reward.
+			for _, m in spawned do
+				setHighlight(m.model, m.value == chosen, baseCFs[m.model])
 			end
+			-- Winner gets sparkles + a "+$X" flash.
+			for _, m in spawned do
+				if m.value == chosen then
+					sparkle(m.model)
+					break
+				end
+			end
+			flashCash(chosen)
 			return
 		end
-		-- Increase interval as we decelerate.
-		local interval = 0.05 + progress * 0.25
+		local interval = 0.05 + progress * 0.3 -- decelerate
 		if (os.clock() - t) >= current * interval then
-			for _, m in models do
-				setModelHighlight(m.model, false)
+			for _, m in spawned do
+				setHighlight(m.model, false, baseCFs[m.model])
 			end
 			current = current + 1
-			local idx = ((current - 1) % #models) + 1
-			setModelHighlight(models[idx].model, true)
+			local idx = ((current - 1) % #spawned) + 1
+			setHighlight(spawned[idx].model, true, baseCFs[spawned[idx].model])
 		end
 	end)
 
-	-- After the animation, leave the winner highlighted for a moment.
-	task.delay(duration + 0.6, function()
-		for _, m in models do
-			setModelHighlight(m.model, false)
+	-- Clean up spawned clones after the animation.
+	task.delay(duration + 1.5, function()
+		for _, m in spawned do
+			if m.model and m.model.Parent then
+				m.model:Destroy()
+			end
 		end
 	end)
 end
@@ -139,5 +214,3 @@ end
 Events:WaitForChild("CashReroll").OnClientEvent:Connect(function(chosen, rewardList)
 	runReroll(chosen, rewardList)
 end)
-
--- (Optional) On award, you could flash "+$X" on screen. Leave for now.

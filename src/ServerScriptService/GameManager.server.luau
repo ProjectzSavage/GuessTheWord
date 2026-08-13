@@ -141,6 +141,10 @@ end
 -------------------------------------------------------------------------------
 -- HELPERS
 -------------------------------------------------------------------------------
+-- Forward-declared: playerOnSeat is defined further down but used by
+-- seatedSeatOf() below.
+local playerOnSeat
+
 local function playerInMatch(tableState, player)
 	for _, occ in tableState.occupants do
 		if occ == player then
@@ -154,6 +158,18 @@ local function seatOfPlayer(tableState, player)
 	for i, occ in tableState.occupants do
 		if occ == player then
 			return i
+		end
+	end
+	return nil
+end
+
+-- Fallback seat lookup: find which of this table's seats the player's character
+-- is physically sitting in. This stays correct even if the occupants table went
+-- stale (e.g. right after a match ended / a winner stayed seated).
+local function seatedSeatOf(tableState, player)
+	for seatIndex, seat in tableState.seats do
+		if playerOnSeat(seat) == player then
+			return seatIndex
 		end
 	end
 	return nil
@@ -732,7 +748,7 @@ end
 -------------------------------------------------------------------------------
 
 -- The real Player currently sitting on a seat, or nil.
-local function playerOnSeat(seat)
+playerOnSeat = function(seat)
 	local humanoid = seat.Occupant
 	if humanoid and humanoid.Parent then
 		return Players:GetPlayerFromCharacter(humanoid.Parent)
@@ -823,7 +839,9 @@ PlayVsBotRequest.OnServerEvent:Connect(function(player)
 
 	-- Find the table this player currently occupies (must be seated and alone).
 	for _, tableState in tableStates do
-		local seatIdx = seatOfPlayer(tableState, player)
+		-- occupants first, then fall back to the physical seat (handles the
+		-- winner staying seated after a match, or a stale occupants table).
+		local seatIdx = seatOfPlayer(tableState, player) or seatedSeatOf(tableState, player)
 		if seatIdx and not tableState.matchActive then
 			local otherIdx = opponentSeat(seatIdx)
 			-- On a fast replay, a stale bot from the previous match may still be
