@@ -61,9 +61,25 @@ local function preloadSounds()
 	end
 end
 
--- Play a sound by name. Each call makes a NEW independent Sound so clips can
--- overlap. Roblox queues playback until the clip is loaded, so we call :Play()
--- immediately (no Loaded race) and clean up when it ends.
+-- Persistent base Sounds keep each clip loaded in memory, so playing a clone
+-- starts INSTANTLY (no first-play load delay) while still allowing overlap.
+local bases = {}
+
+local function baseFor(id)
+	local base = bases[id]
+	if not base then
+		base = Instance.new("Sound")
+		base.Name = "SFXBase"
+		base.SoundId = id
+		base.Parent = SoundService
+		-- Keep the clip loaded by leaving it parented (Engine caches it).
+		bases[id] = base
+	end
+	return base
+end
+
+-- Play a sound by name. Clones a loaded base (so no load delay), plays it, and
+-- cleans it up when it ends. Each call is an independent Sound -> they overlap.
 function SFX.play(name, opts)
 	opts = opts or {}
 	local id = SFX.Sounds[name]
@@ -71,14 +87,13 @@ function SFX.play(name, opts)
 		return
 	end
 
-	local s = Instance.new("Sound")
-	s.SoundId = id
+	local base = baseFor(id)
+	local s = base:Clone()
+	s.Parent = SoundService
 	s.Volume = opts.volume or 0.6
 	if opts.speed then
 		s.PlaybackSpeed = opts.speed
 	end
-	-- Do not roll off for UI sounds (they're close to the camera anyway).
-	s.Parent = SoundService
 
 	local function cleanup()
 		if s and s.Parent then
@@ -87,11 +102,9 @@ function SFX.play(name, opts)
 	end
 	s.Ended:Connect(cleanup)
 
-	-- Play immediately; the engine starts playback once loaded. This guarantees
-	-- every call produces audible sound and overlapping sounds overlap.
 	s:Play()
 
-	task.delay(10, cleanup) -- safety (longer than before)
+	task.delay(10, cleanup) -- safety
 end
 
 preloadSounds()

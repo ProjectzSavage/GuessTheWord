@@ -434,8 +434,9 @@ local function buildBank(letterBank)
 	-- Ensure a UIGridLayout exists (use the user's if they added one).
 	if not ScrambledBank:FindFirstChildOfClass("UIGridLayout") then
 		local grid = Instance.new("UIGridLayout")
-		grid.CellSize = UDim2.new(0, 44, 0, 44)
-		grid.CellPadding = UDim2.new(0, 8, 0, 8)
+		-- Scale-based so the 12 tiles lay out correctly on any screen size.
+		grid.CellSize = UDim2.new(0.16, 0, 0.3, 0)
+		grid.CellPadding = UDim2.new(0.02, 0, 0.04, 0)
 		grid.Parent = ScrambledBank
 	end
 
@@ -585,9 +586,11 @@ local function buildSlots()
 	for i = 1, wordLength do
 		-- Use an ImageButton so the player can CLICK a placed letter to send it
 		-- back to the bank (with a fly-back animation).
+		-- SIZED IN SCALE (relative to the AnswerBox) so it looks right on every
+		-- device, including mobile.
 		local slot = Instance.new("ImageButton")
 		slot.Name = "Slot" .. i
-		slot.Size = UDim2.new(0, 48, 0, 48)
+		slot.Size = UDim2.new(0.09, 0, 0.7, 0)
 		slot.BackgroundTransparency = 1
 		slot.ScaleType = Enum.ScaleType.Fit
 		slot.Image = LetterImages.underscore or ""
@@ -1234,10 +1237,10 @@ local function showCelebration(youWon, isDraw, isBotMatch)
 	):Play()
 
 	if youWon and not isDraw then
-		-- WIN: rainbow text, confetti, screen shake, FOV punch then back.
+		-- WIN: rainbow text, confetti, screen shake (while confetti falls), FOV.
 		rainbowText(CelebrationText, 2.5)
 		spawnConfetti(70)
-		shakeCamera(2.6, 1.0) -- aggressive win shake
+		shakeCamera(2.6, 2.4) -- aggressive win shake, lasts while confetti falls
 		if Camera then
 			TweenService:Create(
 				Camera,

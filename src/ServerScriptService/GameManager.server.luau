@@ -738,7 +738,12 @@ PlayVsBotRequest.OnServerEvent:Connect(function(player)
 		local seatIdx = seatOfPlayer(tableState, player)
 		if seatIdx and not tableState.matchActive then
 			local otherIdx = opponentSeat(seatIdx)
-			-- Only if the other seat is empty (no human, no bot yet).
+			-- On a fast replay, a stale bot from the previous match may still be
+			-- in this slot (its despawn is delayed). Clear it so we can respawn.
+			if tableState.occupants[otherIdx] == "BOT" then
+				despawnBot(tableState)
+			end
+			-- Only if the other seat is empty (no human, no bot).
 			if not tableState.occupants[otherIdx] then
 				local botHumanoid = buildBotRig(tableState.seats[otherIdx])
 				if not botHumanoid then
