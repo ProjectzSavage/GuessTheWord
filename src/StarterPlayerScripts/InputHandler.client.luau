@@ -50,6 +50,7 @@ local PlayerGui = player:WaitForChild("PlayerGui")
 -- Letter images (fill in your asset IDs here).
 local LetterImages = require(ReplicatedStorage:WaitForChild("LetterImages"))
 local UIFX = require(ReplicatedStorage:WaitForChild("UIFX"))
+local SFX = require(ReplicatedStorage:WaitForChild("SFX"))
 
 local Events = ReplicatedStorage:WaitForChild("Events")
 local SubmitGuess = Events:WaitForChild("SubmitGuess")
@@ -309,6 +310,9 @@ local function revealRoundUI()
 
 	-- Clue image pop/fade intro.
 	animateClueIntro()
+
+	-- GUI just popped up after the game started.
+	SFX.play("uiPop")
 end
 
 local function showTopBarOnly()
@@ -605,6 +609,7 @@ local function animateLetterToSlot(letter, fromTile, targetSlot)
 	-- NOTE: We do NOT refreshSlots() here. currentGuess already includes this
 	-- letter, but the target slot keeps showing the underscore until the flying
 	-- tile lands, so you SEE the letter fly and land into the empty slot.
+	SFX.play("letter")
 	local flying = Instance.new("ImageLabel")
 	flying.Name = "FlyingLetter"
 	flying.Image = LetterImages[letter] or ""
@@ -1297,6 +1302,7 @@ end)
 -------------------------------------------------------------------------------
 PlayVsBotButton.Activated:Connect(function()
 	-- Animate the button out, then ask the server to start a bot match.
+	SFX.play("click")
 	hideFrame(PlayVsBotButton)
 	task.delay(0.15, function()
 		PlayVsBotRequest:FireServer()

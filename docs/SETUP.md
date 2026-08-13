@@ -26,8 +26,9 @@ build it once. The full details are further down.
    `HeartFrame` + `Heart1/2/3`). Auto-created if missing (text ♥ default).
 5. **Bot rig (recommended)** — `ServerStorage.BotRig` (a Model with a `Humanoid`
    + `Head`) if you want a visible bot body.
-6. **SFX** — fill the `SFX` table in `StarterPlayerScripts.SFX.client.luau`
-   with your sound IDs (optional; unused ones are skipped).
+6. **SFX** — fill the `SFX.Sounds` table in `ReplicatedStorage.SFX` (a
+   ModuleScript) with your sound IDs using the full `"rbxassetid://..."` format
+   (optional; unused ones are skipped).
 7. **Workspace** — `Workspace.GameArea.Table1` (Folder) containing your `Table`
    + 2 `Seat`/`VehicleSeat` instances.
 8. **CameraAnchor (recommended for 2-player view)** — add a Part named
@@ -73,10 +74,10 @@ ServerScriptService
 | `src/ReplicatedStorage/LetterImages.luau`                      | `ReplicatedStorage`         | ModuleScript |
 | `src/ReplicatedStorage/HoverFX.luau`                          | `ReplicatedStorage`         | ModuleScript |
 | `src/ReplicatedStorage/UIFX.luau`                            | `ReplicatedStorage`         | ModuleScript |
+| `src/ReplicatedStorage/SFX.luau`                            | `ReplicatedStorage`         | ModuleScript |
 | `src/StarterPlayerScripts/InputHandler.client.luau`             | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/HoverController.client.luau`          | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/Preloader.client.luau`                | `StarterPlayerScripts`      | LocalScript |
-| `src/StarterPlayerScripts/SFX.client.luau`                      | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/CameraController.client.luau`         | `StarterPlayerScripts`      | LocalScript |
 
 > **Tip:** For each file, right-click the target container in Studio →
@@ -207,16 +208,19 @@ match, you **win it** exactly like a normal victory (Wins/Streak updated).
 
 ## 6. Sound effects
 
-`StarterPlayerScripts.SFX` is a LocalScript with a `SFX` table at the top. Fill
-in your sound IDs using the **full format** `"rbxassetid://117751546358455"`
+`ReplicatedStorage.SFX` is a ModuleScript with a `SFX.Sounds` table at the top.
+Fill in your sound IDs using the **full format** `"rbxassetid://117751546358455"`
 (prefix + digits), leaving unused ones as `""`. It plays them at the right
 moments: **separate sounds for 3, 2, 1 and GO!** (`count3`/`count2`/`count1`/
-`go`), correct/timeout, wrong guess, heart loss (plus a "about to lose" warning
-on your last heart), heart restore, win/lose/draw (+ win jingle), bot
-spawn/despawn, and letter/hover/click/standUp/ragdoll placeholders.
+`go`), GUI-pop after game start (`uiPop`), correct/timeout, wrong guess, heart
+loss (plus a "about to lose" warning on your last heart), heart restore,
+win/lose/draw (+ win jingle), and letter/hover/click/botSpawn/botDespawn
+(letter/click/uiPop are wired into InputHandler; hover is wired into
+HoverController).
 
-> Note: sounds are preloaded automatically by the script so they play instantly.
-> The old version destroyed sounds too early (before the clip loaded) — fixed.
+> Sounds are preloaded automatically so they play instantly. Call
+> `SFX.play("name")` from any client script for extra sounds.
+> There is no built-in ragdoll - the Realism Mod handles that.
 
 ## 7. Asset preloading
 

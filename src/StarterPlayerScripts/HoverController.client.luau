@@ -22,6 +22,14 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
 local HoverFX = require(ReplicatedStorage:WaitForChild("HoverFX"))
+local SFX = require(ReplicatedStorage:WaitForChild("SFX"))
+
+-- Play the hover sound when the mouse first enters an element.
+local function applyHoverSound(element)
+	element.MouseEnter:Connect(function()
+		SFX.play("hover")
+	end)
+end
 
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
@@ -40,6 +48,7 @@ local function applyToClue(clue)
 		return
 	end
 	HoverFX.applyTo(clue, { scale = 1.12, duration = 0.18 })
+	applyHoverSound(clue)
 end
 
 -- Existing clues.
@@ -60,6 +69,7 @@ local function applyToTile(tile)
 		return
 	end
 	HoverFX.applyTo(tile, { scale = 1.22, duration = 0.16 })
+	applyHoverSound(tile)
 end
 
 ScrambledBank.ChildAdded:Connect(function(tile)
@@ -72,4 +82,5 @@ end)
 local PlayVsBotButton = InteractionFrame:FindFirstChild("PlayVsBotButton")
 if PlayVsBotButton and PlayVsBotButton:IsA("GuiButton") then
 	HoverFX.applyTo(PlayVsBotButton, { scale = 1.15, duration = 0.18 })
+	applyHoverSound(PlayVsBotButton)
 end

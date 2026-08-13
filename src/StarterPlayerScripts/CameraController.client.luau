@@ -94,9 +94,8 @@ local function computeTarget()
 end
 
 local function startFocus()
-	if focused then
-		return
-	end
+	-- Always recompute the target so the camera re-focuses the table on a
+	-- rematch too.
 	desiredCFrame = computeTarget()
 	if not desiredCFrame then
 		return

@@ -411,25 +411,14 @@ end
 --   * A bot never "respaws" - if the bot loses it is simply left (cleaned on
 --     rematch); if the bot wins, the human loser ragdolls + respawns.
 function handleMatchEndDramatics(tableState, winnerSeatIndex)
-	-- Only the loser (when there's a clear winner) ragdolls + respawns. The
-	-- winner stays seated in their chair for the rematch.
+	-- Only the loser (when there's a clear winner) respawns. The winner stays
+	-- seated in their chair for the rematch.
+	-- NOTE: no ragdoll here - the Realism Mod handles that.
 	if winnerSeatIndex == nil then
 		return -- draw: no drama, everyone stays seated
 	end
 
-	local function ragdollThenRespawn(player)
-		local character = player.Character
-		if not character then
-			return
-		end
-		local humanoid = character:FindFirstChildOfClass("Humanoid")
-		if humanoid then
-			-- Pop the player off the seat and into a ragdoll fall.
-			humanoid.Sit = false
-			humanoid.PlatformStand = true
-			humanoid:ChangeState(Enum.HumanoidStateType.Physics)
-		end
-		-- Let the ragdoll play out, then respawn the loser.
+	local function respawnLoser(player)
 		task.delay(1.6, function()
 			if player.Parent then
 				player:LoadCharacter()
@@ -439,7 +428,7 @@ function handleMatchEndDramatics(tableState, winnerSeatIndex)
 
 	for seatIndex, occ in tableState.occupants do
 		if occ ~= "BOT" and occ and seatIndex ~= winnerSeatIndex then
-			ragdollThenRespawn(occ) -- loser ragdolls + respawns
+			respawnLoser(occ)
 		end
 	end
 end
