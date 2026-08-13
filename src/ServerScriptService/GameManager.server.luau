@@ -61,16 +61,15 @@ local BOT_THINK_TIME = 1.1       -- seconds between bot guesses
 local BOT_GUESS_CHANCE = 0.5     -- probability the bot actually guesses each tick
 local POLL_INTERVAL = 0.2        -- how often we poll seats for a sitting player
 
--- Cash reward table: value + weighted chance (weights sum can be any number;
--- the server picks proportionally). Order here matters for the reroll animation
--- on the client (it cycles in this order).
+-- Cash reward table: value + weighted chance (weights are percentages, summing
+-- to 100). The last (5000) is 1%. Edit freely - the server picks proportionally.
 local CASH_REWARDS = {
-	{ value = 100,  weight = 40 },
+	{ value = 100,  weight = 30 },
 	{ value = 350,  weight = 25 },
-	{ value = 750,  weight = 18 },
-	{ value = 1500, weight = 10 },
-	{ value = 3500, weight = 5 },
-	{ value = 5000, weight = 2 },
+	{ value = 750,  weight = 20 },
+	{ value = 1500, weight = 15 },
+	{ value = 3500, weight = 9 },
+	{ value = 5000, weight = 1 }, -- rarest: 1%
 }
 local REROLL_DURATION = 3 -- seconds the client shows the reroll animation
 -- Correct-answer dramatic beat: hide puzzle -> pause -> loser's heart blinks out

@@ -9,12 +9,16 @@
 	block, then the chosen one is highlighted with sparkles and a "+$X" flash.
 	Actual Cash is awarded server-side (GameManager.runCashReroll).
 
-	SETUP (no models inside each table folder!)
+	SETUP
 	* Put your 6 reward models in ReplicatedStorage.CashRewards, named:
 	      Cash100, Cash350, Cash750, Cash1500, Cash3500, Cash5000
-	* In each TableN folder, add ONE part named `CashAnchor` (a block where the
-	  reroll happens). The script clones the models there for the animation.
+	* In each TableN folder, add ONE part named `CashAnchor` (the block).
 	If either is missing, the script silently skips (cash still awards).
+
+	OPTIMIZED
+	Models are hidden/shown by toggling their parts' Transparency (never tweened
+	by CFrame, which models don't have). Only ONE model is visible at a time,
+	which keeps rendering light even on mobile.
 ]]
 
 local Players = game:GetService("Players")
@@ -46,38 +50,101 @@ local function findTableFolder()
 	return nil
 end
 
--- Clone the reward models from ReplicatedStorage.CashRewards at the anchor.
-local function spawnRewards(anchor, rewardList)
-	local spawned = {}
-	for _, value in rewardList do
-		if CashRewardsFolder then
-			local template = CashRewardsFolder:FindFirstChild("Cash" .. value)
-			if template then
-				local clone = template:Clone()
-				clone.Name = "CashReward"
-				-- Place at the anchor block.
-				clone:PivotTo(anchor.CFrame * CFrame.new(0, 1, 0))
-				clone.Parent = workspace
-				table.insert(spawned, { value = value, model = clone })
-			end
+-- Collect all BaseParts of a model (cached for cheap hide/show).
+local function collectParts(model)
+	local parts = {}
+	for _, p in model:GetDescendants() do
+		if p:IsA("BasePart") then
+			table.insert(parts, p)
 		end
 	end
-	return spawned
+	-- Ensure there's at least one (e.g. PrimaryPart).
+	if #parts == 0 then
+		local p = model.PrimaryPart
+		if p then
+			table.insert(parts, p)
+		end
+	end
+	return parts
 end
 
--- Highlight (scale up + lift) a model.
-local function setHighlight(model, on, baseCF)
+-- Hide/show a model by toggling its parts' Transparency + billboards.
+local function showModel(entry)
+	local model = entry.model
 	if not model then
 		return
 	end
-	local cf = baseCF or model:GetPivot()
-	if on then
-		TweenService:Create(model, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-			{ CFrame = cf * CFrame.new(0, 0.6, 0) }):Play()
-	else
-		TweenService:Create(model, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{ CFrame = cf }):Play()
+	for _, p in entry.parts do
+		p.Transparency = 0
 	end
+	for _, b in entry.billboards do
+		b.Enabled = true
+	end
+end
+
+local function hideModel(entry)
+	local model = entry.model
+	if not model then
+		return
+	end
+	for _, p in entry.parts do
+		p.Transparency = 1
+	end
+	for _, b in entry.billboards do
+		b.Enabled = false
+	end
+end
+
+-- Lift the highlighted model up a bit (cheap, direct PivotTo, no tween loop).
+local function setHighlight(entry, on)
+	if not entry then
+		return
+	end
+	if on then
+		entry.model:PivotTo(entry.basePivot * CFrame.new(0, 0.6, 0))
+	else
+		entry.model:PivotTo(entry.basePivot)
+	end
+end
+
+-- Clone one reward model at the anchor.
+local function spawnReward(anchor, value)
+	if not CashRewardsFolder then
+		return nil
+	end
+	local template = CashRewardsFolder:FindFirstChild("Cash" .. value)
+	if not template then
+		return nil
+	end
+	local clone = template:Clone()
+	clone.Name = "CashReward"
+	clone:PivotTo(anchor.CFrame * CFrame.new(0, 1, 0))
+	clone.Parent = workspace
+	return clone
+end
+
+-- Build entries (model + parts + billboards + basePivot).
+local function buildEntries(anchor, rewardList)
+	local entries = {}
+	for _, value in rewardList do
+		local model = spawnReward(anchor, value)
+		if model then
+			local entry = {
+				value = value,
+				model = model,
+				parts = collectParts(model),
+				basePivot = model:GetPivot(),
+				billboards = {},
+			}
+			for _, b in model:GetDescendants() do
+				if b:IsA("BillboardGui") then
+					table.insert(entry.billboards, b)
+				end
+			end
+			table.insert(entries, entry)
+		end
+	end
+	return entries
 end
 
 -- Burst of sparkle particles on the winning model.
@@ -85,10 +152,7 @@ local function sparkle(model)
 	if not model then
 		return
 	end
-	local primary = model.PrimaryPart
-	if not primary then
-		primary = model:FindFirstChildWhichIsA("BasePart")
-	end
+	local primary = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
 	if not primary then
 		return
 	end
@@ -135,12 +199,10 @@ local function flashCash(value)
 	us.Scale = 0
 	us.Parent = label
 
-	-- Pop in, float up, fade out.
 	TweenService:Create(us, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
 		{ Scale = 1 }):Play()
-	local up = TweenService:Create(label, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{ Position = UDim2.new(0.25, 0, 0.32, 0) })
-	up:Play()
+	TweenService:Create(label, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ Position = UDim2.new(0.25, 0, 0.32, 0) }):Play()
 	task.delay(1.1, function()
 		TweenService:Create(label, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
 			{ TextTransparency = 1 }):Play()
@@ -158,13 +220,14 @@ local function runReroll(chosen, rewardList)
 		return -- nothing to animate; server still awards cash
 	end
 
-	local spawned = spawnRewards(anchor, rewardList)
-	if #spawned == 0 then
+	local entries = buildEntries(anchor, rewardList)
+	if #entries == 0 then
 		return
 	end
-	local baseCFs = {}
-	for _, m in spawned do
-		baseCFs[m.model] = m.model:GetPivot()
+
+	-- Start with all hidden.
+	for _, e in entries do
+		hideModel(e)
 	end
 
 	local current = 1
@@ -176,36 +239,45 @@ local function runReroll(chosen, rewardList)
 		local progress = (os.clock() - t) / duration
 		if progress >= 1 then
 			conn:Disconnect()
-			-- Land on the chosen reward.
-			for _, m in spawned do
-				setHighlight(m.model, m.value == chosen, baseCFs[m.model])
+			-- Land on the chosen reward: hide all, show + lift the winner.
+			for _, e in entries do
+				hideModel(e)
 			end
-			-- Winner gets sparkles + a "+$X" flash.
-			for _, m in spawned do
-				if m.value == chosen then
-					sparkle(m.model)
-					break
+			local winner
+			for _, e in entries do
+				if e.value == chosen then
+					winner = e
 				end
+			end
+			if winner then
+				showModel(winner)
+				setHighlight(winner, true)
+				sparkle(winner.model)
 			end
 			flashCash(chosen)
 			return
 		end
 		local interval = 0.05 + progress * 0.3 -- decelerate
 		if (os.clock() - t) >= current * interval then
-			for _, m in spawned do
-				setHighlight(m.model, false, baseCFs[m.model])
+			-- Show only the current model, hide the rest.
+			local idx = ((current - 1) % #entries) + 1
+			for i, e in entries do
+				if i == idx then
+					showModel(e)
+					setHighlight(e, true)
+				else
+					hideModel(e)
+				end
 			end
 			current = current + 1
-			local idx = ((current - 1) % #spawned) + 1
-			setHighlight(spawned[idx].model, true, baseCFs[spawned[idx].model])
 		end
 	end)
 
 	-- Clean up spawned clones after the animation.
 	task.delay(duration + 1.5, function()
-		for _, m in spawned do
-			if m.model and m.model.Parent then
-				m.model:Destroy()
+		for _, e in entries do
+			if e.model and e.model.Parent then
+				e.model:Destroy()
 			end
 		end
 	end)
