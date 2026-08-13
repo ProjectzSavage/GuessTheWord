@@ -136,10 +136,18 @@ local function stopFocus()
 	end
 end
 
--- Match starts at the first countdown tick (n==3). Re-focus each new match.
-local countdownSeen = false
+-- Match starts at the first countdown tick (n==3). Re-focus each new match
+-- (including a replay from the pause menu).
 Events:WaitForChild("Countdown").OnClientEvent:Connect(function(n)
 	if n == 3 then
+		startFocus()
+	end
+end)
+
+-- Belt-and-suspenders: also re-focus when a round actually starts, in case the
+-- countdown n==3 was missed (e.g. on a fast replay).
+Events:WaitForChild("RoundStart").OnClientEvent:Connect(function()
+	if not focused then
 		startFocus()
 	end
 end)

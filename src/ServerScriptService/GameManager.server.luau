@@ -394,9 +394,13 @@ function gameOver(tableState, winnerSeatIndex)
 	handleMatchEndDramatics(tableState, winnerSeatIndex)
 
 	-- After the drama, return everything to normal: despawn the bot, hide all
-	-- above-head hearts.
+	-- above-head hearts. Capture THIS bot's model so a fast replay (new bot) is
+	-- not clobbered by this delayed cleanup.
+	local capturedBot = tableState.botModel
 	task.delay(2.5, function()
-		despawnBot(tableState)
+		if tableState.botModel == capturedBot then
+			despawnBot(tableState)
+		end
 		for _, occ in tableState.occupants do
 			if occ ~= "BOT" and occ then
 				HeartHUDManager.hide(occ)

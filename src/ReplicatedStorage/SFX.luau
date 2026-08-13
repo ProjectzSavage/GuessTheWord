@@ -61,7 +61,9 @@ local function preloadSounds()
 	end
 end
 
--- Play a sound by name. Waits for the clip to load, plays it, self-destructs.
+-- Play a sound by name. Each call makes a NEW independent Sound so clips can
+-- overlap. Roblox queues playback until the clip is loaded, so we call :Play()
+-- immediately (no Loaded race) and clean up when it ends.
 function SFX.play(name, opts)
 	opts = opts or {}
 	local id = SFX.Sounds[name]
@@ -75,6 +77,7 @@ function SFX.play(name, opts)
 	if opts.speed then
 		s.PlaybackSpeed = opts.speed
 	end
+	-- Do not roll off for UI sounds (they're close to the camera anyway).
 	s.Parent = SoundService
 
 	local function cleanup()
@@ -84,17 +87,11 @@ function SFX.play(name, opts)
 	end
 	s.Ended:Connect(cleanup)
 
-	-- Play once the clip is loaded (fresh Sounds have TimeLength 0 until loaded).
-	if s.IsLoaded then
-		s:Play()
-	else
-		s.Loaded:Connect(function()
-			if s and s.Parent then
-				s:Play()
-			end
-		end)
-	end
-	task.delay(8, cleanup) -- safety
+	-- Play immediately; the engine starts playback once loaded. This guarantees
+	-- every call produces audible sound and overlapping sounds overlap.
+	s:Play()
+
+	task.delay(10, cleanup) -- safety (longer than before)
 end
 
 preloadSounds()
