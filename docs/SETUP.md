@@ -85,6 +85,7 @@ ServerScriptService
 | `src/StarterPlayerScripts/Preloader.client.luau`                | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/CameraController.client.luau`         | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/RerollController.client.luau`         | `StarterPlayerScripts`      | LocalScript |
+| `src/StarterPlayerScripts/StatsPanel.client.luau`               | `StarterPlayerScripts`      | LocalScript |
 
 > **Tip:** For each file, right-click the target container in Studio →
 > **Insert Object** → choose the right type, name it, then paste the file's

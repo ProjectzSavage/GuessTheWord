@@ -44,6 +44,17 @@ StarterGui
     ├── InteractionFrame  (Frame)  lower area
     │   └── PlayVsBotButton  (TextButton)   "Play vs Bot", Visible = false initially
     │
+    ├── StatsPanel  (Frame)         top-left; shows Cash & Wins HUD
+    │   ├── UIListLayout            Vertical, Padding 4
+    │   ├── CashRow  (Frame)
+    │   │     ├── Icon    (TextLabel)  "$"
+    │   │     ├── Value   (TextLabel)  "0"  (Cash)
+    │   │     └── Plus    (TextButton) "+" (opens shop later)
+    │   └── WinRow   (Frame)
+    │         ├── Icon    (TextLabel)  "W"
+    │         ├── Value   (TextLabel)  "0"  (Wins)
+    │         └── Plus    (TextButton) "+" (opens shop later)
+    │
     ├── CelebrationOverlay  (Frame)   full-screen, transparent, Visible=false
     │   └── CelebrationText  (TextLabel)   big "YOU WON! / LOSER / DRAW!" text.
     │                                    Script sets .Text, colors, rainbow, pop.
@@ -199,6 +210,15 @@ higher or lower:
 - **TimerBar / TimerFill** — `TimerBar` is the background, `TimerFill` the fill.
   The script shrinks `TimerFill.Size.X` from full to 0 as the round counts down.
   Anchor `TimerFill` to the left (AnchorPoint `{0,0.5}`) so it shrinks right→left.
+
+## StatsPanel (Cash & Wins HUD)
+
+Built as a `Frame` + `UIListLayout` so the two rows stack vertically and scale.
+You can build it by hand, or just add an empty `StatsPanel` frame — `StatsPanel`
+LocalScript auto-creates the rows, labels, and "+" buttons (in Scale). It reads
+`leaderstats.Cash` and `leaderstats.Wins` live and updates the `Value` labels.
+The `+` buttons are placeholders that will open the Shop later (they currently
+just print).
 
 ## Heart image resolution (256px vs 512px)
 
