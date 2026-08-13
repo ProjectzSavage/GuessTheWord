@@ -4,23 +4,26 @@
 	Run this as a regular **Script** (server) in ServerScriptService (e.g. inside
 	your "Scripts" folder). Uses a **BillboardGui template** you build.
 
-	REQUIRED TEMPLATE
-	Create a BillboardGui named `Nametag` INSIDE this script (or as a child of the
-	script's object). Typical structure:
+	REQUIRED TEMPLATE (optional) - a BillboardGui named `Nametag` as a child of
+	this script:
 		Nametag  (BillboardGui)
-		  ├── PlayerName  (TextLabel)   -- the player's name
-		  └── Icons  (Frame)            -- optional icon row
-		        ├── Premium  (ImageLabel, Visible=false)
-		        ├── Owner    (ImageLabel, Visible=false)
-		        └── Admin    (ImageLabel, Visible=false)
+		  ├── PlayerName  (TextLabel)          -- player's name
+		  ├── Icons  (Frame)                   -- optional icon row
+		  │     ├── Premium  (ImageLabel, Visible=false)
+		  │     ├── Owner    (ImageLabel, Visible=false)
+		  │     └── Admin    (ImageLabel, Visible=false)
+		  └── StreakRow  (Frame)               -- optional streak row
+		        ├── StreakIcon (ImageLabel)     -- the milestone icon
+		        └── Streak     (TextLabel)      -- the number ("10")
 
-	ADDING THE WIN STREAK
-	Option A: add a TextLabel named `Streak` anywhere inside the template (e.g. a
-	child of `Icons`) - the script sets its text to "🔥10".
-	Option B: if no `Streak` label exists, the script auto-creates one (a small
-	"🔥N" label under the name). No manual setup needed for Option B.
+	If you don't build a template (or leave out StreakRow), the script auto-creates
+	everything needed. All auto-created sizes/positions are in SCALE (never offset).
 
-	Set the template's size/StudsOffset/AlwaysOnTop in Studio to taste.
+	STREAK + MILESTONES
+	The streak shows as an icon + number (e.g. a flame + "10"). As the player's
+	streak passes each milestone threshold in `StreakMilestones`, the ICON swaps to
+	that milestone's `icon` image. Fill in your own image IDs. The first milestone
+	(threshold 1) is the default flame; later ones are the "cooler" icons.
 ]]
 
 local PlayersService = game:GetService("Players")
@@ -35,13 +38,49 @@ local NametagSettings = {
 	},
 }
 
+-- Streak milestone icons (lowest threshold to highest). The first is the
+-- default. The script picks the highest milestone whose threshold you've reached.
+-- Replace the placeholder rbxassetid://... with your icons.
+local StreakMilestones = {
+	{ threshold = 1,  icon = "rbxassetid://DEFAULT_FIRE" },
+	{ threshold = 5,  icon = "rbxassetid://FIRE_5" },
+	{ threshold = 10, icon = "rbxassetid://COOL_FIRE_10" },
+	{ threshold = 25, icon = "rbxassetid://EPIC_FIRE_25" },
+	{ threshold = 50, icon = "rbxassetid://LEGENDARY_FIRE_50" },
+}
+
 -- The template sits inside this script (a child named "Nametag").
 local Template = script:FindFirstChild("Nametag")
 
-local function setStreak(label, value)
-	if label then
-		label.Text = "🔥" .. (value or 0)
+-- Pick the milestone icon for a streak value (highest threshold reached).
+local function milestoneFor(value)
+	local chosen = StreakMilestones[1]
+	for _, m in ipairs(StreakMilestones) do
+		if value >= m.threshold then
+			chosen = m
+		end
 	end
+	return chosen
+end
+
+-- Set the streak display (icon + number) for a value.
+local function setStreak(iconLabel, textLabel, value)
+	value = value or 0
+	if iconLabel then
+		local m = milestoneFor(value)
+		iconLabel.Image = m and m.icon or ""
+		iconLabel.Visible = value > 0
+	end
+	if textLabel then
+		textLabel.Text = tostring(value)
+		textLabel.Visible = value > 0
+	end
+end
+
+-- Find a descendant by name (recursive), so it works even if the label is
+-- nested inside an Icons/StreakRow frame.
+local function findDesc(tag, name)
+	return tag:FindFirstChild(name, true)
 end
 
 local function LoadOverhead(Player, Character)
@@ -61,7 +100,7 @@ local function LoadOverhead(Player, Character)
 	else
 		Tag = Instance.new("BillboardGui")
 		Tag.Name = "Nametag"
-		Tag.Size = UDim2.new(0, 160, 0, 50)
+		Tag.Size = UDim2.new(0.4, 0, 0.08, 0) -- scale-based
 		Tag.StudsOffset = Vector3.new(0, 3.2, 0)
 		Tag.AlwaysOnTop = true
 		Tag.MaxDistance = 300
@@ -72,13 +111,14 @@ local function LoadOverhead(Player, Character)
 	if NametagSettings.ShowsDisplayName then
 		Text = Player.DisplayName
 	end
-	local nameLabel = Tag:FindFirstChild("PlayerName")
+	local nameLabel = findDesc(Tag, "PlayerName")
 	if nameLabel then
 		nameLabel.Text = Text
 	else
 		nameLabel = Instance.new("TextLabel")
 		nameLabel.Name = "PlayerName"
-		nameLabel.Size = UDim2.new(1, 0, 0, 30)
+		nameLabel.Size = UDim2.new(1, 0, 0.55, 0)
+		nameLabel.Position = UDim2.new(0, 0, 0, 0)
 		nameLabel.BackgroundTransparency = 1
 		nameLabel.Font = Enum.Font.GothamBold
 		nameLabel.Text = Text
@@ -88,8 +128,8 @@ local function LoadOverhead(Player, Character)
 	end
 
 	-- Icons (Premium / Owner / Admin) - only if the template has an Icons frame.
-	local Icons = Tag:FindFirstChild("Icons")
-	if Icons then
+	local Icons = findDesc(Tag, "Icons")
+	if Icons and Icons:IsA("GuiObject") then
 		if NametagSettings.DisplayPremium and Player.MembershipType == Enum.MembershipType.Premium then
 			local prem = Icons:FindFirstChild("Premium")
 			if prem then
@@ -126,28 +166,54 @@ local function LoadOverhead(Player, Character)
 		end
 	end
 
-	-- WIN STREAK ("🔥N"). Reuse a template child named "Streak" if present,
-	-- otherwise auto-create one.
-	local StreakLabel = Tag:FindFirstChild("Streak")
-	if not StreakLabel then
+	-- STREAK: look for an existing StreakIcon + Streak (anywhere in the tag).
+	local StreakIcon = findDesc(Tag, "StreakIcon")
+	local StreakLabel = findDesc(Tag, "Streak")
+
+	-- If neither exists, auto-create a StreakRow (icon + number) in SCALE.
+	if not StreakIcon and not StreakLabel then
+		local row = Instance.new("Frame")
+		row.Name = "StreakRow"
+		row.Size = UDim2.new(1, 0, 0.4, 0)
+		row.Position = UDim2.new(0, 0, 0.6, 0) -- below the name
+		row.BackgroundTransparency = 1
+		row.Parent = Tag
+
+		StreakIcon = Instance.new("ImageLabel")
+		StreakIcon.Name = "StreakIcon"
+		StreakIcon.Size = UDim2.new(0.3, 0, 0.8, 0)
+		StreakIcon.Position = UDim2.new(0.1, 0, 0.1, 0)
+		StreakIcon.BackgroundTransparency = 1
+		StreakIcon.ScaleType = Enum.ScaleType.Fit
+		StreakIcon.Parent = row
+
 		StreakLabel = Instance.new("TextLabel")
 		StreakLabel.Name = "Streak"
-		StreakLabel.Size = UDim2.new(1, 0, 0, 24)
-		StreakLabel.Position = UDim2.new(0, 0, 1, 0)
+		StreakLabel.Size = UDim2.new(0.6, 0, 0.8, 0)
+		StreakLabel.Position = UDim2.new(0.4, 0, 0.1, 0)
 		StreakLabel.BackgroundTransparency = 1
 		StreakLabel.Font = Enum.Font.GothamBlack
-		StreakLabel.TextColor3 = Color3.fromRGB(255, 150, 40)
+		StreakLabel.TextColor3 = Color3.fromRGB(255, 170, 50)
 		StreakLabel.TextScaled = true
 		StreakLabel.TextStrokeTransparency = 0.4
-		StreakLabel.Parent = Tag
+		StreakLabel.Parent = row
 	end
 
+	-- Hide the streak entirely at 0 (so it doesn't show "0").
+	if StreakIcon then
+		StreakIcon.Visible = false
+	end
+	if StreakLabel then
+		StreakLabel.Visible = false
+	end
+
+	-- Wire it up to leaderstats.Streak (updates live).
 	local leaderstats = Player:WaitForChild("leaderstats", 10)
 	local streakVal = leaderstats and leaderstats:FindFirstChild("Streak")
-	setStreak(StreakLabel, streakVal and streakVal.Value or 0)
+	setStreak(StreakIcon, StreakLabel, streakVal and streakVal.Value or 0)
 	if streakVal then
 		streakVal.Changed:Connect(function()
-			setStreak(StreakLabel, streakVal.Value)
+			setStreak(StreakIcon, StreakLabel, streakVal.Value)
 		end)
 	end
 

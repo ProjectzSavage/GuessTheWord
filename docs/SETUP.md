@@ -35,11 +35,15 @@ build it once. The full details are further down.
    should sit (above/behind the table). When a match starts, both players'
    cameras focus there. If absent, the camera falls back to behind the `Table`
    model, then to the midpoint of the two seats.
-9. **Nametag (optional)** — `Nametag.server.luau` uses a **BillboardGui template
-   named `Nametag`** you build as a child of the script (with `PlayerName`,
-   optional `Icons` frame with `Premium`/`Owner`/`Admin`). If you don't build
-   one, it auto-creates a simple name + "🔥N" streak tag. Add the script to
-   `ServerScriptService > Scripts`.
+9. **Nametag + streak (optional)** — `Nametag.server.luau` uses a **BillboardGui
+   template named `Nametag`** as a child of the script (`PlayerName`, optional
+   `Icons` frame with `Premium`/`Owner`/`Admin`, optional `StreakRow` with
+   `StreakIcon` + `Streak`). If you don't build one, it auto-creates a scale-based
+   name + streak tag. **Milestone icons**: fill in `StreakMilestones` at the top
+   of the script (threshold → icon image) so the streak icon upgrades as the
+   player reaches 5 / 10 / 25 / 50 etc. Add the script to
+   `ServerScriptService > Scripts`. Use **Scale, not offset**, for any labels you
+   build.
 
 ---
 
