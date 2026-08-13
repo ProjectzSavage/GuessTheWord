@@ -43,10 +43,7 @@ local NametagSettings = {
 -- Replace the placeholder rbxassetid://... with your icons.
 local StreakMilestones = {
 	{ threshold = 1,  icon = "rbxassetid://DEFAULT_FIRE" },
-	{ threshold = 5,  icon = "rbxassetid://FIRE_5" },
 	{ threshold = 10, icon = "rbxassetid://COOL_FIRE_10" },
-	{ threshold = 25, icon = "rbxassetid://EPIC_FIRE_25" },
-	{ threshold = 50, icon = "rbxassetid://LEGENDARY_FIRE_50" },
 }
 
 -- The template sits inside this script (a child named "Nametag").
@@ -63,7 +60,8 @@ local function milestoneFor(value)
 	return chosen
 end
 
--- Set the streak display (icon + number) for a value.
+-- Set the streak display (icon + number) for a value. Unhides the parent
+-- StreakRow frame (it may be inside the Icons frame and set Visible=false).
 local function setStreak(iconLabel, textLabel, value)
 	value = value or 0
 	if iconLabel then
@@ -74,6 +72,11 @@ local function setStreak(iconLabel, textLabel, value)
 	if textLabel then
 		textLabel.Text = tostring(value)
 		textLabel.Visible = value > 0
+	end
+	-- Show/hide the row that holds them, if one exists.
+	local row = iconLabel and iconLabel.Parent or (textLabel and textLabel.Parent)
+	if row and row:IsA("GuiObject") and row.Name == "StreakRow" then
+		row.Visible = value > 0
 	end
 end
 

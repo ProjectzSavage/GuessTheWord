@@ -5,42 +5,48 @@
 
 	PURPOSE
 	Plays all the game's sound effects on the right moments. Fill in your sound
-	asset IDs in the SFX table below. Any entry you leave as "" (empty) or nil is
-	simply skipped, so you can add sounds gradually.
+	asset IDs in the SFX table below. Use the FULL format:
+	    "rbxassetid://117751546358455"
+	(both the prefix and the digits). Leave unused ones as "" (skipped).
+
+	COUNTDOWN: separate sounds for 3, 2, 1 and GO! (fill each).
+	  count3 = ...   count2 = ...   count1 = ...   go = ...
 
 	HOW IT WORKS
-	Every sound is a `Sound` parented under `SoundService` (Volume/RollOff set
-	here). On each game event, we play the matching sound if you've provided an ID.
-	Sounds play on the client, so they're cheap and start instantly.
-
-	FILL IN YOUR SOUNDS HERE (rbxassetid://...)
+	Each sound is parented under SoundService. On play we attach a `Loaded` handler
+	and play when ready; the Sound cleans itself up when it ends. Sounds are also
+	preloaded up front so they start instantly.
 ]]
+
 local SoundService = game:GetService("SoundService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ContentProvider = game:GetService("ContentProvider")
 
 -- ---------------------------------------------------------------------------
--- SOUND CONFIG - fill in the IDs you have. Leave unused ones as "".
+-- SOUND CONFIG - fill in the IDs you have. Use "rbxassetid://..." full form.
 -- ---------------------------------------------------------------------------
 local SFX = {
-	countTick  = "", -- short tick during the 3-2-1 countdown
-	go         = "", -- "GO!" at round start
-	correct    = "", -- correct answer / reveal
-	timeout    = "", -- round timed out
-	wrong      = "", -- wrong full-length guess (with the shake)
-	heartDanger = "", -- when you're about to lose a heart (last one / warning)
-	heartLoss  = "", -- a heart blinks out and disappears
-	heartRestore = "", -- a new round's hearts refresh
-	win        = "", -- you win the match
-	lose       = "", -- you lose the match
-	draw       = "", -- the match was a draw
-	letter     = "", -- a letter flies into the answer box
-	hover      = "", -- hovering over a tile/button
-	click      = "", -- clicking the Play vs Bot button
-	botSpawn   = "", -- the bot rig spawns in the chair
-	botDespawn = "", -- the bot despawns after the match
-	winJingle  = "", -- victory fanfare after winning
-	standUp    = "", -- player stands up at match end
-	ragdoll    = "", -- loser ragdolls
+	count3      = "", -- countdown "3"
+	count2      = "", -- countdown "2"
+	count1      = "", -- countdown "1"
+	go          = "", -- "GO!" at round start
+	correct     = "", -- correct answer / reveal
+	timeout     = "", -- round timed out
+	wrong       = "", -- wrong full-length guess (with the shake)
+	heartDanger = "", -- about to lose a heart (last one / warning)
+	heartLoss   = "", -- a heart blinks out and disappears
+	heartRestore= "", -- a new round's hearts refresh
+	win         = "", -- you win the match
+	lose        = "", -- you lose the match
+	draw        = "", -- the match was a draw
+	letter      = "", -- a letter flies into the answer box
+	hover       = "", -- hovering over a tile/button
+	click       = "", -- clicking the Play vs Bot button
+	botSpawn    = "", -- the bot rig spawns in the chair
+	botDespawn  = "", -- the bot despawns after the match
+	winJingle   = "", -- victory fanfare after winning
+	standUp     = "", -- player stands up at match end
+	ragdoll     = "", -- loser ragdolls
 }
 
 -- ---------------------------------------------------------------------------
@@ -48,46 +54,74 @@ local SFX = {
 -- ---------------------------------------------------------------------------
 local Events = ReplicatedStorage:WaitForChild("Events")
 
-local function ensureSound(id)
-	if type(id) ~= "string" or id == "" then
-		return nil
+-- Preload all provided sound IDs so they play instantly.
+local function preloadSounds()
+	local ids = {}
+	for _, id in pairs(SFX) do
+		if type(id) == "string" and id ~= "" then
+			table.insert(ids, id)
+		end
 	end
-	local s = Instance.new("Sound")
-	s.SoundId = id
-	s.Volume = 0.6
-	s.Parent = SoundService
-	return s
+	if #ids > 0 then
+		task.spawn(function()
+			pcall(function()
+				ContentProvider:PreloadAsync(ids)
+			end)
+		end)
+	end
 end
 
+-- Play a sound by name. Waits for the clip to load, plays it, self-destructs.
 local function play(name, opts)
 	opts = opts or {}
 	local id = SFX[name]
 	if type(id) ~= "string" or id == "" then
 		return
 	end
-	local s = ensureSound(id)
-	if not s then
-		return
-	end
-	if opts.volume then
-		s.Volume = opts.volume
-	end
+
+	local s = Instance.new("Sound")
+	s.SoundId = id
+	s.Volume = opts.volume or 0.6
 	if opts.speed then
 		s.PlaybackSpeed = opts.speed
 	end
-	s:Play()
-	-- Clean up the Sound once it finishes.
-	task.delay(s.TimeLength + 0.2, function()
-		s:Destroy()
-	end)
+	s.Parent = SoundService
+
+	local started = false
+	local function cleanup()
+		if s and s.Parent then
+			s:Destroy()
+		end
+	end
+	s.Ended:Connect(cleanup)
+
+	-- Play once the clip is loaded (fresh Sounds have TimeLength 0 until loaded).
+	if s.IsLoaded then
+		s:Play()
+	else
+		s.Loaded:Connect(function()
+			if not started then
+				started = true
+				s:Play()
+			end
+		end)
+	end
+	-- Safety cleanup in case Loaded never fires or the clip is very long.
+	task.delay(8, cleanup)
 end
+
+preloadSounds()
 
 -- ---------------------------------------------------------------------------
 -- EVENT -> SOUND WIRING
 -- ---------------------------------------------------------------------------
 Events:WaitForChild("Countdown").OnClientEvent:Connect(function(n)
-	if n <= 3 then
-		play("countTick", { volume = 0.5 })
+	if n == 3 then
+		play("count3", { volume = 0.6 })
+	elseif n == 2 then
+		play("count2", { volume = 0.6 })
+	elseif n == 1 then
+		play("count1", { volume = 0.6 })
 	end
 end)
 
@@ -107,9 +141,8 @@ Events:WaitForChild("WrongGuess").OnClientEvent:Connect(function()
 	play("wrong")
 end)
 
--- Heart sounds: on the first loss (3 -> 2) play heartLoss; on the last one
--- (2 -> 1) also play heartDanger as the "about to lose" warning. Track state so
--- we only fire once per transition, not on every heartbeat.
+-- Heart sounds: on a loss play heartLoss; on reaching the last heart also play
+-- heartDanger; on restore play heartRestore. Track state so it fires per change.
 local lastHeartCount = 3
 Events:WaitForChild("HeartUpdate").OnClientEvent:Connect(function(count)
 	count = count or 0

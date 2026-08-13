@@ -208,11 +208,15 @@ match, you **win it** exactly like a normal victory (Wins/Streak updated).
 ## 6. Sound effects
 
 `StarterPlayerScripts.SFX` is a LocalScript with a `SFX` table at the top. Fill
-in your `rbxassetid://...` sound IDs (leave unused ones as `""`), and it plays
-them at the right moments: countdown tick, GO!, correct/timeout, wrong guess,
-heart loss (plus a "about to lose" warning on your last heart), heart restore,
-win/lose/draw (+ win jingle), bot spawn/despawn, and letter/hover/click/standUp/
-ragdoll placeholders.
+in your sound IDs using the **full format** `"rbxassetid://117751546358455"`
+(prefix + digits), leaving unused ones as `""`. It plays them at the right
+moments: **separate sounds for 3, 2, 1 and GO!** (`count3`/`count2`/`count1`/
+`go`), correct/timeout, wrong guess, heart loss (plus a "about to lose" warning
+on your last heart), heart restore, win/lose/draw (+ win jingle), bot
+spawn/despawn, and letter/hover/click/standUp/ragdoll placeholders.
+
+> Note: sounds are preloaded automatically by the script so they play instantly.
+> The old version destroyed sounds too early (before the clip loaded) — fixed.
 
 ## 7. Asset preloading
 
