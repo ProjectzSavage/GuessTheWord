@@ -4,21 +4,15 @@
 	Run this as a **LocalScript** in StarterPlayerScripts.
 
 	PURPOSE
-	Plays the cash-reward REROLL animation on the table (like a lucky block):
-	after the countdown, the 6 reward models cycle at the table's CashAnchor
-	block, then the chosen one is highlighted with sparkles and a "+$X" flash.
-	Actual Cash is awarded server-side (GameManager.runCashReroll).
+	Plays the cash-reward ROULETTE on screen (like Steal a Brainrot):
+	* A wheel/roulette of cash values rapidly cycles on the screen.
+	* It decelerates and lands on the single chosen reward.
+	* The countdown frame is hidden when the roll starts (so the countdown ends
+	  FIRST, then the roll plays), and the overlay disappears when RoundStart
+	  fires (the game GUI then pops up).
 
-	SETUP
-	* Put your 6 reward models in ReplicatedStorage.CashRewards, named:
-	      Cash100, Cash350, Cash750, Cash1500, Cash3500, Cash5000
-	* In each TableN folder, add ONE part named `CashAnchor` (the block).
-	If either is missing, the script silently skips (cash still awards).
-
-	OPTIMIZED
-	Models are hidden/shown by toggling their parts' Transparency (never tweened
-	by CFrame, which models don't have). Only ONE model is visible at a time,
-	which keeps rendering light even on mobile.
+	Actual Cash is awarded server-side (GameManager.runCashReroll). The reward
+	list + chosen value come from the CashReroll RemoteEvent.
 ]]
 
 local Players = game:GetService("Players")
@@ -26,225 +20,149 @@ local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
+local PlayerGui = player:WaitForChild("PlayerGui")
 local Events = ReplicatedStorage:WaitForChild("Events")
 
--- The central pool of cash reward models.
-local CashRewardsFolder = ReplicatedStorage:FindFirstChild("CashRewards")
+local REROLL_DURATION = 3 -- match the server's REROLL_DURATION
 
--- Find the "TableN" folder the local player is seated at.
-local function findTableFolder()
-	local char = player.Character
-	if not char then
-		return nil
-	end
-	local humanoid = char:FindFirstChildOfClass("Humanoid")
-	local seat = humanoid and humanoid.SeatPart
-	local node = seat and seat.Parent
-	while node do
-		if node:IsA("Folder") and string.sub(node.Name, 1, 5) == "Table" then
-			return node
-		end
-		node = node.Parent
-	end
-	return nil
-end
+-------------------------------------------------------------------------------
+-- ROULETTE OVERLAY
+-------------------------------------------------------------------------------
+local overlay = nil
+local cycleLabel = nil
+local dimBg = nil
 
--- Collect all BaseParts of a model (cached for cheap hide/show).
-local function collectParts(model)
-	local parts = {}
-	for _, p in model:GetDescendants() do
-		if p:IsA("BasePart") then
-			table.insert(parts, p)
-		end
-	end
-	-- Ensure there's at least one (e.g. PrimaryPart).
-	if #parts == 0 then
-		local p = model.PrimaryPart
-		if p then
-			table.insert(parts, p)
-		end
-	end
-	return parts
-end
-
--- Hide/show a model by toggling its parts' Transparency + billboards.
-local function showModel(entry)
-	local model = entry.model
-	if not model then
+local function buildOverlay()
+	if overlay then
 		return
 	end
-	for _, p in entry.parts do
-		p.Transparency = 0
-	end
-	for _, b in entry.billboards do
-		b.Enabled = true
-	end
+	overlay = Instance.new("ScreenGui")
+	overlay.Name = "CashRoulette"
+	overlay.IgnoreGuiInset = true
+	overlay.Enabled = false
+	overlay.Parent = PlayerGui
+
+	-- Dim background
+	dimBg = Instance.new("Frame")
+	local bg = dimBg
+	bg.Size = UDim2.new(1, 0, 1, 0)
+	bg.BackgroundColor3 = Color3.new(0, 0, 0)
+	bg.BackgroundTransparency = 0.4
+	bg.ZIndex = 40
+	bg.Parent = overlay
+
+	-- Title
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(1, 0, 0.2, 0)
+	title.Position = UDim2.new(0, 0, 0.1, 0)
+	title.BackgroundTransparency = 1
+	title.Font = Enum.Font.GothamBold
+	title.Text = "REWARD!"
+	title.TextColor3 = Color3.fromRGB(255, 210, 90)
+	title.TextScaled = true
+	title.ZIndex = 50
+	title.Parent = overlay
+
+	-- Cycling value label (the roulette)
+	cycleLabel = Instance.new("TextLabel")
+	cycleLabel.Size = UDim2.new(0.6, 0, 0.4, 0)
+	cycleLabel.Position = UDim2.new(0.2, 0, 0.35, 0)
+	cycleLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+	cycleLabel.BackgroundTransparency = 0.2
+	cycleLabel.Font = Enum.Font.GothamBlack
+	cycleLabel.TextColor3 = Color3.new(1, 1, 1)
+	cycleLabel.TextScaled = true
+	cycleLabel.TextStrokeTransparency = 0.3
+	cycleLabel.ZIndex = 50
+	cycleLabel.Parent = overlay
+
+	-- Small instruction
+	local hint = Instance.new("TextLabel")
+	hint.Size = UDim2.new(1, 0, 0.15, 0)
+	hint.Position = UDim2.new(0, 0, 0.78, 0)
+	hint.BackgroundTransparency = 1
+	hint.Font = Enum.Font.Gotham
+	hint.Text = "Good luck!"
+	hint.TextColor3 = Color3.fromRGB(200, 200, 200)
+	hint.TextScaled = true
+	hint.ZIndex = 50
+	hint.Parent = overlay
 end
 
-local function hideModel(entry)
-	local model = entry.model
-	if not model then
-		return
-	end
-	for _, p in entry.parts do
-		p.Transparency = 1
-	end
-	for _, b in entry.billboards do
-		b.Enabled = false
-	end
-end
-
--- Lift the highlighted model up a bit (cheap, direct PivotTo, no tween loop).
-local function setHighlight(entry, on)
-	if not entry then
-		return
-	end
-	if on then
-		entry.model:PivotTo(entry.basePivot * CFrame.new(0, 0.6, 0))
-	else
-		entry.model:PivotTo(entry.basePivot)
-	end
-end
-
--- Clone one reward model at the anchor.
-local function spawnReward(anchor, value)
-	if not CashRewardsFolder then
-		return nil
-	end
-	local template = CashRewardsFolder:FindFirstChild("Cash" .. value)
-	if not template then
-		return nil
-	end
-	local clone = template:Clone()
-	clone.Name = "CashReward"
-	clone:PivotTo(anchor.CFrame * CFrame.new(0, 1, 0))
-	clone.Parent = workspace
-	return clone
-end
-
--- Build entries (model + parts + billboards + basePivot).
-local function buildEntries(anchor, rewardList)
-	local entries = {}
-	for _, value in rewardList do
-		local model = spawnReward(anchor, value)
-		if model then
-			local entry = {
-				value = value,
-				model = model,
-				parts = collectParts(model),
-				basePivot = model:GetPivot(),
-				billboards = {},
-			}
-			for _, b in model:GetDescendants() do
-				if b:IsA("BillboardGui") then
-					table.insert(entry.billboards, b)
-				end
-			end
-			table.insert(entries, entry)
-		end
-	end
-	return entries
-end
-
--- Burst of sparkle particles on the winning model.
-local function sparkle(model)
-	if not model then
-		return
-	end
-	local primary = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
-	if not primary then
-		return
-	end
-	local emitter = Instance.new("ParticleEmitter")
-	emitter.Texture = "rbxassetid://243660179" -- star sparkle
-	emitter.Enabled = true
-	emitter.Rate = 200
-	emitter.Lifetime = NumberRange.new(0.6, 1)
-	emitter.Speed = NumberRange.new(4, 9)
-	emitter.SpreadAngle = Vector2.new(0, 360)
-	emitter.Size = NumberSequence.new(0.4)
-	emitter.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(1, 1) })
-	emitter.Parent = primary
-	task.delay(0.6, function()
-		emitter.Rate = 0
-	end)
-	task.delay(1.5, function()
-		if emitter then
-			emitter:Destroy()
-		end
-	end)
-end
-
--- Run the reroll animation.
-local function runReroll(chosen, rewardList)
-	local folder = findTableFolder()
-	local anchor = folder and folder:FindFirstChild("CashAnchor")
-	if not anchor or not anchor:IsA("BasePart") or not CashRewardsFolder then
-		return -- nothing to animate; server still awards cash
-	end
-
-	local entries = buildEntries(anchor, rewardList)
-	if #entries == 0 then
+-- Cycle the roulette, decelerating, and land on the chosen value.
+local function runRoulette(chosen, rewardList)
+	buildOverlay()
+	if not overlay or not cycleLabel then
 		return
 	end
 
-	-- Start with all hidden.
-	for _, e in entries do
-		hideModel(e)
+	-- Hide the countdown frame so the countdown "ends" before the roll.
+	local gameUI = PlayerGui:FindFirstChild("GameUI")
+	local countdown = gameUI and gameUI:FindFirstChild("CountdownFrame")
+	if countdown then
+		countdown.Visible = false
 	end
 
-	local current = 1
+	overlay.Enabled = true
+	cycleLabel.Text = ""
+	cycleLabel.TextColor3 = Color3.new(1, 1, 1)
+
 	local t = os.clock()
-	local duration = 3 -- match REROLL_DURATION on the server
-
+	local current = 1
+	local lastTick = 0
 	local conn
+
 	conn = game:GetService("RunService").Heartbeat:Connect(function()
-		local progress = (os.clock() - t) / duration
+		local progress = (os.clock() - t) / REROLL_DURATION
 		if progress >= 1 then
 			conn:Disconnect()
-			-- Land on the chosen reward: hide all, show + lift the winner.
-			for _, e in entries do
-				hideModel(e)
+			-- Land on the chosen value.
+			cycleLabel.Text = "$" .. chosen
+			cycleLabel.TextColor3 = Color3.fromRGB(120, 255, 130)
+			-- Pop the landed value.
+			local us = cycleLabel:FindFirstChildOfClass("UIScale")
+			if not us then
+				us = Instance.new("UIScale")
+				us.Parent = cycleLabel
 			end
-			local winner
-			for _, e in entries do
-				if e.value == chosen then
-					winner = e
+			us.Scale = 0.6
+			TweenService:Create(us, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+				{ Scale = 1 }):Play()
+			-- Briefly hold the result, then fade the overlay out.
+			task.delay(0.9, function()
+				if overlay then
+					TweenService:Create(dimBg, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
+						{ BackgroundTransparency = 1 }):Play()
+					TweenService:Create(cycleLabel, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
+						{ TextTransparency = 1 }):Play()
 				end
-			end
-			if winner then
-				showModel(winner)
-				setHighlight(winner, true)
-				sparkle(winner.model)
-			end
+				task.delay(0.4, function()
+					if overlay then
+						overlay.Enabled = false
+					end
+				end)
+			end)
 			return
 		end
-		local interval = 0.05 + progress * 0.3 -- decelerate
-		if (os.clock() - t) >= current * interval then
-			-- Show only the current model, hide the rest.
-			local idx = ((current - 1) % #entries) + 1
-			for i, e in entries do
-				if i == idx then
-					showModel(e)
-					setHighlight(e, true)
-				else
-					hideModel(e)
-				end
-			end
-			current = current + 1
-		end
-	end)
 
-	-- Clean up spawned clones after the animation.
-	task.delay(duration + 1.5, function()
-		for _, e in entries do
-			if e.model and e.model.Parent then
-				e.model:Destroy()
-			end
+		-- Decelerating cycle: interval grows as progress increases.
+		local interval = 0.03 + progress * 0.12
+		if (os.clock() - t) >= current * interval then
+			current = current + 1
+			local idx = ((current - 1) % #rewardList) + 1
+			cycleLabel.Text = "$" .. rewardList[idx]
 		end
 	end)
 end
 
+-- Always hide the overlay when the round starts (GUI pops up).
+Events:WaitForChild("RoundStart").OnClientEvent:Connect(function()
+	if overlay then
+		overlay.Enabled = false
+	end
+end)
+
+-- Start the roll when the server says so.
 Events:WaitForChild("CashReroll").OnClientEvent:Connect(function(chosen, rewardList)
-	runReroll(chosen, rewardList)
+	runRoulette(chosen, rewardList)
 end)

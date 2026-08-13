@@ -290,6 +290,10 @@ local function setWaitingUI(waiting)
 	end
 end
 
+-- Forward-declared here so revealRoundUI (below) can call it; it's defined
+-- later in the file. Declared BEFORE use to satisfy the type checker.
+local animateClueIntro
+
 -- Only show PuzzleArea + TopBar AFTER the countdown finishes. This is also
 -- where the puzzle's entrance animations play (now that it's actually visible).
 local function revealRoundUI()
@@ -337,9 +341,9 @@ local roundActive = false
 local matchInProgress = false -- true during an active match (jump locked)
 local flyingLetters = {}     -- in-flight flying clones (for cleanup)
 
--- Forward declarations for helpers that are CALLED early (by revealRoundUI /
--- the Countdown handler) but DEFINED later in the file.
-local lockJump, getHumanoid, onLeftSeat, setupCharacterJump, animateClueIntro
+-- Forward declarations for helpers that are CALLED early (by the Countdown
+-- handler) but DEFINED later in the file.
+local lockJump, getHumanoid, onLeftSeat, setupCharacterJump
 
 setWaitingUI(false) -- start hidden until the server says otherwise
 
