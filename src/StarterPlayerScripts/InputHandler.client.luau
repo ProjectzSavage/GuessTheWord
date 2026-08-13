@@ -861,10 +861,8 @@ Countdown.OnClientEvent:Connect(function(n)
 	hideFrame(PuzzleArea)
 	slideTopBarOut()
 	showCountdown(tostring(n))
-	if n == 3 then
-		matchInProgress = true -- lock the player into their chair
-		lockJump(true)
-	end
+	-- Player can still jump out of the chair during the countdown; the jump is
+	-- locked when the actual round starts (RoundStart).
 end)
 
 -- Round timer tick (15 -> 0). Also shrinks the TimerBar fill.
@@ -942,6 +940,9 @@ RoundStart.OnClientEvent:Connect(function(length, letterBank, images)
 	currentGuess = ""
 	roundActive = true
 	timerMax = 0
+	-- The round is now live: lock the player into their chair.
+	matchInProgress = true
+	lockJump(true)
 	buildBank(letterBank)
 	buildSlots()
 	setClueImages(images) -- show the 4 clue images for this word

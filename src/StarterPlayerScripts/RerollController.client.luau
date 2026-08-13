@@ -26,7 +26,6 @@ local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
-local PlayerGui = player:WaitForChild("PlayerGui")
 local Events = ReplicatedStorage:WaitForChild("Events")
 
 -- The central pool of cash reward models.
@@ -176,42 +175,6 @@ local function sparkle(model)
 	end)
 end
 
--- Flash "+$X" in the middle of the screen.
-local function flashCash(value)
-	local gui = Instance.new("ScreenGui")
-	gui.Name = "CashFlash"
-	gui.IgnoreGuiInset = true
-	gui.Parent = PlayerGui
-
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.new(0.5, 0, 0.15, 0)
-	label.Position = UDim2.new(0.25, 0, 0.4, 0)
-	label.BackgroundTransparency = 1
-	label.Font = Enum.Font.GothamBlack
-	label.Text = "+$" .. value
-	label.TextColor3 = Color3.fromRGB(80, 255, 120)
-	label.TextScaled = true
-	label.TextStrokeTransparency = 0.3
-	label.ZIndex = 50
-	label.Parent = gui
-
-	local us = Instance.new("UIScale")
-	us.Scale = 0
-	us.Parent = label
-
-	TweenService:Create(us, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-		{ Scale = 1 }):Play()
-	TweenService:Create(label, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{ Position = UDim2.new(0.25, 0, 0.32, 0) }):Play()
-	task.delay(1.1, function()
-		TweenService:Create(label, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
-			{ TextTransparency = 1 }):Play()
-	end)
-	task.delay(1.6, function()
-		gui:Destroy()
-	end)
-end
-
 -- Run the reroll animation.
 local function runReroll(chosen, rewardList)
 	local folder = findTableFolder()
@@ -254,7 +217,6 @@ local function runReroll(chosen, rewardList)
 				setHighlight(winner, true)
 				sparkle(winner.model)
 			end
-			flashCash(chosen)
 			return
 		end
 		local interval = 0.05 + progress * 0.3 -- decelerate

@@ -462,8 +462,11 @@ function handleMatchEndDramatics(tableState, winnerSeatIndex)
 				player:LoadCharacter()
 				-- Re-seat the loser once their new character spawns, so they can
 				-- use the pause-menu replay (which requires being seated).
-				local spawned = player.CharacterAdded:Connect(function(character)
-					spawned:Disconnect()
+				local spawned
+				spawned = player.CharacterAdded:Connect(function(character)
+					if spawned then
+						spawned:Disconnect()
+					end
 					task.wait(0.5)
 					if character and character.Parent then
 						local humanoid = character:FindFirstChildOfClass("Humanoid")
@@ -683,6 +686,8 @@ end
 
 -- Run the cash reroll: tell clients to animate, then after the animation award
 -- the chosen cash to every real player seated.
+-- Play the cash reroll animation, then (after it finishes) award the cash and
+-- start the round. Returns the chosen reward value.
 local function runCashReroll(tableState)
 	local reward = pickCashReward()
 	local rewardList = {}
@@ -697,19 +702,22 @@ local function runCashReroll(tableState)
 		end
 	end
 
-	-- After the animation plays, award cash and confirm the winner amount.
-	task.delay(REROLL_DURATION + 0.5, function()
-		for _, occ in tableState.occupants do
-			if occ ~= "BOT" and occ then
-				local ls = occ:FindFirstChild("leaderstats")
-				local cash = ls and ls:FindFirstChild("Cash")
-				if cash then
-					cash.Value = cash.Value + reward
-				end
-				CashAwarded:FireClient(occ, reward)
+	-- Wait for the animation to finish.
+	task.wait(REROLL_DURATION)
+
+	-- Award cash and confirm the winner amount.
+	for _, occ in tableState.occupants do
+		if occ ~= "BOT" and occ then
+			local ls = occ:FindFirstChild("leaderstats")
+			local cash = ls and ls:FindFirstChild("Cash")
+			if cash then
+				cash.Value = cash.Value + reward
 			end
+			CashAwarded:FireClient(occ, reward)
 		end
-	end)
+	end
+
+	return reward
 end
 
 function startMatch(tableState)
@@ -729,7 +737,8 @@ function startMatch(tableState)
 		task.wait(1)
 	end
 
-	-- Cash reroll animation plays here (after countdown, before the GUI pops).
+	-- Cash reroll animation plays after the countdown. The round only starts
+	-- AFTER the roll finishes (and cash is awarded).
 	runCashReroll(tableState)
 
 	startRound(tableState)
