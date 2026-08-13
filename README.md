@@ -34,7 +34,13 @@ src/
     ├── InputHandler.client.luau    # hybrid click + keyboard input + UI
     ├── HoverController.client.luau # applies HoverFX to clues + letter tiles
     ├── Preloader.client.luau       # preloads image assets
-    └── SFX.client.luau             # sound effects (fill in IDs)
+    ├── CameraController.client.luau# focuses the table between two players
+    └── RerollController.client.luau# cash-reward reroll animation on the table
+
+## Cash & streak
+- `leaderstats.Cash` (first) + `leaderstats.Wins` show on the leaderboard.
+- `Stats.Streak` is hidden from the leaderboard (nametag + celebration read it).
+- After the countdown a cash reroll (100–5000, weighted) awards `Cash`.
 ```
 
 ## Feature checklist

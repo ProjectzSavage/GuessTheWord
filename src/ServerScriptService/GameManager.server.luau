@@ -46,6 +46,8 @@ local GameOver = Events:WaitForChild("GameOver")
 local OpponentState = Events:WaitForChild("OpponentState")
 local WrongGuess = Events:WaitForChild("WrongGuess")
 local PreloadClueImages = Events:WaitForChild("PreloadClueImages")
+local CashReroll = Events:WaitForChild("CashReroll")
+local CashAwarded = Events:WaitForChild("CashAwarded")
 
 -------------------------------------------------------------------------------
 -- CONFIG
@@ -58,6 +60,19 @@ local START_COUNTDOWN = 3        -- 3..2..1 before the match begins
 local BOT_THINK_TIME = 1.1       -- seconds between bot guesses
 local BOT_GUESS_CHANCE = 0.5     -- probability the bot actually guesses each tick
 local POLL_INTERVAL = 0.2        -- how often we poll seats for a sitting player
+
+-- Cash reward table: value + weighted chance (weights sum can be any number;
+-- the server picks proportionally). Order here matters for the reroll animation
+-- on the client (it cycles in this order).
+local CASH_REWARDS = {
+	{ value = 100,  weight = 40 },
+	{ value = 350,  weight = 25 },
+	{ value = 750,  weight = 18 },
+	{ value = 1500, weight = 10 },
+	{ value = 3500, weight = 5 },
+	{ value = 5000, weight = 2 },
+}
+local REROLL_DURATION = 3 -- seconds the client shows the reroll animation
 -- Correct-answer dramatic beat: hide puzzle -> pause -> loser's heart blinks out
 -- -> pause -> show next round. Timings in seconds.
 local CORRECT_REVEAL_HIDE = 1.2
@@ -108,6 +123,7 @@ local function discoverTables()
 					occupants = {},        -- seatIndex -> Player | "BOT"
 					hearts = {},           -- seatIndex -> number
 					matchActive = false,
+					cooldownUntil = 0,      -- time before a fresh auto-match can start
 					currentWord = nil,
 					letterBank = {},
 					roundConn = nil,       -- round timer thread
@@ -353,6 +369,9 @@ end
 function gameOver(tableState, winnerSeatIndex)
 	-- winnerSeatIndex = nil means a draw (both ran out of hearts on a timeout).
 	tableState.matchActive = false
+	-- Give the pause-menu replay control for a few seconds (so re-seating right
+	-- after game-over doesn't auto-start a fresh match underneath it).
+	tableState.cooldownUntil = os.clock() + 4
 	stopRound(tableState)
 	stopBot(tableState)
 
@@ -422,17 +441,32 @@ function handleMatchEndDramatics(tableState, winnerSeatIndex)
 		return -- draw: no drama, everyone stays seated
 	end
 
-	local function respawnLoser(player)
+	local function respawnLoser(player, seatIndex, seat)
 		task.delay(1.6, function()
 			if player.Parent then
 				player:LoadCharacter()
+				-- Re-seat the loser once their new character spawns, so they can
+				-- use the pause-menu replay (which requires being seated).
+				local spawned = player.CharacterAdded:Connect(function(character)
+					spawned:Disconnect()
+					task.wait(0.5)
+					if character and character.Parent then
+						local humanoid = character:FindFirstChildOfClass("Humanoid")
+						local seatNow = seat or tableState.seats[seatIndex]
+						if humanoid and seatNow then
+							character:PivotTo(seatNow.CFrame * CFrame.new(0, 0.6, 0))
+							task.wait(0.1)
+							humanoid.Sit = true
+						end
+					end
+				end)
 			end
 		end)
 	end
 
 	for seatIndex, occ in tableState.occupants do
 		if occ ~= "BOT" and occ and seatIndex ~= winnerSeatIndex then
-			respawnLoser(occ)
+			respawnLoser(occ, seatIndex, tableState.seats[seatIndex])
 		end
 	end
 end
@@ -616,6 +650,53 @@ function startRound(tableState)
 	end)
 end
 
+-- Pick a cash reward proportionally by weight.
+local function pickCashReward()
+	local total = 0
+	for _, r in CASH_REWARDS do
+		total = total + r.weight
+	end
+	local roll = math.random() * total
+	for _, r in CASH_REWARDS do
+		roll = roll - r.weight
+		if roll <= 0 then
+			return r.value
+		end
+	end
+	return CASH_REWARDS[#CASH_REWARDS].value
+end
+
+-- Run the cash reroll: tell clients to animate, then after the animation award
+-- the chosen cash to every real player seated.
+local function runCashReroll(tableState)
+	local reward = pickCashReward()
+	local rewardList = {}
+	for _, r in CASH_REWARDS do
+		table.insert(rewardList, r.value)
+	end
+
+	-- Fire the animation to each seated real player.
+	for _, occ in tableState.occupants do
+		if occ ~= "BOT" and occ then
+			CashReroll:FireClient(occ, reward, rewardList)
+		end
+	end
+
+	-- After the animation plays, award cash and confirm the winner amount.
+	task.delay(REROLL_DURATION + 0.5, function()
+		for _, occ in tableState.occupants do
+			if occ ~= "BOT" and occ then
+				local ls = occ:FindFirstChild("leaderstats")
+				local cash = ls and ls:FindFirstChild("Cash")
+				if cash then
+					cash.Value = cash.Value + reward
+				end
+				CashAwarded:FireClient(occ, reward)
+			end
+		end
+	end)
+end
+
 function startMatch(tableState)
 	tableState.matchActive = true
 	tableState.hearts[1] = HEARTS_PER_PLAYER
@@ -632,6 +713,9 @@ function startMatch(tableState)
 		end
 		task.wait(1)
 	end
+
+	-- Cash reroll animation plays here (after countdown, before the GUI pops).
+	runCashReroll(tableState)
 
 	startRound(tableState)
 end
@@ -699,9 +783,13 @@ function assignPlayer(tableState, seatIndex, player)
 	tableState.occupants[seatIndex] = player
 	notifyWaiting(tableState)
 
-	-- Two real players -> normal match.
+	-- Two real players -> normal match. But if a match just ended (cooldown),
+	-- let the pause-menu replay (or a fresh manual re-sit) take over instead of
+	-- auto-starting.
 	if tableState.occupants[1] and tableState.occupants[2] then
-		startMatch(tableState)
+		if os.clock() >= tableState.cooldownUntil then
+			startMatch(tableState)
+		end
 	end
 end
 
@@ -792,12 +880,23 @@ end)
 -------------------------------------------------------------------------------
 -- Give every player a leaderboard: Wins and Streak (consecutive wins).
 local function ensureLeaderstats(player)
+	-- leaderstats shows in the Roblox leaderboard. Cash + Wins go here
+	-- (Cash first, so it appears before Wins).
 	local leaderstats = player:FindFirstChild("leaderstats")
 	if not leaderstats then
 		leaderstats = Instance.new("Folder")
 		leaderstats.Name = "leaderstats"
 		leaderstats.Parent = player
 	end
+
+	local cash = leaderstats:FindFirstChild("Cash")
+	if not cash then
+		cash = Instance.new("IntValue")
+		cash.Name = "Cash"
+		cash.Value = 0
+		cash.Parent = leaderstats
+	end
+
 	local wins = leaderstats:FindFirstChild("Wins")
 	if not wins then
 		wins = Instance.new("IntValue")
@@ -805,28 +904,40 @@ local function ensureLeaderstats(player)
 		wins.Value = 0
 		wins.Parent = leaderstats
 	end
-	local streak = leaderstats:FindFirstChild("Streak")
+
+	-- Streak is NOT shown on the leaderboard, so it lives OUTSIDE the
+	-- "leaderstats" folder (a folder named "Stats" is not auto-displayed).
+	local stats = player:FindFirstChild("Stats")
+	if not stats then
+		stats = Instance.new("Folder")
+		stats.Name = "Stats"
+		stats.Parent = player
+	end
+	local streak = stats:FindFirstChild("Streak")
 	if not streak then
 		streak = Instance.new("IntValue")
 		streak.Name = "Streak"
 		streak.Value = 0
-		streak.Parent = leaderstats
+		streak.Parent = stats
 	end
 end
 
 -- Award Wins/Streak based on a finished match.
 -- winnerSeatIndex == nil => draw (streak resets). A bot winner awards nothing.
 function awardMatchOutcome(tableState, winnerSeatIndex)
+	-- Read the (hidden) streak from the "Stats" folder, not leaderstats.
+	local function playerStreak(player)
+		local stats = player:FindFirstChild("Stats")
+		return stats and stats:FindFirstChild("Streak")
+	end
+
 	if winnerSeatIndex == nil then
 		-- Draw: break any streaks for real players.
 		for _, occ in tableState.occupants do
 			if occ ~= "BOT" and occ then
-				local ls = occ:FindFirstChild("leaderstats")
-				if ls then
-					local streak = ls:FindFirstChild("Streak")
-					if streak then
-						streak.Value = 0
-					end
+				local streak = playerStreak(occ)
+				if streak then
+					streak.Value = 0
 				end
 			end
 		end
@@ -836,22 +947,20 @@ function awardMatchOutcome(tableState, winnerSeatIndex)
 	for seatIndex, occ in tableState.occupants do
 		if occ ~= "BOT" and occ then
 			local ls = occ:FindFirstChild("leaderstats")
-			if ls then
-				local wins = ls:FindFirstChild("Wins")
-				local streak = ls:FindFirstChild("Streak")
-				if seatIndex == winnerSeatIndex then
-					-- Winner: +1 win, +1 streak.
-					if wins then
-						wins.Value = wins.Value + 1
-					end
-					if streak then
-						streak.Value = streak.Value + 1
-					end
-				else
-					-- Loser: reset streak.
-					if streak then
-						streak.Value = 0
-					end
+			local wins = ls and ls:FindFirstChild("Wins")
+			local streak = playerStreak(occ)
+			if seatIndex == winnerSeatIndex then
+				-- Winner: +1 win, +1 streak.
+				if wins then
+					wins.Value = wins.Value + 1
+				end
+				if streak then
+					streak.Value = streak.Value + 1
+				end
+			else
+				-- Loser: reset streak.
+				if streak then
+					streak.Value = 0
 				end
 			end
 		end

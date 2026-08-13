@@ -29,6 +29,8 @@ local EVENT_NAMES = {
 	"OpponentState",    -- Server -> Client : waiting-for-opponent flag
 	"WrongGuess",       -- Server -> Client : a full-length guess was wrong
 	"PreloadClueImages", -- Server -> Client : all clue image IDs to preload
+	"CashReroll",      -- Server -> Client : start a cash reward reroll animation
+	"CashAwarded",     -- Server -> Client : tell client which cash value won
 }
 
 -- Idempotent: if the folder already exists, reuse it (don't wipe manual setup).

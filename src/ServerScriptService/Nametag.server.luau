@@ -210,9 +210,9 @@ local function LoadOverhead(Player, Character)
 		StreakLabel.Visible = false
 	end
 
-	-- Wire it up to leaderstats.Streak (updates live).
-	local leaderstats = Player:WaitForChild("leaderstats", 10)
-	local streakVal = leaderstats and leaderstats:FindFirstChild("Streak")
+	-- Wire it up to Stats.Streak (hidden from the leaderboard, updates live).
+	local stats = Player:WaitForChild("Stats", 10)
+	local streakVal = stats and stats:FindFirstChild("Streak")
 	setStreak(StreakIcon, StreakLabel, streakVal and streakVal.Value or 0)
 	if streakVal then
 		streakVal.Changed:Connect(function()

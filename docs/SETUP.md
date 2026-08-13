@@ -36,7 +36,11 @@ build it once. The full details are further down.
    should sit (above/behind the table). When a match starts, both players'
    cameras focus there. If absent, the camera falls back to behind the `Table`
    model, then to the midpoint of the two seats.
-9. **Nametag + streak (optional)** — `Nametag.server.luau` uses a **BillboardGui
+9. **Cash reward models** — in each `TableN` folder add 6 models named
+   `Cash100`, `Cash350`, `Cash750`, `Cash1500`, `Cash3500`, `Cash5000` (the
+   reroll animation cycles these on the table). `RerollController.client.luau`
+   plays the animation; if models are missing it just skips (cash still awards).
+10. **Nametag + streak (optional)** — `Nametag.server.luau` uses a **BillboardGui
    template named `Nametag`** as a child of the script (`PlayerName`, optional
    `Icons` frame with `Premium`/`Owner`/`Admin`, optional `StreakRow` with
    `StreakIcon` + `Streak`). If you don't build one, it auto-creates a scale-based
@@ -79,6 +83,7 @@ ServerScriptService
 | `src/StarterPlayerScripts/HoverController.client.luau`          | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/Preloader.client.luau`                | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/CameraController.client.luau`         | `StarterPlayerScripts`      | LocalScript |
+| `src/StarterPlayerScripts/RerollController.client.luau`         | `StarterPlayerScripts`      | LocalScript |
 
 > **Tip:** For each file, right-click the target container in Studio →
 > **Insert Object** → choose the right type, name it, then paste the file's
@@ -159,7 +164,13 @@ Workspace
         ├── Table        (existing part/model)
         ├── Seat1        (existing Seat)
         ├── Seat2        (existing Seat)
-        └── CameraAnchor (Part, optional)  -- where the match camera sits
+        ├── CameraAnchor (Part, optional)  -- where the match camera sits
+        ├── Cash100      (Model, cash reroll reward)
+        ├── Cash350      (Model, cash reroll reward)
+        ├── Cash750      (Model, cash reroll reward)
+        ├── Cash1500     (Model, cash reroll reward)
+        ├── Cash3500     (Model, cash reroll reward)
+        └── Cash5000     (Model, cash reroll reward)
 ```
 
 - `GameManager` auto-detects any `GameArea` child folder whose name starts with
@@ -196,8 +207,15 @@ starts the next round (which reshores the puzzle). The heart fade is animated in
 guaranteed present, the rest are random `a–z` fillers (`Dictionary.BANK_LETTERS`
 = 12, adjustable).
 
-**Leaderboard:** every player gets `leaderstats` with **Wins** and **Streak**
-(consecutive wins). A win +1 Wins/+1 Streak; a loss or draw resets Streak.
+**Leaderboard:** every player gets `leaderstats` with **Cash** (first) and
+**Wins**. **Streak** (consecutive wins) is stored in a separate hidden `Stats`
+folder — it is NOT shown on the Roblox leaderboard. A win +1 Wins/+1 Streak; a
+loss or draw resets Streak.
+
+**Cash rewards:** after the countdown, before the GUI pops, a **cash reroll
+animation** plays on the table (100/350/750/1500/3500/5000 with weighted odds).
+The chosen cash is added to the player's `leaderstats.Cash` (shown on the
+leaderboard).
 
 **Jump out of the chair:** before a match you can jump out (the Play vs Bot
 toggle outros). During an active match your jump is **locked** so you can't leave

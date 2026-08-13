@@ -1208,9 +1208,10 @@ local function showCelebration(youWon, isDraw, isBotMatch)
 	local message = isDraw and "DRAW!" or (youWon and "YOU WON!" or "LOSER")
 
 	-- On a win, show the current streak ("YOU WON! — Streak ×3 🔥").
+	-- Streak lives in the hidden "Stats" folder (not on the leaderboard).
 	if youWon and not isDraw then
-		local ls = player:FindFirstChild("leaderstats")
-		local streak = ls and ls:FindFirstChild("Streak")
+		local stats = player:FindFirstChild("Stats")
+		local streak = stats and stats:FindFirstChild("Streak")
 		if streak and streak.Value > 0 then
 			message = message .. "\nStreak ×" .. streak.Value .. " 🔥"
 		end
