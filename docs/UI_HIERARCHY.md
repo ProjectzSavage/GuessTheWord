@@ -228,15 +228,22 @@ just print).
 
 A frame inside `PuzzleArea` holding the two powerup buttons. Reveal Letter fills
 one random correct letter (animated like a normal selection); Reveal Word fills
-the full word one letter at a time (fast). Both cost Robux (a buy prompt opens
-if the player has no free uses).
+the full word one letter at a time (fast). They currently work for free (a buy
+prompt opens if the player has no free uses — future: real Robux purchase).
 
 ```
 PuzzleArea
 └── PowerupFrame  (Frame)
     ├── RevealLetterBtn  (TextButton)
+    │     └── PriceLbl   (TextLabel)  "N Use" or "R$10" (price)
     └── RevealWordBtn    (TextButton)
+          └── PriceLbl   (TextLabel)  "N Use" or "R$25" (price)
 ```
+
+Each button has an inner **`PriceLbl`**. It shows **"N Use"** when the player has
+free uses (from claimed rewards), otherwise the robux price (placeholder config
+in InputHandler; later the price comes from the product id). Claiming a reward
+grants uses, which updates these labels.
 
 Buy prompt (in GameUI, optional):
 ```
@@ -248,9 +255,8 @@ GameUI
 ```
 
 Reward rows grant powerup uses: each `REWARDS` entry can set `powerup`
-("Letter"/"Word"), `uses`, and `robuxprice`. Until claimed the `ClaimBtn`/
-`PriceLbl` shows `R$<robuxprice>`; once claimed it shows `(N Use)` and the uses
-are added to the player's hidden `Stats` folder.
+("Letter"/"Word") and `uses`. Claiming adds those uses to the player's hidden
+`Stats` folder, which the powerup buttons' `PriceLbl` reflects ("N Use").
 
 ## RewardsF (Rewards window)
 
@@ -279,9 +285,6 @@ RewardsF  (Frame, main window, Visible=false)
 │                 └── ClaimBtn          (TextButton) collect the reward
 └── CloseBtn  (TextButton)
 ```
-
-Each reward row can also have a `PriceLbl` (TextLabel, optional) that shows the
-robux price / "(N Use)" next to the ClaimBtn.
 
 The `+` buttons on the StatsPanel open this window (via `_G.RewardsAPI`).
 Reward data lives in the `REWARDS` table at the top of `RewardsController`.

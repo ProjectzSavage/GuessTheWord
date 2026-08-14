@@ -920,6 +920,9 @@ local function spendUse(player, name)
 end
 
 -- Reveal one random correct letter, or the full word.
+-- For now the powerup always works (free) so it can be tested. When a use is
+-- available it is spent; otherwise it still reveals (placeholder - later it
+-- will cost robux or require reward-granted uses).
 PowerupUse.OnServerEvent:Connect(function(player, powerupType)
 	if typeof(powerupType) ~= "string" then
 		return
@@ -931,19 +934,12 @@ PowerupUse.OnServerEvent:Connect(function(player, powerupType)
 			local word = tableState.currentWord
 
 			if powerupType == "Letter" then
-				if not spendUse(player, "RevealLetterUses") then
-					PowerupGrant:FireClient(player, "Letter", nil, nil, false)
-					return
-				end
-				-- Pick a random correct letter from the word.
+				spendUse(player, "RevealLetterUses") -- spend if available
 				local i = math.random(1, #word)
 				local letter = string.sub(word, i, i)
 				PowerupGrant:FireClient(player, "Letter", letter, nil, true)
 			elseif powerupType == "Word" then
-				if not spendUse(player, "RevealWordUses") then
-					PowerupGrant:FireClient(player, "Word", nil, nil, false)
-					return
-				end
+				spendUse(player, "RevealWordUses")
 				PowerupGrant:FireClient(player, "Word", nil, word, true)
 			end
 			return

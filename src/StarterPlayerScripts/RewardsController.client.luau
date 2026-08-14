@@ -39,32 +39,32 @@ local PlayerGui = player:WaitForChild("PlayerGui")
 
 -- ---------------------------------------------------------------------------
 -- REWARD CONFIG - edit here (image ids are placeholders - fill yours in).
--- Each reward can grant a powerup: powerup = "Letter"/"Word", uses = amount,
--- and robuxprice = the normal price to buy that many uses (shown until claimed;
--- once claimed the button shows "(N Uses)" instead).
+-- Each reward can grant powerup uses: powerup = "Letter"/"Word", uses = amount.
+-- Claiming a reward adds those uses to the player's hidden Stats folder, which
+-- the powerup buttons' PriceLbl reflects ("N Use" when they have uses).
 -- ---------------------------------------------------------------------------
 local REWARDS = {
 	Daily = {
-		{ label = "Log in for 1 day",    reward = "rbxassetid://DAILY_1", claimed = false, powerup = "Letter", uses = 1, robuxprice = 10 },
-		{ label = "Log in for 3 days",   reward = "rbxassetid://DAILY_3", claimed = false, powerup = "Word",   uses = 1, robuxprice = 25 },
-		{ label = "Log in for 7 days",   reward = "rbxassetid://DAILY_7", claimed = false, powerup = "Letter", uses = 3, robuxprice = 30 },
+		{ label = "Log in for 1 day",    reward = "rbxassetid://DAILY_1", claimed = false, powerup = "Letter", uses = 1 },
+		{ label = "Log in for 3 days",   reward = "rbxassetid://DAILY_3", claimed = false, powerup = "Word",   uses = 1 },
+		{ label = "Log in for 7 days",   reward = "rbxassetid://DAILY_7", claimed = false, powerup = "Letter", uses = 3 },
 	},
 	Group = {
-		{ label = "Join the group",      reward = "rbxassetid://GROUP_JOIN", claimed = false, powerup = "Letter", uses = 2, robuxprice = 20 },
+		{ label = "Join the group",      reward = "rbxassetid://GROUP_JOIN", claimed = false, powerup = "Letter", uses = 2 },
 	},
 	Playtime = {
-		{ label = "Play for 1 hour",     reward = "rbxassetid://TIME_1H", claimed = false, powerup = "Letter", uses = 2, robuxprice = 20 },
-		{ label = "Play for 5 hours",    reward = "rbxassetid://TIME_5H", claimed = false, powerup = "Word", uses = 1, robuxprice = 25 },
+		{ label = "Play for 1 hour",     reward = "rbxassetid://TIME_1H", claimed = false, powerup = "Letter", uses = 2 },
+		{ label = "Play for 5 hours",    reward = "rbxassetid://TIME_5H", claimed = false, powerup = "Word", uses = 1 },
 	},
 	RobuxSpent = {
-		{ label = "Spend 100 Robux",     reward = "rbxassetid://RBX_100", claimed = false, powerup = "Word", uses = 2, robuxprice = 50 },
+		{ label = "Spend 100 Robux",     reward = "rbxassetid://RBX_100", claimed = false, powerup = "Word", uses = 2 },
 	},
 	Social = {
-		{ label = "Follow on X",         reward = "rbxassetid://SOCIAL_X", claimed = false, powerup = "Letter", uses = 1, robuxprice = 10 },
-		{ label = "Subscribe on YouTube",reward = "rbxassetid://SOCIAL_YT", claimed = false, powerup = "Letter", uses = 2, robuxprice = 20 },
+		{ label = "Follow on X",         reward = "rbxassetid://SOCIAL_X", claimed = false, powerup = "Letter", uses = 1 },
+		{ label = "Subscribe on YouTube",reward = "rbxassetid://SOCIAL_YT", claimed = false, powerup = "Letter", uses = 2 },
 	},
 	VipDaily = {
-		{ label = "VIP daily reward",    reward = "rbxassetid://VIP_DAILY", claimed = false, powerup = "Letter", uses = 5, robuxprice = 50 },
+		{ label = "VIP daily reward",    reward = "rbxassetid://VIP_DAILY", claimed = false, powerup = "Letter", uses = 5 },
 	},
 }
 
@@ -160,22 +160,13 @@ local function makeRow(scroll, rowTemplate, data)
 	local claim = row:WaitForChild("ClaimBtn")
 	claim.Visible = true
 
-	-- Show robux price until claimed; once claimed show "(N Uses)".
-	local priceLbl = row:FindFirstChild("PriceLbl")
 	local function refreshClaimUI()
 		if data.claimed then
-			claim.Text = (data.powerup and data.uses) and ("(" .. data.uses .. " Use)") or "Claimed"
+			claim.Text = "Claimed"
 			claim.Interactable = false
 		else
-			claim.Text = (data.robuxprice and ("R$" .. data.robuxprice)) or "Claim"
+			claim.Text = "Claim"
 			claim.Interactable = true
-		end
-		if priceLbl then
-			if data.claimed then
-				priceLbl.Text = (data.powerup and data.uses) and ("(" .. data.uses .. " Use)") or "Claimed"
-			else
-				priceLbl.Text = data.robuxprice and ("R$" .. data.robuxprice) or ""
-			end
 		end
 	end
 	refreshClaimUI()
@@ -183,7 +174,7 @@ local function makeRow(scroll, rowTemplate, data)
 	claim.Activated:Connect(function()
 		if not data.claimed then
 			data.claimed = true
-			-- Grant the powerup uses to the player.
+			-- Grant the powerup uses to the player (updates the buttons' PriceLbl).
 			if data.powerup then
 				grantPowerupUses(data.powerup, data.uses)
 			end

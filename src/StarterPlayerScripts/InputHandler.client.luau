@@ -82,6 +82,12 @@ local ScrambledBank = PuzzleArea:WaitForChild("ScrambledBank")
 local PowerupFrame = PuzzleArea:FindFirstChild("PowerupFrame")
 local RevealLetterBtn = PowerupFrame and PowerupFrame:FindFirstChild("RevealLetterBtn")
 local RevealWordBtn = PowerupFrame and PowerupFrame:FindFirstChild("RevealWordBtn")
+-- Each button has a PriceLbl inside it (shows "N Use" or the robux price).
+local RevealLetterPrice = RevealLetterBtn and RevealLetterBtn:FindFirstChild("PriceLbl")
+local RevealWordPrice = RevealWordBtn and RevealWordBtn:FindFirstChild("PriceLbl")
+
+-- Placeholder robux prices (later the price comes from the product id directly).
+local POWERUP_PRICE = { Letter = 10, Word = 25 }
 local InteractionFrame = GameUI:WaitForChild("InteractionFrame")
 local PlayVsBotButton = InteractionFrame:WaitForChild("PlayVsBotButton")
 -- Countdown frame (big 3-2-1-GO!) - built into the hierarchy by you.
@@ -782,10 +788,42 @@ local function closeBuy()
 	pendingBuyType = nil
 end
 
+-- Read a player's powerup-use count.
+local function getPowerupUses(useName)
+	local stats = player:FindFirstChild("Stats")
+	local val = stats and stats:FindFirstChild(useName)
+	return val and val.Value or 0
+end
+
+-- Update each powerup button's PriceLbl: show "N Use" when the player has uses,
+-- otherwise show the robux price (placeholder; later from the product id).
+local function updatePowerupPrices()
+	local letterUses = getPowerupUses("RevealLetterUses")
+	local wordUses = getPowerupUses("RevealWordUses")
+	if RevealLetterPrice then
+		RevealLetterPrice.Text = letterUses > 0 and (letterUses .. " Use") or ("R$" .. (POWERUP_PRICE.Letter or 0))
+	end
+	if RevealWordPrice then
+		RevealWordPrice.Text = wordUses > 0 and (wordUses .. " Use") or ("R$" .. (POWERUP_PRICE.Word or 0))
+	end
+end
+
+-- Update prices when the player's uses change (rewards grant / purchases).
+local function watchUses(useName)
+	local stats = player:FindFirstChild("Stats")
+	local val = stats and stats:FindFirstChild(useName)
+	if val then
+		val.Changed:Connect(updatePowerupPrices)
+	end
+end
+watchUses("RevealLetterUses")
+watchUses("RevealWordUses")
+updatePowerupPrices()
+
 -- Handle server responses for powerups.
 PowerupGrant.OnClientEvent:Connect(function(powerupType, letter, word, success)
 	if not success then
-		-- No uses left -> prompt to buy with robux.
+		-- No uses left -> prompt to buy with robux (future: real purchase).
 		promptBuy(powerupType)
 		return
 	end
@@ -794,6 +832,7 @@ PowerupGrant.OnClientEvent:Connect(function(powerupType, letter, word, success)
 	elseif powerupType == "Word" and typeof(word) == "string" then
 		placeRevealedWord(word)
 	end
+	updatePowerupPrices()
 end)
 
 if BuyConfirm then
