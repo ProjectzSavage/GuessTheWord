@@ -48,6 +48,9 @@ local WrongGuess = Events:WaitForChild("WrongGuess")
 local PreloadClueImages = Events:WaitForChild("PreloadClueImages")
 local CashReroll = Events:WaitForChild("CashReroll")
 local CashAwarded = Events:WaitForChild("CashAwarded")
+local PowerupUse = Events:WaitForChild("PowerupUse")
+local PowerupGrant = Events:WaitForChild("PowerupGrant")
+local PurchasePowerup = Events:WaitForChild("PurchasePowerup")
 
 -------------------------------------------------------------------------------
 -- CONFIG
@@ -897,6 +900,78 @@ SubmitGuess.OnServerEvent:Connect(function(player, guess)
 end)
 
 -------------------------------------------------------------------------------
+-- POWERUPS (Reveal Letter / Reveal Word)
+-------------------------------------------------------------------------------
+-- Get a player's powerup-use count.
+local function getUses(player, name)
+	local stats = player:FindFirstChild("Stats")
+	local val = stats and stats:FindFirstChild(name)
+	return val and val.Value or 0
+end
+
+local function spendUse(player, name)
+	local stats = player:FindFirstChild("Stats")
+	local val = stats and stats:FindFirstChild(name)
+	if val and val.Value > 0 then
+		val.Value = val.Value - 1
+		return true
+	end
+	return false
+end
+
+-- Reveal one random correct letter, or the full word.
+PowerupUse.OnServerEvent:Connect(function(player, powerupType)
+	if typeof(powerupType) ~= "string" then
+		return
+	end
+	-- Find the player's active table + round.
+	for _, tableState in tableStates do
+		local seatIdx = seatOfPlayer(tableState, player) or seatedSeatOf(tableState, player)
+		if seatIdx and tableState.matchActive and tableState.currentWord then
+			local word = tableState.currentWord
+
+			if powerupType == "Letter" then
+				if not spendUse(player, "RevealLetterUses") then
+					PowerupGrant:FireClient(player, "Letter", nil, nil, false)
+					return
+				end
+				-- Pick a random correct letter from the word.
+				local i = math.random(1, #word)
+				local letter = string.sub(word, i, i)
+				PowerupGrant:FireClient(player, "Letter", letter, nil, true)
+			elseif powerupType == "Word" then
+				if not spendUse(player, "RevealWordUses") then
+					PowerupGrant:FireClient(player, "Word", nil, nil, false)
+					return
+				end
+				PowerupGrant:FireClient(player, "Word", nil, word, true)
+			end
+			return
+		end
+	end
+end)
+
+-- Buy a powerup with robux (placeholder - replace with real MarketplaceService
+-- / dev-product purchase. For now it grants 1 use so the flow can be tested).
+PurchasePowerup.OnServerEvent:Connect(function(player, powerupType)
+	if typeof(powerupType) ~= "string" then
+		return
+	end
+	local stats = player:FindFirstChild("Stats")
+	if not stats then
+		return
+	end
+	local useName = powerupType == "Word" and "RevealWordUses" or "RevealLetterUses"
+	local val = stats:FindFirstChild(useName)
+	if val then
+		val.Value = val.Value + 1
+	end
+	-- TODO: hook up real robux purchase (MarketplaceService:PromptProductPurchase)
+	-- using a dev product per powerup. Fire an acknowledgement:
+	PowerupGrant:FireClient(player, powerupType, nil, nil, true)
+end)
+
+-------------------------------------------------------------------------------
 -- PLAYER JOIN / LEAVE HOOKUP
 -------------------------------------------------------------------------------
 -- Give every player a leaderboard: Wins and Streak (consecutive wins).
@@ -941,6 +1016,20 @@ local function ensureLeaderstats(player)
 		streak.Value = 0
 		streak.Parent = stats
 	end
+
+	-- Powerup uses (hidden from leaderboard, granted by rewards / bought).
+	local function ensureUses(name)
+		local u = stats:FindFirstChild(name)
+		if not u then
+			u = Instance.new("IntValue")
+			u.Name = name
+			u.Value = 0
+			u.Parent = stats
+		end
+		return u
+	end
+	ensureUses("RevealLetterUses")
+	ensureUses("RevealWordUses")
 end
 
 -- Award Wins/Streak based on a finished match.

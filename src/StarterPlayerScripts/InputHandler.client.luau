@@ -64,6 +64,9 @@ local GameOver = Events:WaitForChild("GameOver")
 local OpponentState = Events:WaitForChild("OpponentState")
 local PlayVsBotRequest = Events:WaitForChild("PlayVsBotRequest")
 local WrongGuess = Events:WaitForChild("WrongGuess")
+local PowerupUse = Events:WaitForChild("PowerupUse")
+local PowerupGrant = Events:WaitForChild("PowerupGrant")
+local PurchasePowerup = Events:WaitForChild("PurchasePowerup")
 
 -- UI references (fail loudly if the hierarchy is wrong - easy to debug).
 local GameUI = PlayerGui:WaitForChild("GameUI")
@@ -75,6 +78,10 @@ local PuzzleArea = GameUI:WaitForChild("PuzzleArea")
 local ImageGrid = PuzzleArea:FindFirstChild("ImageGrid")
 local AnswerBox = PuzzleArea:WaitForChild("AnswerBox")
 local ScrambledBank = PuzzleArea:WaitForChild("ScrambledBank")
+-- Powerup frame inside PuzzleArea (built by you) with two buttons.
+local PowerupFrame = PuzzleArea:FindFirstChild("PowerupFrame")
+local RevealLetterBtn = PowerupFrame and PowerupFrame:FindFirstChild("RevealLetterBtn")
+local RevealWordBtn = PowerupFrame and PowerupFrame:FindFirstChild("RevealWordBtn")
 local InteractionFrame = GameUI:WaitForChild("InteractionFrame")
 local PlayVsBotButton = InteractionFrame:WaitForChild("PlayVsBotButton")
 -- Countdown frame (big 3-2-1-GO!) - built into the hierarchy by you.
@@ -665,7 +672,8 @@ local function animateLetterToSlot(letter, fromTile, targetSlot)
 		end
 		flying:Destroy()
 		-- Gray out the source tile to show it was used (and disable it).
-		if fromTile and fromTile.Parent then
+		-- Only bank tiles get grayed; powerup buttons are not in buttonMap.
+		if fromTile and fromTile.Parent and buttonMap[fromTile] then
 			usedTiles[fromTile] = true
 			fromTile.ImageColor3 = Color3.fromRGB(90, 90, 90)
 			fromTile.ImageTransparency = 0.7
@@ -696,6 +704,122 @@ local function checkAutoSubmit()
 			SubmitGuess:FireServer(currentGuess)
 		end)
 	end
+end
+
+-------------------------------------------------------------------------------
+-- POWERUPS (Reveal Letter / Reveal Word)
+-- The server validates the powerup use and reveals the correct letter/word.
+-------------------------------------------------------------------------------
+-- Place a single revealed letter into the next empty slot (with the flying
+-- letter animation, as if the player clicked it themselves).
+local function placeRevealedLetter(letter)
+	if not roundActive or #currentGuess >= wordLength then
+		return
+	end
+	local idx = #currentGuess + 1
+	currentGuess = currentGuess .. letter
+	-- Animate from the powerup button (or the bank center) into the slot.
+	local source = RevealLetterBtn or RevealWordBtn
+	if source then
+		animateLetterToSlot(letter, source, slots[idx])
+	else
+		refreshSlots()
+	end
+	checkAutoSubmit()
+end
+
+-- Place the full revealed word, one letter at a time (fast but sequential).
+local function placeRevealedWord(word)
+	if not roundActive then
+		return
+	end
+	roundActive = false -- lock input during the reveal
+	for i = 1, #word do
+		local ch = string.sub(word, i, i)
+		currentGuess = string.sub(currentGuess, 1, i - 1) .. ch
+		local slot = slots[i]
+		if slot then
+			slot.Image = LetterImages[ch] or ""
+		end
+		-- stagger: place each letter ~0.12s apart (fast but readable)
+		task.delay(i * 0.12, function()
+			local s = slots[i]
+			if s then
+				s.Image = LetterImages[string.sub(word, i, i)] or ""
+			end
+		end)
+	end
+	-- After all letters placed, submit.
+	task.delay(#word * 0.12 + 0.2, function()
+		roundActive = false
+		SubmitGuess:FireServer(word)
+	end)
+end
+
+-- Robux purchase prompt (placeholder - you build BuyPrompt in the hierarchy).
+local BuyPrompt = GameUI:FindFirstChild("BuyPrompt")
+local BuyMsg = BuyPrompt and BuyPrompt:FindFirstChild("BuyMsg")
+local BuyConfirm = BuyPrompt and BuyPrompt:FindFirstChild("BuyConfirm")
+local BuyCancel = BuyPrompt and BuyPrompt:FindFirstChild("BuyCancel")
+local pendingBuyType = nil
+
+local function promptBuy(powerupType)
+	if not BuyPrompt then
+		return
+	end
+	pendingBuyType = powerupType
+	BuyPrompt.Visible = true
+	if BuyMsg then
+		BuyMsg.Text = "Buy " .. (powerupType == "Word" and "Reveal Word" or "Reveal Letter")
+			.. " for Robux?"
+	end
+end
+
+local function closeBuy()
+	if BuyPrompt then
+		BuyPrompt.Visible = false
+	end
+	pendingBuyType = nil
+end
+
+-- Handle server responses for powerups.
+PowerupGrant.OnClientEvent:Connect(function(powerupType, letter, word, success)
+	if not success then
+		-- No uses left -> prompt to buy with robux.
+		promptBuy(powerupType)
+		return
+	end
+	if powerupType == "Letter" and typeof(letter) == "string" then
+		placeRevealedLetter(letter)
+	elseif powerupType == "Word" and typeof(word) == "string" then
+		placeRevealedWord(word)
+	end
+end)
+
+if BuyConfirm then
+	BuyConfirm.Activated:Connect(function()
+		if pendingBuyType then
+			PurchasePowerup:FireServer(pendingBuyType)
+		end
+		closeBuy()
+	end)
+end
+if BuyCancel then
+	BuyCancel.Activated:Connect(function()
+		closeBuy()
+	end)
+end
+
+-- Wire the powerup buttons.
+if RevealLetterBtn then
+	RevealLetterBtn.Activated:Connect(function()
+		PowerupUse:FireServer("Letter")
+	end)
+end
+if RevealWordBtn then
+	RevealWordBtn.Activated:Connect(function()
+		PowerupUse:FireServer("Word")
+	end)
 end
 
 local function backspace()

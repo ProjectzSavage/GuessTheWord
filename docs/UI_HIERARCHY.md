@@ -224,6 +224,34 @@ LocalScript auto-creates the rows, labels, and "+" buttons (in Scale). It reads
 The `+` buttons are placeholders that will open the Shop later (they currently
 just print).
 
+## Powerups (inside PuzzleArea)
+
+A frame inside `PuzzleArea` holding the two powerup buttons. Reveal Letter fills
+one random correct letter (animated like a normal selection); Reveal Word fills
+the full word one letter at a time (fast). Both cost Robux (a buy prompt opens
+if the player has no free uses).
+
+```
+PuzzleArea
+└── PowerupFrame  (Frame)
+    ├── RevealLetterBtn  (TextButton)
+    └── RevealWordBtn    (TextButton)
+```
+
+Buy prompt (in GameUI, optional):
+```
+GameUI
+└── BuyPrompt  (Frame, Visible=false)
+    ├── BuyMsg     (TextLabel)   "Buy Reveal Letter for Robux?"
+    ├── BuyConfirm (TextButton)  confirm
+    └── BuyCancel  (TextButton)  cancel
+```
+
+Reward rows grant powerup uses: each `REWARDS` entry can set `powerup`
+("Letter"/"Word"), `uses`, and `robuxprice`. Until claimed the `ClaimBtn`/
+`PriceLbl` shows `R$<robuxprice>`; once claimed it shows `(N Use)` and the uses
+are added to the player's hidden `Stats` folder.
+
 ## RewardsF (Rewards window)
 
 A window placed inside the **`GameUI`** ScreenGui for the reward system.
@@ -251,6 +279,9 @@ RewardsF  (Frame, main window, Visible=false)
 │                 └── ClaimBtn          (TextButton) collect the reward
 └── CloseBtn  (TextButton)
 ```
+
+Each reward row can also have a `PriceLbl` (TextLabel, optional) that shows the
+robux price / "(N Use)" next to the ClaimBtn.
 
 The `+` buttons on the StatsPanel open this window (via `_G.RewardsAPI`).
 Reward data lives in the `REWARDS` table at the top of `RewardsController`.

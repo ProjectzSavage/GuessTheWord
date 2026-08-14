@@ -39,29 +39,32 @@ local PlayerGui = player:WaitForChild("PlayerGui")
 
 -- ---------------------------------------------------------------------------
 -- REWARD CONFIG - edit here (image ids are placeholders - fill yours in).
+-- Each reward can grant a powerup: powerup = "Letter"/"Word", uses = amount,
+-- and robuxprice = the normal price to buy that many uses (shown until claimed;
+-- once claimed the button shows "(N Uses)" instead).
 -- ---------------------------------------------------------------------------
 local REWARDS = {
 	Daily = {
-		{ label = "Log in for 1 day",    reward = "rbxassetid://DAILY_1", claimed = false },
-		{ label = "Log in for 3 days",   reward = "rbxassetid://DAILY_3", claimed = false },
-		{ label = "Log in for 7 days",   reward = "rbxassetid://DAILY_7", claimed = false },
+		{ label = "Log in for 1 day",    reward = "rbxassetid://DAILY_1", claimed = false, powerup = "Letter", uses = 1, robuxprice = 10 },
+		{ label = "Log in for 3 days",   reward = "rbxassetid://DAILY_3", claimed = false, powerup = "Word",   uses = 1, robuxprice = 25 },
+		{ label = "Log in for 7 days",   reward = "rbxassetid://DAILY_7", claimed = false, powerup = "Letter", uses = 3, robuxprice = 30 },
 	},
 	Group = {
-		{ label = "Join the group",      reward = "rbxassetid://GROUP_JOIN", claimed = false },
+		{ label = "Join the group",      reward = "rbxassetid://GROUP_JOIN", claimed = false, powerup = "Letter", uses = 2, robuxprice = 20 },
 	},
 	Playtime = {
-		{ label = "Play for 1 hour",     reward = "rbxassetid://TIME_1H", claimed = false },
-		{ label = "Play for 5 hours",    reward = "rbxassetid://TIME_5H", claimed = false },
+		{ label = "Play for 1 hour",     reward = "rbxassetid://TIME_1H", claimed = false, powerup = "Letter", uses = 2, robuxprice = 20 },
+		{ label = "Play for 5 hours",    reward = "rbxassetid://TIME_5H", claimed = false, powerup = "Word", uses = 1, robuxprice = 25 },
 	},
 	RobuxSpent = {
-		{ label = "Spend 100 Robux",     reward = "rbxassetid://RBX_100", claimed = false },
+		{ label = "Spend 100 Robux",     reward = "rbxassetid://RBX_100", claimed = false, powerup = "Word", uses = 2, robuxprice = 50 },
 	},
 	Social = {
-		{ label = "Follow on X",         reward = "rbxassetid://SOCIAL_X", claimed = false },
-		{ label = "Subscribe on YouTube",reward = "rbxassetid://SOCIAL_YT", claimed = false },
+		{ label = "Follow on X",         reward = "rbxassetid://SOCIAL_X", claimed = false, powerup = "Letter", uses = 1, robuxprice = 10 },
+		{ label = "Subscribe on YouTube",reward = "rbxassetid://SOCIAL_YT", claimed = false, powerup = "Letter", uses = 2, robuxprice = 20 },
 	},
 	VipDaily = {
-		{ label = "VIP daily reward",    reward = "rbxassetid://VIP_DAILY", claimed = false },
+		{ label = "VIP daily reward",    reward = "rbxassetid://VIP_DAILY", claimed = false, powerup = "Letter", uses = 5, robuxprice = 50 },
 	},
 }
 
@@ -99,13 +102,16 @@ local SUBTITLE_MAP = {
 -- Search the PlayerGui for the RewardsF window.
 local RewardsF
 local function findRewardsUI()
+	-- Wait up to 10s for it to appear (rewards frame is inside GameUI).
 	for _, child in PlayerGui:GetChildren() do
 		local rf = child:FindFirstChild("RewardsF", true)
 		if rf then
 			return rf
 		end
 	end
-	return nil
+	-- Fallback: wait on GameUI.RewardsF
+	local gameUI = PlayerGui:WaitForChild("GameUI", 10)
+	return gameUI and gameUI:WaitForChild("RewardsF", 5)
 end
 
 RewardsF = findRewardsUI()
@@ -124,39 +130,67 @@ local function clearRows(scroll)
 	end
 end
 
+-- Grant powerup uses to the player's Stats folder.
+local function grantPowerupUses(powerup, uses)
+	local stats = player:FindFirstChild("Stats")
+	if not stats then
+		return
+	end
+	local useName = (powerup == "Word") and "RevealWordUses" or "RevealLetterUses"
+	local val = stats:FindFirstChild(useName)
+	if val then
+		val.Value = val.Value + (uses or 1)
+	end
+end
+
 -- Clone RowTemplate and fill one reward row.
 local function makeRow(scroll, rowTemplate, data)
 	local row = rowTemplate:Clone()
 	row.Name = "RewardRow"
 	row.Visible = true
 
-	local left = row:FindFirstChild("LeftLbl")
-	if left then
-		left.Text = data.label
-	end
+	local left = row:WaitForChild("LeftLbl")
+	left.Text = data.label
 
-	local container = row:FindFirstChild("RewardsContainer")
-	local img = container and container:FindFirstChild("ImageTemplate")
-	if img then
-		img.Image = data.reward
-		img.Visible = true
-	end
+	local container = row:WaitForChild("RewardsContainer")
+	local img = container:WaitForChild("ImageTemplate")
+	img.Image = data.reward
+	img.Visible = true
 
-	local claim = row:FindFirstChild("ClaimBtn")
-	if claim then
-		claim.Visible = true
-		-- Already claimed?
-		claim.Text = data.claimed and "Claimed" or "Claim"
-		claim.Interactable = not data.claimed
-		claim.Activated:Connect(function()
-			if not data.claimed then
-				data.claimed = true
-				claim.Text = "Claimed"
-				claim.Interactable = false
-				setMsg("Claimed!")
+	local claim = row:WaitForChild("ClaimBtn")
+	claim.Visible = true
+
+	-- Show robux price until claimed; once claimed show "(N Uses)".
+	local priceLbl = row:FindFirstChild("PriceLbl")
+	local function refreshClaimUI()
+		if data.claimed then
+			claim.Text = (data.powerup and data.uses) and ("(" .. data.uses .. " Use)") or "Claimed"
+			claim.Interactable = false
+		else
+			claim.Text = (data.robuxprice and ("R$" .. data.robuxprice)) or "Claim"
+			claim.Interactable = true
+		end
+		if priceLbl then
+			if data.claimed then
+				priceLbl.Text = (data.powerup and data.uses) and ("(" .. data.uses .. " Use)") or "Claimed"
+			else
+				priceLbl.Text = data.robuxprice and ("R$" .. data.robuxprice) or ""
 			end
-		end)
+		end
 	end
+	refreshClaimUI()
+
+	claim.Activated:Connect(function()
+		if not data.claimed then
+			data.claimed = true
+			-- Grant the powerup uses to the player.
+			if data.powerup then
+				grantPowerupUses(data.powerup, data.uses)
+			end
+			refreshClaimUI()
+			setMsg("Claimed! Powerup uses added.")
+		end
+	end)
 
 	row.Parent = scroll
 	return row
@@ -167,38 +201,30 @@ local function showTab(tabName)
 	if not RewardsF then
 		return
 	end
-	local content = RewardsF:FindFirstChild("Content")
-	local title = content and content:FindFirstChild("CategoryTitle")
-	local subtitle = content and content:FindFirstChild("CategorySubtitle")
-	local scroll = content and content:FindFirstChild("RowsScroll")
+	local content = RewardsF:WaitForChild("Content")
+	local title = content:WaitForChild("CategoryTitle")
+	local subtitle = content:WaitForChild("CategorySubtitle")
+	local scroll = content:WaitForChild("RowsScroll")
 
-	if title then
-		title.Text = TITLE_MAP[tabName] or tabName
-	end
-	if subtitle then
-		subtitle.Text = SUBTITLE_MAP[tabName] or ""
-	end
+	title.Text = TITLE_MAP[tabName] or tabName
+	subtitle.Text = SUBTITLE_MAP[tabName] or ""
 
-	if scroll then
-		clearRows(scroll)
-		local rowTemplate = scroll:FindFirstChild("RowTemplate")
-		for _, data in REWARDS[tabName] or {} do
-			makeRow(scroll, rowTemplate, data)
-		end
+	clearRows(scroll)
+	local rowTemplate = scroll:WaitForChild("RowTemplate")
+	for _, data in REWARDS[tabName] or {} do
+		makeRow(scroll, rowTemplate, data)
 	end
 end
 
 function setMsg(text)
 	if RewardsF then
-		local msg = RewardsF:FindFirstChild("MsgLbl")
-		if msg then
-			msg.Text = text
-			task.delay(3, function()
-				if msg then
-					msg.Text = ""
-				end
-			end)
-		end
+		local msg = RewardsF:WaitForChild("MsgLbl")
+		msg.Text = text
+		task.delay(3, function()
+			if msg then
+				msg.Text = ""
+			end
+		end)
 	end
 end
 
@@ -206,24 +232,20 @@ end
 -- WIRE UI
 -------------------------------------------------------------------------------
 if RewardsF then
-	local leftTabs = RewardsF:FindFirstChild("LeftTabs")
-	if leftTabs then
-		for btnName, tabName in pairs(TAB_MAP) do
-			local btn = leftTabs:FindFirstChild(btnName)
-			if btn and btn:IsA("GuiButton") then
-				btn.Activated:Connect(function()
-					showTab(tabName)
-				end)
-			end
+	local leftTabs = RewardsF:WaitForChild("LeftTabs")
+	for btnName, tabName in pairs(TAB_MAP) do
+		local btn = leftTabs:FindFirstChild(btnName)
+		if btn and btn:IsA("GuiButton") then
+			btn.Activated:Connect(function()
+				showTab(tabName)
+			end)
 		end
 	end
 
-	local close = RewardsF:FindFirstChild("CloseBtn")
-	if close then
-		close.Activated:Connect(function()
-			RewardsF.Visible = false
-		end)
-	end
+	local close = RewardsF:WaitForChild("CloseBtn")
+	close.Activated:Connect(function()
+		RewardsF.Visible = false
+	end)
 
 	-- Default to the Daily tab.
 	RewardsF.Visible = false

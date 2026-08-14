@@ -31,6 +31,9 @@ local EVENT_NAMES = {
 	"PreloadClueImages", -- Server -> Client : all clue image IDs to preload
 	"CashReroll",      -- Server -> Client : start a cash reward reroll animation
 	"CashAwarded",     -- Server -> Client : tell client which cash value won
+	"PowerupUse",      -- Client -> Server : use a powerup (Letter/Word)
+	"PowerupGrant",    -- Server -> Client : server reveals the letter/word
+	"PurchasePowerup", -- Client -> Server : buy a powerup with robux (placeholder)
 }
 
 -- Idempotent: if the folder already exists, reuse it (don't wipe manual setup).
