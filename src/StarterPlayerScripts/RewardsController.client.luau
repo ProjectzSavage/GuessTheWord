@@ -110,6 +110,9 @@ end
 
 RewardsF = findRewardsUI()
 
+-- Forward-declared so makeRow() below can call it (defined further down).
+local setMsg
+
 -------------------------------------------------------------------------------
 -- BUILD ROWS
 -------------------------------------------------------------------------------
@@ -185,7 +188,7 @@ local function showTab(tabName)
 	end
 end
 
-local function setMsg(text)
+function setMsg(text)
 	if RewardsF then
 		local msg = RewardsF:FindFirstChild("MsgLbl")
 		if msg then

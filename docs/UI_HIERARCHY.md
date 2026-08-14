@@ -213,7 +213,8 @@ higher or lower:
 
 ## StatsPanel (Cash & Wins HUD)
 
-Located in the **`Currency`** ScreenGui (falls back to `GameUI`). Built as a
+Located in a ScreenGui named **`Currency`** (the script also falls back to
+`GameUI` if it can't find one). Built as a
 `Frame` + `UIListLayout` so the two rows stack vertically and scale. You can
 build it by hand, or just add an empty `StatsPanel` frame — `StatsPanel`
 LocalScript auto-creates the rows, labels, and "+" buttons (in Scale). It reads
@@ -225,7 +226,7 @@ just print).
 
 ## RewardsF (Rewards window)
 
-A separate window (e.g. in the `Currency` ScreenGui) for the reward system.
+A window placed inside the **`GameUI`** ScreenGui for the reward system.
 `RewardsController.client.luau` drives it (tab switching + reward rows).
 
 ```
