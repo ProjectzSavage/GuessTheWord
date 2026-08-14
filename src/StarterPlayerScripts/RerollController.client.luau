@@ -212,6 +212,9 @@ local function runReroll(chosen, rewardList)
 	-- Hide everything initially.
 	showOnly(entries, nil)
 
+	-- Play the "spinning/cycling" sound while the roll is happening.
+	SFX.play("cashRoll")
+
 	local t = os.clock()
 	local current = 1
 	local conn

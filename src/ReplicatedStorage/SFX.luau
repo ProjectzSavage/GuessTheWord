@@ -40,6 +40,7 @@ SFX.Sounds = {
 	hover        = "rbxassetid://139800881181209", -- hovering over a tile/button
 	click        = "rbxassetid://139719503904449", -- clicking the Play vs Bot button
 	cash         = "", -- cash reward lands on the reroll
+	cashRoll     = "", -- cash reward reroll spinning/cycling
 	botSpawn     = "", -- the bot rig spawns in the chair
 	botDespawn   = "", -- the bot despawns after the match
 	winJingle    = "", -- victory fanfare after winning

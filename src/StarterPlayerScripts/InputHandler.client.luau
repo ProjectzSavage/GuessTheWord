@@ -716,25 +716,49 @@ end
 -- POWERUPS (Reveal Letter / Reveal Word)
 -- The server validates the powerup use and reveals the correct letter/word.
 -------------------------------------------------------------------------------
--- Place a single revealed letter into the next empty slot (with the flying
--- letter animation, as if the player clicked it themselves).
-local function placeRevealedLetter(letter)
-	if not roundActive or #currentGuess >= wordLength then
+-- Find an unused (not already placed) bank tile matching `letter`, if any.
+-- This lets powerup reveals animate from the bank like the player chose it.
+local function findBankTile(letter)
+	for tile, l in pairs(buttonMap) do
+		if l == letter and not usedTiles[tile] then
+			return tile
+		end
+	end
+	return nil
+end
+
+-- Set a character of currentGuess at a specific 1-based index.
+local function setGuessAt(index, ch)
+	if index < 1 or index > wordLength then
 		return
 	end
-	local idx = #currentGuess + 1
-	currentGuess = currentGuess .. letter
-	-- Animate from the powerup button (or the bank center) into the slot.
-	local source = RevealLetterBtn or RevealWordBtn
-	if source then
-		animateLetterToSlot(letter, source, slots[idx])
+	currentGuess = string.sub(currentGuess, 1, index - 1)
+		.. ch
+		.. string.sub(currentGuess, index + 1)
+end
+
+-- Place a revealed letter at its CORRECT index, animating from a matching bank
+-- tile (exactly as if the player clicked that letter themselves).
+local function placeRevealedLetter(letter, index)
+	if not roundActive then
+		return
+	end
+	if index == nil or index < 1 or index > wordLength then
+		-- fallback: next empty slot
+		index = #currentGuess + 1
+	end
+	setGuessAt(index, letter)
+	local tile = findBankTile(letter)
+	if tile and slots[index] then
+		animateLetterToSlot(letter, tile, slots[index])
 	else
 		refreshSlots()
 	end
 	checkAutoSubmit()
 end
 
--- Place the full revealed word, one letter at a time (fast but sequential).
+-- Place the full revealed word, one letter at a time (fast but sequential),
+-- each animated from a matching bank tile like the player chose it.
 local function placeRevealedWord(word)
 	if not roundActive then
 		return
@@ -742,21 +766,24 @@ local function placeRevealedWord(word)
 	roundActive = false -- lock input during the reveal
 	for i = 1, #word do
 		local ch = string.sub(word, i, i)
-		currentGuess = string.sub(currentGuess, 1, i - 1) .. ch
-		local slot = slots[i]
-		if slot then
-			slot.Image = LetterImages[ch] or ""
-		end
-		-- stagger: place each letter ~0.12s apart (fast but readable)
-		task.delay(i * 0.12, function()
-			local s = slots[i]
-			if s then
-				s.Image = LetterImages[string.sub(word, i, i)] or ""
+		local tile = findBankTile(ch)
+		task.delay((i - 1) * 0.18, function()
+			if not roundActive then
+				-- word reveal keeps running even though we locked input
+			end
+			setGuessAt(i, ch)
+			if tile and slots[i] then
+				animateLetterToSlot(ch, tile, slots[i])
+			else
+				local s = slots[i]
+				if s then
+					s.Image = LetterImages[ch] or ""
+				end
 			end
 		end)
 	end
 	-- After all letters placed, submit.
-	task.delay(#word * 0.12 + 0.2, function()
+	task.delay(#word * 0.18 + 0.3, function()
 		roundActive = false
 		SubmitGuess:FireServer(word)
 	end)
@@ -821,14 +848,14 @@ watchUses("RevealWordUses")
 updatePowerupPrices()
 
 -- Handle server responses for powerups.
-PowerupGrant.OnClientEvent:Connect(function(powerupType, letter, word, success)
+PowerupGrant.OnClientEvent:Connect(function(powerupType, letter, index, word, success)
 	if not success then
 		-- No uses left -> prompt to buy with robux (future: real purchase).
 		promptBuy(powerupType)
 		return
 	end
 	if powerupType == "Letter" and typeof(letter) == "string" then
-		placeRevealedLetter(letter)
+		placeRevealedLetter(letter, index)
 	elseif powerupType == "Word" and typeof(word) == "string" then
 		placeRevealedWord(word)
 	end
