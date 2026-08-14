@@ -8,19 +8,20 @@
 	"+" button next to each that will open a Shop later (placeholders for now).
 	Uses a Frame + UIListLayout so the two rows stack cleanly and scale.
 
-	REQUIRED UI (you build it in GameUI - see docs/UI_HIERARCHY.md):
-		GameUI.StatsPanel  (Frame, top-left, background)
+	REQUIRED UI (you build it - see docs/UI_HIERARCHY.md):
+		Currency.StatsPanel  (Frame, top-left, background)
 		  ├── UIListLayout      (Vertical, padding ~6)
 		  ├── CashRow  (Frame)
-		  │     ├── CashIcon   (TextLabel, optional, e.g. "$")
-		  │     ├── CashLabel  (TextLabel)   "0"  (the Cash value)
-		  │     └── CashPlus   (TextButton)  "+" -> opens shop later
+		  │     ├── Icon        (TextLabel, optional "$")
+		  │     ├── Value       (TextLabel)  "$0"   (Cash, formatted with $ + commas)
+		  │     └── Plus        (TextButton) "+" -> opens shop later
 		  └── WinRow   (Frame)
-		        ├── WinIcon    (TextLabel, optional)
-		        ├── WinLabel   (TextLabel)   "0"  (the Wins value)
-		        └── WinPlus    (TextButton)  "+" -> opens shop later
+		        ├── Icon        (TextLabel, optional "W")
+		        ├── Value       (TextLabel)  "0"   (Wins, commas only, no $)
+		        └── Plus        (TextButton) "+" -> opens shop later
 
-	If you only place an empty `StatsPanel` frame, the script auto-builds the rest
+	The panel is found inside the "Currency" ScreenGui first, then "GameUI" as a
+	fallback. If only an empty StatsPanel exists, the script auto-builds the rest
 	in Scale (never offset).
 ]]
 
@@ -28,7 +29,24 @@ local Players = game:GetService("Players")
 
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
-local GameUI = PlayerGui:WaitForChild("GameUI")
+
+-- Locate the StatsPanel: prefer the "Currency" ScreenGui, else "GameUI".
+local function findPanelGui()
+	for _, name in ipairs({ "Currency", "GameUI" }) do
+		local gui = PlayerGui:FindFirstChild(name)
+		if gui then
+			local panel = gui:FindFirstChild("StatsPanel")
+			if panel then
+				return gui, panel
+			end
+		end
+	end
+	-- Fall back to Currency if present (to hold an auto-built panel).
+	return PlayerGui:FindFirstChild("Currency") or PlayerGui:FindFirstChild("GameUI")
+end
+
+local panelGui = findPanelGui()
+local PanelRoot = panelGui or Instance.new("ScreenGui")
 
 -------------------------------------------------------------------------------
 -- BUILD / AUTO-CREATE
@@ -91,7 +109,7 @@ local function ensureRow(panel, rowName, title)
 end
 
 local function buildPanel()
-	local panel = GameUI:FindFirstChild("StatsPanel")
+	local panel = PanelRoot:FindFirstChild("StatsPanel")
 	if not panel then
 		panel = Instance.new("Frame")
 		panel.Name = "StatsPanel"
@@ -99,7 +117,11 @@ local function buildPanel()
 		panel.Position = UDim2.new(0.02, 0, 0.02, 0)
 		panel.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 		panel.BackgroundTransparency = 0.4
-		panel.Parent = GameUI
+		if not PanelRoot.Parent then
+			PanelRoot.Name = "Currency"
+			PanelRoot.Parent = PlayerGui
+		end
+		panel.Parent = PanelRoot
 	end
 
 	local layout = panel:FindFirstChildOfClass("UIListLayout")
@@ -121,6 +143,15 @@ local panel, cashValue, cashPlus, winValue, winPlus = buildPanel()
 -------------------------------------------------------------------------------
 -- LIVE UPDATE FROM leaderstats
 -------------------------------------------------------------------------------
+-- Format a number with thousands separators, e.g. 2145 -> "2,145".
+local function addCommas(n)
+	local s = tostring(math.floor(n))
+	local formatted = s:reverse():gsub("(%d%d%d)", "%1,"):reverse()
+	-- Remove a leading comma if present (e.g. from "1000" -> "1,000" edge).
+	formatted = formatted:gsub("^,", "")
+	return formatted
+end
+
 local function update()
 	local ls = player:FindFirstChild("leaderstats")
 	if not ls then
@@ -129,10 +160,12 @@ local function update()
 	local cash = ls:FindFirstChild("Cash")
 	local wins = ls:FindFirstChild("Wins")
 	if cashValue then
-		cashValue.Text = tostring(cash and cash.Value or 0)
+		-- Cash: "$" prefix + commas, e.g. "$2,145".
+		cashValue.Text = "$" .. addCommas(cash and cash.Value or 0)
 	end
 	if winValue then
-		winValue.Text = tostring(wins and wins.Value or 0)
+		-- Wins: commas only (no $).
+		winValue.Text = addCommas(wins and wins.Value or 0)
 	end
 end
 
@@ -152,13 +185,22 @@ update()
 -------------------------------------------------------------------------------
 -- "+" BUTTONS (shop placeholders)
 -------------------------------------------------------------------------------
+-- Open the Rewards window if RewardsController is present (else placeholder).
+local function openRewards()
+	if _G.RewardsAPI and _G.RewardsAPI.open then
+		_G.RewardsAPI.open()
+	else
+		print("[StatsPanel] Rewards window not found (RewardsController not set up).")
+	end
+end
+
 if cashPlus then
 	cashPlus.Activated:Connect(function()
-		print("[StatsPanel] Cash shop button clicked (shop not implemented yet).")
+		openRewards()
 	end)
 end
 if winPlus then
 	winPlus.Activated:Connect(function()
-		print("[StatsPanel] Wins shop button clicked (shop not implemented yet).")
+		openRewards()
 	end)
 end

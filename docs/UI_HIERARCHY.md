@@ -213,12 +213,46 @@ higher or lower:
 
 ## StatsPanel (Cash & Wins HUD)
 
-Built as a `Frame` + `UIListLayout` so the two rows stack vertically and scale.
-You can build it by hand, or just add an empty `StatsPanel` frame — `StatsPanel`
+Located in the **`Currency`** ScreenGui (falls back to `GameUI`). Built as a
+`Frame` + `UIListLayout` so the two rows stack vertically and scale. You can
+build it by hand, or just add an empty `StatsPanel` frame — `StatsPanel`
 LocalScript auto-creates the rows, labels, and "+" buttons (in Scale). It reads
 `leaderstats.Cash` and `leaderstats.Wins` live and updates the `Value` labels.
+- **Cash** is shown as `$2,145` (dollar prefix + comma separators).
+- **Wins** is shown as `2,145` (commas only, no `$`).
 The `+` buttons are placeholders that will open the Shop later (they currently
 just print).
+
+## RewardsF (Rewards window)
+
+A separate window (e.g. in the `Currency` ScreenGui) for the reward system.
+`RewardsController.client.luau` drives it (tab switching + reward rows).
+
+```
+RewardsF  (Frame, main window, Visible=false)
+├── TitleLbl  (TextLabel)          main menu header title
+├── MsgLbl    (TextLabel)          status/notification (e.g. "Claimed!")
+├── LeftTabs  (Frame)              side navigation (sibling to Content)
+│     ├── DailyBtn      (TextButton)
+│     ├── GroupBtn      (TextButton)
+│     ├── PlaytimeBtn   (TextButton)
+│     ├── RobuxSpentBtn (TextButton)
+│     ├── SocialBtn     (TextButton)
+│     └── VipDailyBtn   (TextButton)
+├── Content  (Frame)               tab display area
+│     ├── CategoryTitle    (TextLabel)
+│     ├── CategorySubtitle (TextLabel)
+│     └── RowsScroll  (ScrollingFrame)
+│           └── RowTemplate  (Frame, Visible=false)
+│                 ├── LeftLbl           (TextLabel) requirement/progress text
+│                 ├── RewardsContainer  (Frame)
+│                 │     └── ImageTemplate (ImageLabel) reward icon
+│                 └── ClaimBtn          (TextButton) collect the reward
+└── CloseBtn  (TextButton)
+```
+
+The `+` buttons on the StatsPanel open this window (via `_G.RewardsAPI`).
+Reward data lives in the `REWARDS` table at the top of `RewardsController`.
 
 ## Heart image resolution (256px vs 512px)
 
