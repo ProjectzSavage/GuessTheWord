@@ -136,6 +136,7 @@ local function discoverTables()
 					botConn = nil,         -- bot loop thread
 					botActive = false,     -- is the bot thinking loop running?
 					attemptedGuesses = {}, -- bot: tried permutations
+					revealedIndices = {}, -- Reveal Letter: which word indices are revealed
 				}
 			end
 		end
@@ -598,6 +599,7 @@ function startRound(tableState)
 
 	local entry = Dictionary.randomEntry()
 	tableState.currentWord = entry.word
+	tableState.revealedIndices = {} -- reset revealed letters each round
 	tableState.letterBank = Dictionary.buildBank(entry.word)
 
 	local wordLength = #entry.word
@@ -725,6 +727,12 @@ function startMatch(tableState)
 	broadcastHearts(tableState) -- also reveals the above-head hearts
 	notifyWaiting(tableState)   -- hides the "Play vs Bot" button
 
+	-- Re-broadcast hearts shortly after (and again after the cash roll) so the
+	-- bot's above-head hearts reliably appear/update, especially on rematch.
+	task.delay(0.5, function()
+		broadcastHearts(tableState)
+	end)
+
 	-- 3..2..1 countdown before the match begins.
 	for i = START_COUNTDOWN, 1, -1 do
 		for _, occ in tableState.occupants do
@@ -739,6 +747,7 @@ function startMatch(tableState)
 	-- AFTER the roll finishes (and cash is awarded).
 	runCashReroll(tableState)
 
+	broadcastHearts(tableState) -- re-sync bot hearts before the round starts
 	startRound(tableState)
 end
 
@@ -935,7 +944,19 @@ PowerupUse.OnServerEvent:Connect(function(player, powerupType)
 
 			if powerupType == "Letter" then
 				spendUse(player, "RevealLetterUses") -- spend if available
-				local i = math.random(1, #word)
+				-- Reveal the next unrevealed letter IN ORDER (left to right), so
+				-- "ball" reveals b, then a, then l, then l.
+				local i
+				for k = 1, #word do
+					if not tableState.revealedIndices[k] then
+						i = k
+						break
+					end
+				end
+				if not i then
+					return -- all letters already revealed
+				end
+				tableState.revealedIndices[i] = true
 				local letter = string.sub(word, i, i)
 				PowerupGrant:FireClient(player, "Letter", true, letter, i)
 			elseif powerupType == "Word" then

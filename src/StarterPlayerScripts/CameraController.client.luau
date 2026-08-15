@@ -34,6 +34,7 @@ local Events = ReplicatedStorage:WaitForChild("Events")
 local focused = false
 local desiredCFrame = nil
 local renderConn = nil
+local lastTarget = nil -- cache the last good table view (fallback on rematch)
 
 local function findTableFolder()
 	local char = player.Character
@@ -95,11 +96,13 @@ end
 
 local function startFocus()
 	-- Always recompute the target so the camera re-focuses the table on a
-	-- rematch too.
-	desiredCFrame = computeTarget()
+	-- rematch too. If seat detection fails (e.g. mid-rematch), fall back to the
+	-- last known good table view.
+	desiredCFrame = computeTarget() or lastTarget
 	if not desiredCFrame then
 		return
 	end
+	lastTarget = desiredCFrame
 	focused = true
 	Camera.CameraType = Enum.CameraType.Scriptable
 
@@ -145,11 +148,10 @@ Events:WaitForChild("Countdown").OnClientEvent:Connect(function(n)
 end)
 
 -- Belt-and-suspenders: also re-focus when a round actually starts, in case the
--- countdown n==3 was missed (e.g. on a fast replay).
+-- countdown n==3 was missed (e.g. on a fast replay). Always re-run so the
+-- camera snaps back to the table on every rematch.
 Events:WaitForChild("RoundStart").OnClientEvent:Connect(function()
-	if not focused then
-		startFocus()
-	end
+	startFocus()
 end)
 
 -- On game over, release the camera back to the player.

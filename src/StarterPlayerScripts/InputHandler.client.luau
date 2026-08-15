@@ -1474,6 +1474,10 @@ local function showCelebration(youWon, isDraw, isBotMatch)
 		setCinematic(0)
 		if isBotMatch then
 			showPauseScreen()
+		else
+			-- Not a bot match: give the player the interaction UI back so they're
+			-- never stuck (they can re-sit / pick a bot again).
+			setWaitingUI(true)
 		end
 	end)
 end
