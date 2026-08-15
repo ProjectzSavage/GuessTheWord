@@ -43,11 +43,12 @@ StarterGui
     │
     ├── InteractionFrame  (Frame)  lower area
     │   ├── PlayVsBotButton  (TextButton)   "Play vs Bot", Visible = false initially
-    │   └── DifficultySelector  (Frame, Visible=false)  shown when PlayVsBot is clicked
+    │   └── DifficultySelector  (Frame, Visible=false)  shown when PlayVsBot/Rematch is clicked
     │         ├── TitleLbl  (TextLabel)   "Choose Difficulty"
-    │         ├── EasyBtn   (TextButton)  "Easy — Max $100"
-    │         ├── MediumBtn (TextButton)  "Medium — Max $350"
-    │         ├── HardBtn   (TextButton)  "Hard — Max $750"
+    │         ├── Difficulties  (Frame)   (the difficulty buttons live here)
+    │         │     ├── EasyBtn   (TextButton)  "Easy — Max $100"
+    │         │     ├── MediumBtn (TextButton)  "Medium — Max $350"
+    │         │     └── HardBtn   (TextButton)  "Hard — Max $750"
     │         ├── BackBtn   (TextButton)  "Back" (optional, returns to PlayVsBot)
     │         └── CloseBtn  (TextButton)  "Leave Chair" (cancels + leaves seat)
     │

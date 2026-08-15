@@ -93,11 +93,13 @@ local InteractionFrame = GameUI:WaitForChild("InteractionFrame")
 local PlayVsBotButton = InteractionFrame:WaitForChild("PlayVsBotButton")
 -- Difficulty selector (inside InteractionFrame, shown when PlayVsBot is clicked).
 local DifficultySelector = InteractionFrame:FindFirstChild("DifficultySelector")
-local DifficultyEasy = DifficultySelector and DifficultySelector:FindFirstChild("EasyBtn")
-local DifficultyMedium = DifficultySelector and DifficultySelector:FindFirstChild("MediumBtn")
-local DifficultyHard = DifficultySelector and DifficultySelector:FindFirstChild("HardBtn")
-local DifficultyClose = DifficultySelector and DifficultySelector:FindFirstChild("CloseBtn")
-local DifficultyBack = DifficultySelector and DifficultySelector:FindFirstChild("BackBtn")
+-- Difficulty buttons live inside a nested "Difficulties" frame; use recursive
+-- lookup so Easy/Medium/Hard are found regardless of the nesting.
+local DifficultyEasy = DifficultySelector and DifficultySelector:FindFirstChild("EasyBtn", true)
+local DifficultyMedium = DifficultySelector and DifficultySelector:FindFirstChild("MediumBtn", true)
+local DifficultyHard = DifficultySelector and DifficultySelector:FindFirstChild("HardBtn", true)
+local DifficultyClose = DifficultySelector and DifficultySelector:FindFirstChild("CloseBtn", true)
+local DifficultyBack = DifficultySelector and DifficultySelector:FindFirstChild("BackBtn", true)
 -- Countdown frame (big 3-2-1-GO!) - built into the hierarchy by you.
 local CountdownFrame = GameUI:FindFirstChild("CountdownFrame")
 local CountdownLabel = CountdownFrame and CountdownFrame:FindFirstChild("CountdownLabel")
@@ -1050,12 +1052,20 @@ if player.Character then
 	setupCharacterJump(player.Character)
 end
 
--- Rematch button: start a new bot match (reuses the PlayVsBot request, same
--- difficulty as before - the server persists it).
+-- Rematch button: re-open the difficulty selector so the player can pick the
+-- difficulty again (including switching).
 if RematchButton then
 	RematchButton.Activated:Connect(function()
 		hidePauseScreen()
-		PlayVsBotRequest:FireServer("Rematch")
+		if DifficultySelector then
+			-- The selector lives inside InteractionFrame, so show that too.
+			showFrame(InteractionFrame)
+			DifficultySelector.Visible = true
+			UIFX.popIn(DifficultySelector)
+		else
+			-- No selector built -> start a default bot match directly.
+			PlayVsBotRequest:FireServer("Easy")
+		end
 	end)
 end
 
