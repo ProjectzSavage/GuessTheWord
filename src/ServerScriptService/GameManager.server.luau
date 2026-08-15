@@ -937,10 +937,10 @@ PowerupUse.OnServerEvent:Connect(function(player, powerupType)
 				spendUse(player, "RevealLetterUses") -- spend if available
 				local i = math.random(1, #word)
 				local letter = string.sub(word, i, i)
-				PowerupGrant:FireClient(player, "Letter", letter, i, true)
+				PowerupGrant:FireClient(player, "Letter", true, letter, i)
 			elseif powerupType == "Word" then
 				spendUse(player, "RevealWordUses")
-				PowerupGrant:FireClient(player, "Word", nil, nil, word, true)
+				PowerupGrant:FireClient(player, "Word", true, nil, nil, word)
 			end
 			return
 		end

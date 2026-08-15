@@ -848,7 +848,7 @@ watchUses("RevealWordUses")
 updatePowerupPrices()
 
 -- Handle server responses for powerups.
-PowerupGrant.OnClientEvent:Connect(function(powerupType, letter, index, word, success)
+PowerupGrant.OnClientEvent:Connect(function(powerupType, success, letter, index, word)
 	if not success then
 		-- No uses left -> prompt to buy with robux (future: real purchase).
 		promptBuy(powerupType)
