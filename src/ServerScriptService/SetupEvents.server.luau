@@ -34,6 +34,7 @@ local EVENT_NAMES = {
 	"PowerupUse",      -- Client -> Server : use a powerup (Letter/Word)
 	"PowerupGrant",    -- Server -> Client : server reveals the letter/word
 	"PurchasePowerup", -- Client -> Server : buy a powerup with robux (placeholder)
+	"LeaveSeat",       -- Client -> Server : player leaves their chair (cancel)
 }
 
 -- Idempotent: if the folder already exists, reuse it (don't wipe manual setup).

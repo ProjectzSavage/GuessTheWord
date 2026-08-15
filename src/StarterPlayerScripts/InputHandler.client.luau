@@ -67,6 +67,7 @@ local WrongGuess = Events:WaitForChild("WrongGuess")
 local PowerupUse = Events:WaitForChild("PowerupUse")
 local PowerupGrant = Events:WaitForChild("PowerupGrant")
 local PurchasePowerup = Events:WaitForChild("PurchasePowerup")
+local LeaveSeat = Events:WaitForChild("LeaveSeat")
 
 -- UI references (fail loudly if the hierarchy is wrong - easy to debug).
 local GameUI = PlayerGui:WaitForChild("GameUI")
@@ -90,6 +91,13 @@ local RevealWordPrice = RevealWordBtn and RevealWordBtn:FindFirstChild("PriceLbl
 local POWERUP_PRICE = { Letter = 10, Word = 25 }
 local InteractionFrame = GameUI:WaitForChild("InteractionFrame")
 local PlayVsBotButton = InteractionFrame:WaitForChild("PlayVsBotButton")
+-- Difficulty selector (inside InteractionFrame, shown when PlayVsBot is clicked).
+local DifficultySelector = InteractionFrame:FindFirstChild("DifficultySelector")
+local DifficultyEasy = DifficultySelector and DifficultySelector:FindFirstChild("EasyBtn")
+local DifficultyMedium = DifficultySelector and DifficultySelector:FindFirstChild("MediumBtn")
+local DifficultyHard = DifficultySelector and DifficultySelector:FindFirstChild("HardBtn")
+local DifficultyClose = DifficultySelector and DifficultySelector:FindFirstChild("CloseBtn")
+local DifficultyBack = DifficultySelector and DifficultySelector:FindFirstChild("BackBtn")
 -- Countdown frame (big 3-2-1-GO!) - built into the hierarchy by you.
 local CountdownFrame = GameUI:FindFirstChild("CountdownFrame")
 local CountdownLabel = CountdownFrame and CountdownFrame:FindFirstChild("CountdownLabel")
@@ -1042,11 +1050,12 @@ if player.Character then
 	setupCharacterJump(player.Character)
 end
 
--- Rematch button: start a new bot match (reuses the PlayVsBot request).
+-- Rematch button: start a new bot match (reuses the PlayVsBot request, same
+-- difficulty as before - the server persists it).
 if RematchButton then
 	RematchButton.Activated:Connect(function()
 		hidePauseScreen()
-		PlayVsBotRequest:FireServer()
+		PlayVsBotRequest:FireServer("Rematch")
 	end)
 end
 
@@ -1501,13 +1510,61 @@ OpponentState.OnClientEvent:Connect(function(waiting)
 end)
 
 -------------------------------------------------------------------------------
--- PLAY VS BOT BUTTON (immediate - no timer wait)
+-- PLAY VS BOT + DIFFICULTY SELECTOR
 -------------------------------------------------------------------------------
+-- Clicking PlayVsBot opens the difficulty selector (Easy/Medium/Hard + Close).
 PlayVsBotButton.Activated:Connect(function()
-	-- Animate the button out, then ask the server to start a bot match.
 	SFX.play("click")
 	hideFrame(PlayVsBotButton)
-	task.delay(0.15, function()
-		PlayVsBotRequest:FireServer()
+	task.delay(0.1, function()
+		if DifficultySelector then
+			DifficultySelector.Visible = true
+			UIFX.popIn(DifficultySelector)
+		else
+			-- No selector built -> start a default bot match directly.
+			PlayVsBotRequest:FireServer("Easy")
+		end
 	end)
 end)
+
+local function startBotWithDifficulty(diff)
+	if DifficultySelector then
+		DifficultySelector.Visible = false
+	end
+	PlayVsBotRequest:FireServer(diff)
+end
+
+if DifficultyEasy then
+	DifficultyEasy.Activated:Connect(function()
+		startBotWithDifficulty("Easy")
+	end)
+end
+if DifficultyMedium then
+	DifficultyMedium.Activated:Connect(function()
+		startBotWithDifficulty("Medium")
+	end)
+end
+if DifficultyHard then
+	DifficultyHard.Activated:Connect(function()
+		startBotWithDifficulty("Hard")
+	end)
+end
+-- Back button returns to the PlayVsBot button (optional).
+if DifficultyBack then
+	DifficultyBack.Activated:Connect(function()
+		if DifficultySelector then
+			DifficultySelector.Visible = false
+		end
+		showFrame(PlayVsBotButton)
+	end)
+end
+-- Close button: leave the chair and cancel (game never started).
+if DifficultyClose then
+	DifficultyClose.Activated:Connect(function()
+		if DifficultySelector then
+			DifficultySelector.Visible = false
+		end
+		setWaitingUI(false)
+		LeaveSeat:FireServer()
+	end)
+end

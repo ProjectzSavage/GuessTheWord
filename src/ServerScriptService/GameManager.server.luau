@@ -58,10 +58,15 @@ local PurchasePowerup = Events:WaitForChild("PurchasePowerup")
 local HEARTS_PER_PLAYER = 3
 local ROUND_TIME = 15            -- seconds per round
 local START_COUNTDOWN = 3        -- 3..2..1 before the match begins
--- Bot is a placeholder random-guessing opponent (difficulty is a future update).
--- To keep it clearly beatable, it guesses slowly and only ~50% of the time.
-local BOT_THINK_TIME = 1.1       -- seconds between bot guesses
-local BOT_GUESS_CHANCE = 0.5     -- probability the bot actually guesses each tick
+-- Bot difficulty config. maxCash caps the cash-reward roll for that difficulty.
+-- The bot builds guesses from the WORD's own letters (permuting them), so it can
+-- actually solve; difficulty tunes speed/consistency.
+local BOT_DIFFICULTIES = {
+	Easy =   { thinkTime = 1.4, guessChance = 0.6, maxCash = 100, name = "Easy" },
+	Medium = { thinkTime = 1.0, guessChance = 0.8, maxCash = 350, name = "Medium" },
+	Hard =   { thinkTime = 0.7, guessChance = 1.0, maxCash = 750, name = "Hard" },
+}
+local DEFAULT_DIFFICULTY = "Easy"
 local POLL_INTERVAL = 0.2        -- how often we poll seats for a sitting player
 
 -- Cash reward table: value + weighted chance (weights are percentages, summing
@@ -135,6 +140,7 @@ local function discoverTables()
 					roundGen = 0,          -- increments each round; kills stale threads
 					botConn = nil,         -- bot loop thread
 					botActive = false,     -- is the bot thinking loop running?
+					botDifficulty = "Easy", -- current bot difficulty
 					attemptedGuesses = {}, -- bot: tried permutations
 					revealedIndices = {}, -- Reveal Letter: which word indices are revealed
 				}
@@ -333,13 +339,24 @@ local function startBotLoop(tableState, seatIndex)
 	stopBot(tableState)
 
 	tableState.attemptedGuesses = {}
-	local bank = tableState.letterBank
 	local gen = tableState.roundGen   -- capture current round generation
 	tableState.botActive = true
 
+	local diff = BOT_DIFFICULTIES[tableState.botDifficulty] or BOT_DIFFICULTIES[DEFAULT_DIFFICULTY]
+	local thinkTime = diff.thinkTime
+	local guessChance = diff.guessChance
+
+	-- The bot builds candidates by permuting the WORD's own letters (which are
+	-- guaranteed in the 12-letter bank). This lets it actually solve a round.
+	local word = tableState.currentWord
+	local wordLetters = {}
+	for i = 1, #word do
+		table.insert(wordLetters, string.sub(word, i, i))
+	end
+
 	tableState.botConn = task.spawn(function()
 		while tableState.botActive do
-			task.wait(BOT_THINK_TIME)
+			task.wait(thinkTime)
 			if not tableState.botActive then
 				break
 			end
@@ -353,24 +370,21 @@ local function startBotLoop(tableState, seatIndex)
 			if tableState.hearts[seatIndex] and tableState.hearts[seatIndex] <= 0 then
 				break
 			end
-			-- The bot hesitates sometimes (keeps it clearly beatable).
-			if math.random() <= BOT_GUESS_CHANCE then
-				-- The bank holds 12 letters (word letters + fillers). The bot
-				-- guesses a word of the CORRECT length by picking `wordLen`
-				-- distinct letters from the bank in a random order.
-				local wordLen = #tableState.currentWord
+			if math.random() > guessChance then
+				-- bot hesitates this tick
+			else
+				-- Shuffle a copy of the word's letters into a candidate.
 				local order = {}
-				for i = 1, #bank do
+				for i = 1, #wordLetters do
 					order[i] = i
 				end
 				for i = #order, 2, -1 do
 					local j = math.random(1, i)
 					order[i], order[j] = order[j], order[i]
 				end
-
 				local candidate = ""
-				for k = 1, wordLen do
-					candidate = candidate .. bank[order[k]]
+				for _, k in order do
+					candidate = candidate .. wordLetters[k]
 				end
 
 				-- Avoid repeating a candidate the bot already tried this round.
@@ -697,11 +711,39 @@ end
 -- shown) wait a little before the round starts. The rolled amount becomes the
 -- match PRIZE: it is stored here and awarded to the match WINNER at the end
 -- (not to everyone). Returns the chosen reward value.
+-- Pick a reward, limited to <= maxCash (used for difficulty-limited rolls).
+local function pickCashRewardCapped(maxCash)
+	local eligible = {}
+	local total = 0
+	for _, r in CASH_REWARDS do
+		if r.value <= maxCash then
+			table.insert(eligible, r)
+			total = total + r.weight
+		end
+	end
+	if #eligible == 0 then
+		return CASH_REWARDS[1].value
+	end
+	local roll = math.random() * total
+	for _, r in eligible do
+		roll = roll - r.weight
+		if roll <= 0 then
+			return r.value
+		end
+	end
+	return eligible[#eligible].value
+end
+
 local function runCashReroll(tableState)
-	local reward = pickCashReward()
+	-- Difficulty caps the roll's max cash (Easy 100 / Medium 350 / Hard 750).
+	local diff = BOT_DIFFICULTIES[tableState.botDifficulty] or BOT_DIFFICULTIES[DEFAULT_DIFFICULTY]
+	local maxCash = diff.maxCash
+	local reward = pickCashRewardCapped(maxCash)
 	local rewardList = {}
 	for _, r in CASH_REWARDS do
-		table.insert(rewardList, r.value)
+		if r.value <= maxCash then
+			table.insert(rewardList, r.value)
+		end
 	end
 
 	tableState.cashPrize = reward -- the winner collects this at match end
@@ -847,9 +889,12 @@ end
 -------------------------------------------------------------------------------
 -- PLAY VS BOT REQUEST
 -------------------------------------------------------------------------------
-PlayVsBotRequest.OnServerEvent:Connect(function(player)
+PlayVsBotRequest.OnServerEvent:Connect(function(player, difficulty)
 	if not player then
 		return
+	end
+	if type(difficulty) ~= "string" or not BOT_DIFFICULTIES[difficulty] then
+		difficulty = DEFAULT_DIFFICULTY
 	end
 
 	-- Find the table this player currently occupies (must be seated and alone).
@@ -866,6 +911,7 @@ PlayVsBotRequest.OnServerEvent:Connect(function(player)
 			end
 			-- Only if the other seat is empty (no human, no bot).
 			if not tableState.occupants[otherIdx] then
+				tableState.botDifficulty = difficulty -- set the difficulty
 				local botHumanoid = buildBotRig(tableState.seats[otherIdx])
 				if not botHumanoid then
 					return -- bot rig failed to spawn
@@ -882,6 +928,27 @@ PlayVsBotRequest.OnServerEvent:Connect(function(player)
 	end
 
 	-- Player wasn't seated alone: silently ignore.
+end)
+
+-- Player leaves their chair (used by the difficulty selector's Close button).
+local LeaveSeat = Events:WaitForChild("LeaveSeat")
+LeaveSeat.OnServerEvent:Connect(function(player)
+	if not player then
+		return
+	end
+	for _, tableState in tableStates do
+		local seatIdx = seatOfPlayer(tableState, player)
+		if seatIdx then
+			-- Stand them up and free their seat.
+			local char = player.Character
+			local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+			if humanoid then
+				humanoid.Sit = false
+			end
+			releasePlayer(tableState, player)
+			return
+		end
+	end
 end)
 
 -------------------------------------------------------------------------------

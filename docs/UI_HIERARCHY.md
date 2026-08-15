@@ -42,7 +42,14 @@ StarterGui
     │   └── ScrambledBank  (Frame)   letter tiles are created here as ImageButtons
     │
     ├── InteractionFrame  (Frame)  lower area
-    │   └── PlayVsBotButton  (TextButton)   "Play vs Bot", Visible = false initially
+    │   ├── PlayVsBotButton  (TextButton)   "Play vs Bot", Visible = false initially
+    │   └── DifficultySelector  (Frame, Visible=false)  shown when PlayVsBot is clicked
+    │         ├── TitleLbl  (TextLabel)   "Choose Difficulty"
+    │         ├── EasyBtn   (TextButton)  "Easy — Max $100"
+    │         ├── MediumBtn (TextButton)  "Medium — Max $350"
+    │         ├── HardBtn   (TextButton)  "Hard — Max $750"
+    │         ├── BackBtn   (TextButton)  "Back" (optional, returns to PlayVsBot)
+    │         └── CloseBtn  (TextButton)  "Leave Chair" (cancels + leaves seat)
     │
     ├── StatsPanel  (Frame)         top-left; shows Cash & Wins HUD
     │   ├── UIListLayout            Vertical, Padding 4

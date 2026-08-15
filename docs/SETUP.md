@@ -207,6 +207,11 @@ RerollController clones them and animates them at each table's `CashAnchor`.
    celebration plays. In a bot match a **Pause screen** ("Play vs Bot again")
    appears so you can rematch from your chair.
 
+**Bot difficulty:** clicking "Play vs Bot" opens a **DifficultySelector**
+(Easy/Medium/Hard). Each difficulty caps the cash-reward roll's max cash
+(Easy $100 / Medium $350 / Hard $750) and tunes the bot's speed/consistency. The
+bot builds guesses from the word's own letters so it can actually answer.
+
 **Correct-answer beat:** when the answer is found, the server hides the
 `PuzzleArea`, waits 2s, makes the loser's heart disappear, waits another 2s, then
 starts the next round (which reshores the puzzle). The heart fade is animated in
