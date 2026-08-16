@@ -297,22 +297,28 @@ RewardsF  (Frame, main window, Visible=false)
 The `+` buttons on the StatsPanel open this window (via `_G.RewardsAPI`).
 
 **Server-authoritative:** the server (`RewardsService.server.luau`) owns all
-reward state (claimed, playtime, robux spent, daily reset, social visits) and
-sends a `payload` the client renders. The client `RewardsController` just
-displays it. Each row's ClaimBtn shows a state:
+reward state (claimed, playtime, robux spent, daily reset) and sends a
+`payload` the client renders. The client `RewardsController` just displays it.
+Each row's ClaimBtn shows a state:
 - **CLAIMED** (green, disabled) — already claimed.
 - **CLAIM** (green, enabled) — ready.
-- **VISIT** (blue, enabled) — social: press to "visit" an owner, then wait.
+- **FOLLOW** (blue, enabled) — social: you must **follow the owner on Roblox**
+  to claim (checked server-side via friendship, since Roblox has no public
+  follow-check API).
 - **NOT READY** (grey, disabled) — requirement not met / on cooldown.
+
+Rewards can grant **Cash** (`leaderstats.Cash`) and/or **powerup uses**
+(Reveal Letter common, Reveal Word rarer).
 
 Config lives at the top of `RewardsService.server.luau`: `GROUP_ID`, the
 `VIP_GAMEPASS_ID`, `SOCIAL_OWNERS` (owners to follow), and the reward tables
 (playtime/daily/group/social/vipdaily/robuxspent). Reward image ids are in
 `REWARD_IMAGES` on both server and client (matched by pattern text like
-"+1 Reveal Letter").
+"+1 Reveal Letter" or "+$300").
 
-Reveal Letter rewards are more common; Reveal Word rewards are rarer (fewer,
-lower uses).
+**Timers work live:** playtime counts up in real time and the daily countdown
+ticks down while the window is open (the client computes from the last synced
+base + elapsed time).
 
 ## Heart image resolution (256px vs 512px)
 

@@ -9,7 +9,7 @@
 	client clones the RowTemplate per row and styles the ClaimBtn:
 	  * CLAIMED (green, disabled)  -- already claimed
 	  * CLAIM   (green, enabled)   -- ready to claim
-	  * VISIT   (blue, enabled)    -- social: press to "visit" an owner
+	  * FOLLOW  (blue, enabled)    -- social: you must follow the owner on Roblox
 	  * NOT READY (grey, disabled) -- requirement not met / on cooldown
 
 	SETUP (hierarchy in docs/UI_HIERARCHY.md):
@@ -24,7 +24,6 @@
 ]]
 
 local Players       = game:GetService("Players")
-local SocialService = game:GetService("SocialService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player  = Players.LocalPlayer
@@ -45,7 +44,6 @@ local Events             = ReplicatedStorage:WaitForChild("Events")
 local RewardSync         = Events:WaitForChild("RewardSync")
 local RewardClaim        = Events:WaitForChild("RewardClaim")
 local RewardRequestSync  = Events:WaitForChild("RewardRequestSync")
-local SocialVisit        = Events:WaitForChild("SocialVisit")
 local NotifyPlayer       = Events:WaitForChild("NotifyPlayer")
 
 local TAB_TO_CAT = {
@@ -75,6 +73,10 @@ local REWARD_IMAGES = {
 	word_1   = "rbxassetid://REVEAL_WORD_1",
 	word_2   = "rbxassetid://REVEAL_WORD_2",
 	word_3   = "rbxassetid://REVEAL_WORD_3",
+	cash_100 = "rbxassetid://CASH_100",
+	cash_300 = "rbxassetid://CASH_300",
+	cash_500 = "rbxassetid://CASH_500",
+	cash_1000 = "rbxassetid://CASH_1000",
 }
 local REWARD_PATTERNS = {
 	{ pattern = "+1 Reveal Letter", image = "letter_1" },
@@ -83,11 +85,19 @@ local REWARD_PATTERNS = {
 	{ pattern = "+1 Reveal Word",   image = "word_1" },
 	{ pattern = "+2 Reveal Word",   image = "word_2" },
 	{ pattern = "+3 Reveal Word",   image = "word_3" },
+	{ pattern = "+$100",            image = "cash_100" },
+	{ pattern = "+$300",            image = "cash_300" },
+	{ pattern = "+$500",            image = "cash_500" },
+	{ pattern = "+$1000",           image = "cash_1000" },
 }
 
 local payload   = nil
 local activeCat = "playtime"
 local isOpen    = false
+-- Live timer tracking so playtime/daily countdown actually count while open.
+local syncedAt = os.clock()
+local syncedPlaytime = 0
+local syncedDaily = 0
 
 local function requestSync()
 	RewardRequestSync:FireServer()
@@ -122,7 +132,8 @@ local function styleClaim(btn, row, categoryId)
 		btn.BackgroundColor3 = Color3.fromRGB(60, 220, 60)
 		btn.Active = true
 	elseif categoryId == "social" then
-		btn.Text = "VISIT"
+		-- Not following yet: the button prompts them to follow the owner.
+		btn.Text = "FOLLOW"
 		btn.BackgroundColor3 = Color3.fromRGB(70, 140, 255)
 		btn.Active = true
 	else
@@ -181,13 +192,8 @@ local function renderRow(categoryId, idx, row)
 		styleClaim(claim, row, categoryId)
 		claim.MouseButton1Click:Connect(function()
 			if categoryId == "social" and not row.ready and not row.claimed then
-				pcall(function()
-					SocialService:PromptGameInvite(player)
-				end)
-				SocialVisit:FireServer(row.id)
-				setMsg("Visited! Wait a moment, then claim.")
-				task.delay(1, requestSync)
-				task.delay(6, requestSync)
+				-- Not following: tell them to follow the owner, then claim.
+				setMsg("Follow " .. (row.devUsername or "the owner") .. " on Roblox to claim!")
 				return
 			end
 			if row.ready and not row.claimed then
@@ -207,16 +213,39 @@ local function renderRows()
 	end
 end
 
+local function formatTime(secs)
+	secs = math.max(0, math.floor(secs))
+	local h = math.floor(secs / 3600)
+	local m = math.floor((secs % 3600) / 60)
+	local s = secs % 60
+	return string.format("%02d:%02d:%02d", h, m, s)
+end
+
+-- Compute current playtime seconds (synced base + elapsed since sync).
+local function livePlaytime()
+	return syncedPlaytime + (os.clock() - syncedAt)
+end
+
+-- Compute current daily countdown (synced base - elapsed since sync).
+local function liveDaily()
+	return math.max(0, syncedDaily - (os.clock() - syncedAt))
+end
+
 local function refreshSubtitle()
 	if not payload then subLbl.Text = "Waiting for server sync..."; return end
 	if activeCat == "robuxspent" then
 		subLbl.Text = "Total Robux spent: R$" .. tostring(payload.robuxSpentTotal or 0)
 	elseif activeCat == "playtime" then
-		subLbl.Text = "You played for " .. tostring(math.floor((payload.totalPlaytime or 0) / 60)) .. " minutes"
+		subLbl.Text = "Played for " .. formatTime(livePlaytime())
 	elseif activeCat == "daily" then
-		subLbl.Text = (payload.dailyCountdown or 0) > 0 and "Ready in a few hours" or "Daily reward ready"
+		local left = liveDaily()
+		if left > 0 then
+			subLbl.Text = "Next daily in " .. formatTime(left)
+		else
+			subLbl.Text = "Daily reward ready!"
+		end
 	elseif activeCat == "social" then
-		subLbl.Text = "Visit the owners and claim your rewards!"
+		subLbl.Text = "Follow the owners on Roblox to claim!"
 	elseif activeCat == "group" then
 		subLbl.Text = "Like the game + Join the group"
 	elseif activeCat == "vipdaily" then
@@ -271,7 +300,18 @@ closeBtn.MouseButton1Click:Connect(onClose)
 RewardSync.OnClientEvent:Connect(function(newPayload)
 	if type(newPayload) ~= "table" then return end
 	payload = newPayload
+	-- Store timer bases for live counting.
+	syncedAt = os.clock()
+	syncedPlaytime = tonumber(newPayload.totalPlaytime) or 0
+	syncedDaily = tonumber(newPayload.dailyCountdown) or 0
 	if isOpen then render() end
+end)
+
+-- Live ticker: while the rewards window is open, keep playtime/daily counting.
+game:GetService("RunService").Heartbeat:Connect(function()
+	if isOpen and (activeCat == "playtime" or activeCat == "daily") then
+		refreshSubtitle()
+	end
 end)
 
 NotifyPlayer.OnClientEvent:Connect(function(info)

@@ -38,7 +38,6 @@ local EVENT_NAMES = {
 	"RewardSync",      -- Server -> Client : rewards payload (categories/rows)
 	"RewardClaim",     -- Client -> Server : claim a reward (category, id)
 	"RewardRequestSync", -- Client -> Server : ask for a fresh sync
-	"SocialVisit",     -- Client -> Server : player visited an owner (social reward)
 	"AddRobuxSpent",   -- Client -> Server : add to robux-spent total (on purchase)
 	"NotifyPlayer",    -- Server -> Client : popup notification message
 }

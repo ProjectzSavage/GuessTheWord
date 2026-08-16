@@ -4,30 +4,34 @@
 	Run this as a regular **Script** (server) in ServerScriptService.
 
 	PURPOSE
-	Server-authoritative rewards system (ported from the old gmc project):
-	the SERVER owns all reward state (claimed, playtime, robux spent, daily reset,
-	social visits), validates claims, persists to a DataStore, and sends a
-	`payload` the client renders. Rewards grant Reveal Letter / Reveal Word uses
-	(written to the player's Stats folder, which the powerup buttons read).
+	Server-authoritative rewards. The SERVER owns all reward state (claimed,
+	playtime, robux spent, daily reset), validates claims, persists to a
+	DataStore, and sends a `payload` the client renders.
 
-	CATEGORIES: playtime, daily, group, social, vipdaily, robuxspent.
+	REWARDS
+	Each reward can grant CASH (leaderstats.Cash) and/or powerup uses
+	(RevealLetterUses / RevealWordUses). Reveal Letter is common; Reveal Word is
+	rarer.
 
-	EVENTS (in ReplicatedStorage.Events):
-	  RewardSync (S->C payload), RewardClaim (C->S cat,id),
-	  RewardRequestSync (C->S), SocialVisit (C->S rowId), AddRobuxSpent (C->S),
-	  NotifyPlayer (S->C).
+	SOCIAL
+	Social rewards require the player to FOLLOW the owner(s) on Roblox. Since
+	Roblox has no public "is following" API, we use the player being FRIENDS with
+	the owner as the checkable proxy (friendship requires following on Roblox).
 
-	SETUP
-	  * Set GROUP_ID (your group).
-	  * Set VIP_GAMEPASS_ID (your VIP gamepass id).
-	  * Fill SOCIAL_OWNERS with the owner usernames/userIds to follow.
-	  * Reward image ids live in REWARD_IMAGES (fill in your assets).
+	TIMERS
+	Playtime is accumulated live each second; the client shows it counting up.
+	Daily rewards reset on a 24h timer (per-day, tracked by date + timestamp).
+
+	SETUP (config at top):
+	  * GROUP_ID         - your group id.
+	  * VIP_GAMEPASS_ID  - your VIP gamepass id (0 = disabled).
+	  * SOCIAL_OWNERS    - { username, userId } owners to follow.
+	  * Reward tables + REWARD_IMAGES (fill your asset ids).
 ]]
 
 local Players = game:GetService("Players")
 local DataStoreService = game:GetService("DataStoreService")
 local MarketplaceService = game:GetService("MarketplaceService")
-local SocialService = game:GetService("SocialService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Events = ReplicatedStorage:WaitForChild("Events")
@@ -47,55 +51,60 @@ local RewardClaim       = ensureEvent("RewardClaim")
 local NotifyPlayer      = ensureEvent("NotifyPlayer")
 local AddRobuxSpent     = ensureEvent("AddRobuxSpent")
 local RewardRequestSync = ensureEvent("RewardRequestSync")
-local SocialVisit       = ensureEvent("SocialVisit")
 
 -------------------------------------------------------------------------------
 -- CONFIG
 -------------------------------------------------------------------------------
-local GROUP_ID = 3597354        -- your group
-local VIP_GAMEPASS_ID = 0       -- set your VIP gamepass id
+local GROUP_ID = 3597354
+local VIP_GAMEPASS_ID = 0
 local SOCIAL_OWNERS = {
 	{ username = "TheCoolBaconHairIsMe", userId = 3107183806 },
 	{ username = "YurisMatrix",          userId = 3721585498 },
 }
-local SOCIAL_CLAIM_DELAY = 5    -- seconds after visiting before you can claim
 local DAILY_SECONDS = 24 * 60 * 60
 
 -- Reward image ids (fill in your assets).
 local REWARD_IMAGES = {
 	letter_1 = "rbxassetid://REVEAL_LETTER_1",
+	letter_2 = "rbxassetid://REVEAL_LETTER_2",
 	letter_3 = "rbxassetid://REVEAL_LETTER_3",
 	word_1   = "rbxassetid://REVEAL_WORD_1",
+	word_2   = "rbxassetid://REVEAL_WORD_2",
+	cash_100 = "rbxassetid://CASH_100",
+	cash_300 = "rbxassetid://CASH_300",
+	cash_500 = "rbxassetid://CASH_500",
+	cash_1000 = "rbxassetid://CASH_1000",
 }
 
--- Reward definitions. rewards is a text that the client parses to pick icons
--- (via REWARD_PATTERNS). Each grants powerup uses server-side on claim.
+-- Each reward: id, rewards (text for icon matching), and grants (cash + powerup).
+-- Reveal Letter is common; Reveal Word is rarer.
 local PLAYTIME = {
-	{ id = "pt_1",  requiredMin = 1,  powerup = "Letter", uses = 1, rewards = "+1 Reveal Letter" },
-	{ id = "pt_3",  requiredMin = 3,  powerup = "Letter", uses = 2, rewards = "+2 Reveal Letter" },
-	{ id = "pt_10", requiredMin = 10, powerup = "Word",   uses = 1, rewards = "+1 Reveal Word" },
+	{ id = "pt_1",  requiredMin = 1,  cash = 100, rewards = "+$100" },
+	{ id = "pt_3",  requiredMin = 3,  powerup = "Letter", uses = 1, rewards = "+1 Reveal Letter" },
+	{ id = "pt_10", requiredMin = 10, cash = 300, powerup = "Letter", uses = 2, rewards = "+$300, +2 Reveal Letter" },
+	{ id = "pt_20", requiredMin = 20, powerup = "Word", uses = 1, rewards = "+1 Reveal Word" },
 }
 
 local DAILY = {
-	{ id = "d1", powerup = "Letter", uses = 1, rewards = "+1 Reveal Letter" },
-	{ id = "d2", powerup = "Letter", uses = 2, rewards = "+2 Reveal Letter" },
-	{ id = "d3", powerup = "Letter", uses = 1, rewards = "+1 Reveal Letter" },
-	{ id = "d4", powerup = "Word",   uses = 1, rewards = "+1 Reveal Word" },
-	{ id = "d5", powerup = "Letter", uses = 3, rewards = "+3 Reveal Letter" },
-	{ id = "d6", powerup = "Letter", uses = 2, rewards = "+2 Reveal Letter" },
-	{ id = "d7", powerup = "Word",   uses = 2, rewards = "+2 Reveal Word" },
+	{ id = "d1", cash = 100, rewards = "+$100" },
+	{ id = "d2", powerup = "Letter", uses = 1, rewards = "+1 Reveal Letter" },
+	{ id = "d3", cash = 300, rewards = "+$300" },
+	{ id = "d4", powerup = "Letter", uses = 2, rewards = "+2 Reveal Letter" },
+	{ id = "d5", cash = 500, rewards = "+$500" },
+	{ id = "d6", powerup = "Letter", uses = 3, rewards = "+3 Reveal Letter" },
+	{ id = "d7", powerup = "Word", uses = 2, cash = 500, rewards = "+$500, +2 Reveal Word" },
 }
 
 local ROBUX_SPENT = {
-	{ id = "rb_50",   required = 50,   powerup = "Letter", uses = 1, rewards = "+1 Reveal Letter" },
+	{ id = "rb_50",   required = 50,   cash = 100, rewards = "+$100" },
 	{ id = "rb_250",  required = 250,  powerup = "Letter", uses = 2, rewards = "+2 Reveal Letter" },
-	{ id = "rb_1000", required = 1000, powerup = "Word",   uses = 1, rewards = "+1 Reveal Word" },
-	{ id = "rb_5000", required = 5000, powerup = "Word",   uses = 2, rewards = "+2 Reveal Word" },
-	{ id = "rb_10000",required = 10000,powerup = "Word",   uses = 3, rewards = "+3 Reveal Word" },
+	{ id = "rb_1000", required = 1000, cash = 1000, powerup = "Letter", uses = 3, rewards = "+$1000, +3 Reveal Letter" },
+	{ id = "rb_5000", required = 5000, powerup = "Word", uses = 2, rewards = "+2 Reveal Word" },
+	{ id = "rb_10000",required = 10000,powerup = "Word", uses = 3, cash = 1000, rewards = "+$1000, +3 Reveal Word" },
 }
 
 -------------------------------------------------------------------------------
--- DATA STORE
+-- DATA
 -------------------------------------------------------------------------------
 local playerData = {}
 
@@ -108,15 +117,10 @@ local function loadData(player)
 		data.lastDailyClaim = data.lastDailyClaim or 0
 		data.dailyDay = data.dailyDay or 1
 		data.robuxSpent = data.robuxSpent or 0
-		data.lastClaimDate = data.lastClaimDate or os.date("%Y-%m-%d")
 		data.totalPlaytime = data.totalPlaytime or 0
-		data.socialVisitAt = data.socialVisitAt or {}
 		return data
 	end
-	return {
-		claimed = {}, lastDailyClaim = 0, dailyDay = 1, robuxSpent = 0,
-		lastClaimDate = os.date("%Y-%m-%d"), totalPlaytime = 0, socialVisitAt = {},
-	}
+	return { claimed = {}, lastDailyClaim = 0, dailyDay = 1, robuxSpent = 0, totalPlaytime = 0 }
 end
 
 local function saveData(player)
@@ -135,9 +139,18 @@ local function ensureData(player)
 end
 
 -------------------------------------------------------------------------------
--- GRANTING REWARDS
+-- GRANTING
 -------------------------------------------------------------------------------
+local function addCash(player, amount)
+	local ls = player:FindFirstChild("leaderstats")
+	local cash = ls and ls:FindFirstChild("Cash")
+	if cash and cash:IsA("IntValue") and amount > 0 then
+		cash.Value = cash.Value + amount
+	end
+end
+
 local function grantPowerupUses(player, powerup, uses)
+	if not powerup then return end
 	local stats = player:FindFirstChild("Stats")
 	if not stats then return end
 	local useName = (powerup == "Word") and "RevealWordUses" or "RevealLetterUses"
@@ -150,40 +163,50 @@ local function grantPowerupUses(player, powerup, uses)
 	val.Value = val.Value + (uses or 1)
 end
 
-local function markClaimed(player, id, def)
+local function markClaimed(player, id, grant)
 	local data = ensureData(player)
 	data.claimed[id] = true
-	if def and def.powerup then
-		grantPowerupUses(player, def.powerup, def.uses)
+	if grant then
+		if grant.cash then addCash(player, grant.cash) end
+		if grant.powerup then grantPowerupUses(player, grant.powerup, grant.uses) end
 	end
 	saveData(player)
 end
 
 -------------------------------------------------------------------------------
--- PROGRESS / READINESS
+-- SOCIAL (follow) + READINESS
 -------------------------------------------------------------------------------
+-- Roblox has no public follow-check API, so "following" is proxied by the
+-- player being FRIENDS with the owner (friending requires following them).
+local function isFollowing(player, ownerId)
+	local ok, isFriend = pcall(function()
+		return player:IsFriendsWith(ownerId)
+	end)
+	return ok and isFriend
+end
+
 local function isDailyId(id)
 	return type(id) == "string" and string.sub(id, 1, 1) == "d"
 end
 
 local function checkDailyReset(player, data)
-	local today = os.date("%Y-%m-%d")
-	if data.lastClaimDate == today then return end
+	local now = os.time()
+	local nextClaim = (data.lastDailyClaim or 0) + DAILY_SECONDS
+	if now < nextClaim then return end
+	-- A new daily cycle: reset daily claims, advance the day.
 	for id in pairs(data.claimed) do
-		if isDailyId(id) then
-			data.claimed[id] = nil
-		end
+		if isDailyId(id) then data.claimed[id] = nil end
 	end
-	data.lastClaimDate = today
-	data.lastDailyClaim = 0
-	data.dailyDay = data.dailyDay or 1
+	data.lastDailyClaim = now
+	data.dailyDay = ((data.dailyDay or 1) % 7) + 1
 	saveData(player)
 end
 
 local function buildPayload(player, data)
 	checkDailyReset(player, data)
 	local playMin = math.floor((data.totalPlaytime or 0) / 60)
-	local dailyLeft = math.max(0, DAILY_SECONDS - (os.time() - (data.lastDailyClaim or 0)))
+	local now = os.time()
+	local dailyLeft = math.max(0, (data.lastDailyClaim or 0) + DAILY_SECONDS - now)
 	local robuxSpent = data.robuxSpent or 0
 
 	local categories = { playtime = {}, daily = {}, group = {}, social = {}, vipdaily = {}, robuxspent = {} }
@@ -198,21 +221,19 @@ local function buildPayload(player, data)
 
 	for i, row in ipairs(DAILY) do
 		table.insert(categories.daily, {
-			id = row.id, rewards = row.rewards,
+			id = row.id, rewards = row.rewards, day = i,
 			claimed = data.claimed[row.id] == true,
 			ready = (data.dailyDay == i and dailyLeft <= 0 and not data.claimed[row.id]),
 		})
 	end
 
-	-- Group
 	local ok, inGroup = pcall(function() return player:IsInGroup(GROUP_ID) end)
 	local groupClaimed = data.claimed["group_main"] == true
 	table.insert(categories.group, {
-		id = "group_main", rewards = "+2 Reveal Letter",
+		id = "group_main", rewards = "+$500, +2 Reveal Letter", left = "Join",
 		claimed = groupClaimed, ready = (ok and inGroup) and not groupClaimed,
 	})
 
-	-- VIP
 	local ownsVip = false
 	if VIP_GAMEPASS_ID > 0 then
 		local vok, v = pcall(function()
@@ -222,27 +243,22 @@ local function buildPayload(player, data)
 	end
 	local vipClaimed = data.claimed["vip_main"] == true
 	table.insert(categories.vipdaily, {
-		id = "vip_main", rewards = "+3 Reveal Letter",
+		id = "vip_main", rewards = "+3 Reveal Letter", left = "VIP",
 		claimed = vipClaimed, ready = ownsVip and not vipClaimed,
 	})
 
-	-- Social (visit each owner, wait a delay, then ready)
 	for _, dev in ipairs(SOCIAL_OWNERS) do
 		local qid = "social_" .. tostring(dev.userId)
-		local visitAt = (data.socialVisitAt and data.socialVisitAt[qid]) or 0
-		local waitLeft = 0
-		if visitAt > 0 then
-			waitLeft = math.max(0, SOCIAL_CLAIM_DELAY - (os.time() - visitAt))
-		end
+		local followed = isFollowing(player, dev.userId)
 		table.insert(categories.social, {
 			id = qid, left = "@" .. dev.username, rewards = "+1 Reveal Letter",
 			claimed = data.claimed[qid] == true,
-			ready = (visitAt > 0 and waitLeft <= 0 and not data.claimed[qid]),
-			waitLeft = waitLeft, devUsername = dev.username, devUserId = dev.userId,
+			ready = followed and not data.claimed[qid],
+			followed = followed,
+			devUsername = dev.username,
 		})
 	end
 
-	-- Robux spent
 	for _, row in ipairs(ROBUX_SPENT) do
 		table.insert(categories.robuxspent, {
 			id = row.id, left = row.required, rewards = row.rewards,
@@ -254,6 +270,7 @@ local function buildPayload(player, data)
 	return {
 		totalPlaytime = data.totalPlaytime or 0,
 		dailyCountdown = dailyLeft,
+		dailyDay = data.dailyDay or 1,
 		robuxSpentTotal = robuxSpent,
 		categories = categories,
 	}
@@ -267,27 +284,17 @@ end
 -------------------------------------------------------------------------------
 -- EVENTS
 -------------------------------------------------------------------------------
-SocialVisit.OnServerEvent:Connect(function(player, rowId)
-	local data = ensureData(player)
-	rowId = tostring(rowId or "")
-	if rowId == "" then return end
-	data.socialVisitAt = data.socialVisitAt or {}
-	data.socialVisitAt[rowId] = os.time()
-	saveData(player)
-	syncPlayer(player)
-end)
-
 RewardClaim.OnServerEvent:Connect(function(player, categoryId, rowId)
 	local data = ensureData(player)
 	categoryId = tostring(categoryId or "")
 	rowId = tostring(rowId or "")
 
-	-- Social requires the visit + wait.
+	-- Social requires following the owner.
 	if categoryId == "social" then
-		local visitAt = (data.socialVisitAt and data.socialVisitAt[rowId]) or 0
-		local waitLeft = SOCIAL_CLAIM_DELAY - (os.time() - visitAt)
-		if visitAt <= 0 or waitLeft > 0 then
-			NotifyPlayer:FireClient(player, { title = "Not Ready", message = "Press VISIT first, then wait a few seconds.", kind = "warn", duration = 2.5 })
+		local ownerId = tonumber(rowId:match("social_(%d+)"))
+		local followed = ownerId and isFollowing(player, ownerId)
+		if not followed then
+			NotifyPlayer:FireClient(player, { title = "Not Following", message = "Follow the owner on Roblox to claim this reward.", kind = "warn", duration = 3 })
 			syncPlayer(player)
 			return
 		end
@@ -297,35 +304,36 @@ RewardClaim.OnServerEvent:Connect(function(player, categoryId, rowId)
 	local rows = payload.categories[categoryId]
 	if type(rows) ~= "table" then syncPlayer(player); return end
 
-	local row, def
+	local row
 	for _, r in ipairs(rows) do
 		if r.id == rowId then row = r end
 	end
-	-- Find the matching definition for reward powerup data.
-	local lookup = { playtime = PLAYTIME, daily = DAILY, robuxspent = ROBUX_SPENT }
-	local defs = lookup[categoryId]
-	if defs then
-		for _, d in ipairs(defs) do
-			if d.id == rowId then def = d end
+	if not row or row.claimed or not row.ready then syncPlayer(player); return end
+
+	-- Determine the grant.
+	local grant
+	if categoryId == "social" then
+		grant = { powerup = "Letter", uses = 1 }
+	elseif categoryId == "group" then
+		grant = { cash = 500, powerup = "Letter", uses = 2 }
+	elseif categoryId == "vipdaily" then
+		grant = { powerup = "Letter", uses = 3 }
+	else
+		local lookup = { playtime = PLAYTIME, daily = DAILY, robuxspent = ROBUX_SPENT }
+		local defs = lookup[categoryId]
+		if defs then
+			for _, d in ipairs(defs) do
+				if d.id == rowId then grant = d end
+			end
 		end
 	end
 
-	if not row or row.claimed or not row.ready then syncPlayer(player); return end
+	if not grant then syncPlayer(player); return end
 
-	-- Grant powerup uses (special-cases for group/vip/social).
-	if def then
-		markClaimed(player, row.id, def)
-	elseif categoryId == "group" then
-		markClaimed(player, row.id, { powerup = "Letter", uses = 2 })
-	elseif categoryId == "vipdaily" then
-		markClaimed(player, row.id, { powerup = "Letter", uses = 3 })
-	elseif categoryId == "social" then
-		markClaimed(player, row.id, { powerup = "Letter", uses = 1 })
-	end
+	markClaimed(player, row.id, grant)
 
 	if categoryId == "daily" then
 		data.lastDailyClaim = os.time()
-		data.dailyDay = (data.dailyDay or 1) % 7 + 1
 		saveData(player)
 	end
 
@@ -354,9 +362,7 @@ Players.PlayerAdded:Connect(function(player)
 	data.totalPlaytime = 0
 	data.claimed = data.claimed or {}
 	for id in pairs(data.claimed) do
-		if string.sub(id, 1, 3) == "pt_" then
-			data.claimed[id] = nil
-		end
+		if string.sub(id, 1, 3) == "pt_" then data.claimed[id] = nil end
 	end
 	saveData(player)
 
@@ -365,6 +371,10 @@ Players.PlayerAdded:Connect(function(player)
 			task.wait(1)
 			if not playerData[player.UserId] then break end
 			data.totalPlaytime = (data.totalPlaytime or 0) + 1
+			-- Push a lightweight sync every 5s so playtime counts live.
+			if data.totalPlaytime % 5 == 0 then
+				syncPlayer(player)
+			end
 			if data.totalPlaytime % 60 == 0 then saveData(player) end
 		end
 	end)
@@ -386,7 +396,7 @@ task.spawn(function()
 	end
 end)
 
--- Public helper so other scripts can add robux-spent on real purchases.
+-- Public helper: add robux-spent on a real purchase.
 _G.RewardsAddRobuxSpent = function(player, amount)
 	if not player then return end
 	amount = tonumber(amount) or 0
