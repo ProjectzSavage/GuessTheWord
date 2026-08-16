@@ -296,6 +296,15 @@ RewardsF  (Frame, main window, Visible=false)
 
 The `+` buttons on the StatsPanel open this window (via `_G.RewardsAPI`).
 Reward data lives in the `REWARDS` table at the top of `RewardsController`.
+Each entry can set `powerup` ("Letter"/"Word"), `uses`, and an optional
+`requirement` that gates claiming:
+- `{ type = "group", id = <groupId> }` — must be in the group (prompts to join).
+- `{ type = "gamepass", id = <gamepassId> }` — must own the gamepass (prompts to buy).
+- `{ type = "follow", users = {...} }` — must follow the owner(s).
+- `{ type = "robux", min = <amount> }` — must have spent that much Robux.
+
+Reveal Letter rewards are more common; Reveal Word rewards are rarer (fewer,
+lower uses).
 
 ## Heart image resolution (256px vs 512px)
 

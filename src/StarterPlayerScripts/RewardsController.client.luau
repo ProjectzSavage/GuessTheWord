@@ -40,31 +40,59 @@ local PlayerGui = player:WaitForChild("PlayerGui")
 -- ---------------------------------------------------------------------------
 -- REWARD CONFIG - edit here (image ids are placeholders - fill yours in).
 -- Each reward can grant powerup uses: powerup = "Letter"/"Word", uses = amount.
--- Claiming a reward adds those uses to the player's hidden Stats folder, which
--- the powerup buttons' PriceLbl reflects ("N Use" when they have uses).
+-- Reveal Letter is more common; Reveal Word is rarer (fewer rewards, lower uses).
+-- Claiming a reward adds uses to the player's hidden Stats folder, which the
+-- powerup buttons' PriceLbl reflects ("N Use" when they have uses).
+--
+-- Optional `requirement` field gates the reward:
+--   { type = "group", id = 3597354 }        -> must be in the group to claim
+--   { type = "follow", users = {...} }      -> must follow the owner(s)
+--   { type = "gamepass", id = 0 }           -> must own the VIP gamepass
+--   { type = "robux", min = 50 }            -> must have spent >= min robux
+-- If unmet, clicking Claim prompts the player (join group / buy gamepass etc.).
 -- ---------------------------------------------------------------------------
 local REWARDS = {
 	Daily = {
 		{ label = "Log in for 1 day",    reward = "rbxassetid://DAILY_1", claimed = false, powerup = "Letter", uses = 1 },
-		{ label = "Log in for 3 days",   reward = "rbxassetid://DAILY_3", claimed = false, powerup = "Word",   uses = 1 },
-		{ label = "Log in for 7 days",   reward = "rbxassetid://DAILY_7", claimed = false, powerup = "Letter", uses = 3 },
+		{ label = "Log in for 3 days",   reward = "rbxassetid://DAILY_3", claimed = false, powerup = "Letter", uses = 2 },
+		{ label = "Log in for 7 days",   reward = "rbxassetid://DAILY_7", claimed = false, powerup = "Word",   uses = 1 },
 	},
 	Group = {
-		{ label = "Join the group",      reward = "rbxassetid://GROUP_JOIN", claimed = false, powerup = "Letter", uses = 2 },
+		{ label = "Join our group",      reward = "rbxassetid://GROUP_JOIN", claimed = false, powerup = "Letter", uses = 2,
+			requirement = { type = "group", id = 3597354 } },
+		{ label = "Group milestone 50 members", reward = "rbxassetid://GROUP_50", claimed = false, powerup = "Word", uses = 1,
+			requirement = { type = "group", id = 3597354 } },
 	},
 	Playtime = {
 		{ label = "Play for 1 hour",     reward = "rbxassetid://TIME_1H", claimed = false, powerup = "Letter", uses = 2 },
-		{ label = "Play for 5 hours",    reward = "rbxassetid://TIME_5H", claimed = false, powerup = "Word", uses = 1 },
+		{ label = "Play for 5 hours",    reward = "rbxassetid://TIME_5H", claimed = false, powerup = "Letter", uses = 3 },
+		{ label = "Play for 20 hours",   reward = "rbxassetid://TIME_20H", claimed = false, powerup = "Word", uses = 1 },
 	},
 	RobuxSpent = {
-		{ label = "Spend 100 Robux",     reward = "rbxassetid://RBX_100", claimed = false, powerup = "Word", uses = 2 },
+		{ label = "Spend 50 Robux",      reward = "rbxassetid://RBX_50", claimed = false, powerup = "Letter", uses = 1,
+			requirement = { type = "robux", min = 50 } },
+		{ label = "Spend 250 Robux",     reward = "rbxassetid://RBX_250", claimed = false, powerup = "Letter", uses = 2,
+			requirement = { type = "robux", min = 250 } },
+		{ label = "Spend 1000 Robux",    reward = "rbxassetid://RBX_1000", claimed = false, powerup = "Word", uses = 1,
+			requirement = { type = "robux", min = 1000 } },
+		{ label = "Spend 5000 Robux",    reward = "rbxassetid://RBX_5000", claimed = false, powerup = "Word", uses = 2,
+			requirement = { type = "robux", min = 5000 } },
+		{ label = "Spend 10000 Robux",   reward = "rbxassetid://RBX_10000", claimed = false, powerup = "Word", uses = 3,
+			requirement = { type = "robux", min = 10000 } },
 	},
 	Social = {
-		{ label = "Follow on X",         reward = "rbxassetid://SOCIAL_X", claimed = false, powerup = "Letter", uses = 1 },
-		{ label = "Subscribe on YouTube",reward = "rbxassetid://SOCIAL_YT", claimed = false, powerup = "Letter", uses = 2 },
+		{ label = "Follow TheCoolBaconHairIsMe", reward = "rbxassetid://SOCIAL_OWNER1", claimed = false, powerup = "Letter", uses = 1,
+			requirement = { type = "follow", users = { "TheCoolBaconHairIsMe" } } },
+		{ label = "Follow YurisMatrix",  reward = "rbxassetid://SOCIAL_OWNER2", claimed = false, powerup = "Letter", uses = 2,
+			requirement = { type = "follow", users = { "YurisMatrix" } } },
+		{ label = "Follow both owners",  reward = "rbxassetid://SOCIAL_BOTH", claimed = false, powerup = "Word", uses = 1,
+			requirement = { type = "follow", users = { "TheCoolBaconHairIsMe", "YurisMatrix" } } },
 	},
 	VipDaily = {
-		{ label = "VIP daily reward",    reward = "rbxassetid://VIP_DAILY", claimed = false, powerup = "Letter", uses = 5 },
+		{ label = "VIP daily reward",    reward = "rbxassetid://VIP_DAILY", claimed = false, powerup = "Letter", uses = 5,
+			requirement = { type = "gamepass", id = 0 } }, -- set your VIP gamepass id
+		{ label = "VIP weekly reward",   reward = "rbxassetid://VIP_WEEKLY", claimed = false, powerup = "Word", uses = 2,
+			requirement = { type = "gamepass", id = 0 } },
 	},
 }
 
@@ -130,6 +158,67 @@ local function clearRows(scroll)
 	end
 end
 
+-- ---------------------------------------------------------------------------
+-- REQUIREMENT CHECK + PROMPT
+-- ---------------------------------------------------------------------------
+local MarketplaceService = game:GetService("MarketplaceService")
+
+-- Check if the player meets a reward's requirement.
+-- (Note: follow-status & robux-spent are placeholders that return true so the
+--  reward can be claimed; wire real checks later via web API / gamepass.)
+local function requirementMet(req)
+	if not req then
+		return true
+	end
+	if req.type == "group" then
+		local ok, inGroup = pcall(function()
+			return player:IsInGroup(req.id)
+		end)
+		return ok and inGroup
+	elseif req.type == "gamepass" then
+		local ok, owns = pcall(function()
+			return MarketplaceService:UserOwnsGamePassAsync(player.UserId, req.id)
+		end)
+		return ok and owns
+	elseif req.type == "robux" then
+		-- Placeholder: assume met if they've claimed a robux reward before.
+		-- (Real robux-spent tracking would use a server/DataStore value.)
+		return true
+	elseif req.type == "follow" then
+		-- Placeholder: social follow status is checked externally (not via API).
+		return true
+	end
+	return true
+end
+
+-- Prompt the player when they don't meet a requirement.
+local function promptRequirement(req)
+	if not req then
+		return
+	end
+	if req.type == "group" then
+		local ok, err = pcall(function()
+			MarketplaceService:PromptGroupMembershipPurchase(player, req.id)
+		end)
+		setMsg("Join the group to claim this reward!")
+		if not ok then
+			warn("[Rewards] Group prompt failed: ", err)
+		end
+	elseif req.type == "gamepass" then
+		local ok, err = pcall(function()
+			MarketplaceService:PromptGamePassPurchase(player, req.id)
+		end)
+		setMsg("Buy the VIP gamepass to claim this reward!")
+		if not ok then
+			warn("[Rewards] Gamepass prompt failed: ", err)
+		end
+	elseif req.type == "follow" then
+		setMsg("Follow the owners to claim this reward!")
+	elseif req.type == "robux" then
+		setMsg("Spend more Robux to unlock this reward!")
+	end
+end
+
 -- Grant powerup uses to the player's Stats folder.
 local function grantPowerupUses(powerup, uses)
 	local stats = player:FindFirstChild("Stats")
@@ -173,6 +262,11 @@ local function makeRow(scroll, rowTemplate, data)
 
 	claim.Activated:Connect(function()
 		if not data.claimed then
+			-- Check the requirement first.
+			if not requirementMet(data.requirement) then
+				promptRequirement(data.requirement)
+				return -- do NOT claim; keep it un-claimed
+			end
 			data.claimed = true
 			-- Grant the powerup uses to the player (updates the buttons' PriceLbl).
 			if data.powerup then
