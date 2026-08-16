@@ -5,8 +5,8 @@
 
 	PURPOSE
 	Server-authoritative rewards. The SERVER owns all reward state (claimed,
-	playtime, robux spent, daily reset), validates claims, persists to a
-	DataStore, and sends a `payload` the client renders.
+	playtime, robux spent, daily reset), validates claims, and sends a `payload`
+	the client renders.
 
 	REWARDS
 	Each reward can grant CASH (leaderstats.Cash) and/or powerup uses
@@ -14,28 +14,34 @@
 	rarer.
 
 	SOCIAL
-	Social rewards require the player to FOLLOW the owner(s) on Roblox. Since
-	Roblox has no public "is following" API, we use the player being FRIENDS with
-	the owner as the checkable proxy (friendship requires following on Roblox).
+	Social rewards require the player to FOLLOW the owner(s) on Roblox. Roblox has
+	no built-in follow-check API, so we query the RoProxy friends API
+	(`https://friends.roproxy.com/v1/users/<userId>/followings`) with HttpService
+	and check whether the owner's id is in the player's followings list. Results
+	are cached (FOLLOW_CHECK_TTL) and refreshed in the background.
 
 	TIMERS
 	Playtime is accumulated live each second; the client shows it counting up.
-	Daily rewards reset on a 24h timer (per-day, tracked by date + timestamp).
+	Daily rewards reset on a 24h timer (per-day, tracked by timestamp).
+
+	PERSISTENCE
+	Reward progress is stored IN-MEMORY only for now (no DataStore). It resets on
+	server restart / player leave. Add a DataStore later when the game is done.
 
 	SETUP (config at top):
 	  * GROUP_ID         - your group id.
 	  * VIP_GAMEPASS_ID  - your VIP gamepass id (0 = disabled).
 	  * SOCIAL_OWNERS    - { username, userId } owners to follow.
 	  * Reward tables + REWARD_IMAGES (fill your asset ids).
+	  * ENABLE HttpRequests in Game Settings (needed for the follow API).
 ]]
 
 local Players = game:GetService("Players")
-local DataStoreService = game:GetService("DataStoreService")
+local HttpService = game:GetService("HttpService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Events = ReplicatedStorage:WaitForChild("Events")
-local RewardDataStore = DataStoreService:GetDataStore("GuessTheWord_Rewards_V1")
 
 local function ensureEvent(name)
 	local e = Events:FindFirstChild(name)
@@ -62,6 +68,8 @@ local SOCIAL_OWNERS = {
 	{ username = "YurisMatrix",          userId = 3721585498 },
 }
 local DAILY_SECONDS = 24 * 60 * 60
+local FOLLOW_CHECK_TTL = 60  -- seconds between follow-status refreshes
+local FOLLOW_API = "https://friends.roproxy.com/v1/users/%d/followings"
 
 -- Reward image ids (fill in your assets).
 local REWARD_IMAGES = {
@@ -106,34 +114,19 @@ local ROBUX_SPENT = {
 -------------------------------------------------------------------------------
 -- DATA
 -------------------------------------------------------------------------------
+-- In-memory only (no DataStore until the game is done).
 local playerData = {}
 
-local function loadData(player)
-	local ok, data = pcall(function()
-		return RewardDataStore:GetAsync("player_" .. player.UserId)
-	end)
-	if ok and type(data) == "table" then
-		data.claimed = data.claimed or {}
-		data.lastDailyClaim = data.lastDailyClaim or 0
-		data.dailyDay = data.dailyDay or 1
-		data.robuxSpent = data.robuxSpent or 0
-		data.totalPlaytime = data.totalPlaytime or 0
-		return data
-	end
-	return { claimed = {}, lastDailyClaim = 0, dailyDay = 1, robuxSpent = 0, totalPlaytime = 0 }
-end
-
+-- saveData is a no-op placeholder; swap in a DataStore SetAsync later.
 local function saveData(player)
-	local data = playerData[player.UserId]
-	if not data then return end
-	pcall(function()
-		RewardDataStore:SetAsync("player_" .. player.UserId, data)
-	end)
+	-- Persistence disabled until the game is done.
 end
 
 local function ensureData(player)
 	if not playerData[player.UserId] then
-		playerData[player.UserId] = loadData(player)
+		playerData[player.UserId] = {
+			claimed = {}, lastDailyClaim = 0, dailyDay = 1, robuxSpent = 0, totalPlaytime = 0,
+		}
 	end
 	return playerData[player.UserId]
 end
@@ -176,13 +169,56 @@ end
 -------------------------------------------------------------------------------
 -- SOCIAL (follow) + READINESS
 -------------------------------------------------------------------------------
--- Roblox has no public follow-check API, so "following" is proxied by the
--- player being FRIENDS with the owner (friending requires following them).
-local function isFollowing(player, ownerId)
-	local ok, isFriend = pcall(function()
-		return player:IsFriendsWith(ownerId)
+-- Follow cache: player.UserId -> { followedIds = {id=true}, at = os.clock() }
+local followCache = {}
+
+-- Query the RoProxy followings API and return a set of followed user ids.
+local function fetchFollowings(userId)
+	local url = string.format(FOLLOW_API, userId)
+	local ok, resp = pcall(function()
+		return HttpService:GetAsync(url)
 	end)
-	return ok and isFriend
+	if not ok then
+		return nil
+	end
+	local ok2, decoded = pcall(function()
+		return HttpService:JSONDecode(resp)
+	end)
+	if not ok2 or type(decoded) ~= "table" then
+		return nil
+	end
+	local followed = {}
+	if type(decoded.data) == "table" then
+		for _, entry in ipairs(decoded.data) do
+			if type(entry) == "table" and entry.id then
+				followed[entry.id] = true
+			end
+		end
+	end
+	return followed
+end
+
+-- Refresh a player's cached follow status in the background.
+local function refreshFollowStatus(player)
+	local followed = fetchFollowings(player.UserId)
+	if followed then
+		followCache[player.UserId] = { followed = followed, at = os.clock() }
+	end
+end
+
+-- Return whether the player follows ownerId (from cache; refresh on miss/expiry).
+local function isFollowing(player, ownerId)
+	local cached = followCache[player.UserId]
+	if cached and (os.clock() - cached.at) < FOLLOW_CHECK_TTL then
+		return cached.followed[ownerId] == true
+	end
+	-- Cache miss/expired: fetch synchronously (rare - once per TTL).
+	local followed = fetchFollowings(player.UserId)
+	if followed then
+		followCache[player.UserId] = { followed = followed, at = os.clock() }
+		return followed[ownerId] == true
+	end
+	return false -- request failed -> not following
 end
 
 local function isDailyId(id)
@@ -379,21 +415,23 @@ Players.PlayerAdded:Connect(function(player)
 		end
 	end)
 
+	-- Refresh follow status periodically so social rewards update live.
+	task.spawn(function()
+		while player.Parent do
+			refreshFollowStatus(player)
+			if player.Parent then syncPlayer(player) end
+			task.wait(FOLLOW_CHECK_TTL)
+		end
+	end)
+
 	task.delay(1.5, function()
 		if player.Parent then syncPlayer(player) end
 	end)
 end)
 
 Players.PlayerRemoving:Connect(function(player)
-	saveData(player)
 	playerData[player.UserId] = nil
-end)
-
-task.spawn(function()
-	while true do
-		task.wait(300)
-		for _, p in ipairs(Players:GetPlayers()) do saveData(p) end
-	end
+	followCache[player.UserId] = nil
 end)
 
 -- Public helper: add robux-spent on a real purchase.

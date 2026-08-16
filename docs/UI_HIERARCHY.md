@@ -303,8 +303,9 @@ Each row's ClaimBtn shows a state:
 - **CLAIMED** (green, disabled) — already claimed.
 - **CLAIM** (green, enabled) — ready.
 - **FOLLOW** (blue, enabled) — social: you must **follow the owner on Roblox**
-  to claim (checked server-side via friendship, since Roblox has no public
-  follow-check API).
+  to claim. The server checks via the RoProxy followings API
+  (`https://friends.roproxy.com/v1/users/<userId>/followings`), cached ~60s.
+  **Enable HTTP Requests in Game Settings** for this to work.
 - **NOT READY** (grey, disabled) — requirement not met / on cooldown.
 
 Rewards can grant **Cash** (`leaderstats.Cash`) and/or **powerup uses**
@@ -319,6 +320,10 @@ Config lives at the top of `RewardsService.server.luau`: `GROUP_ID`, the
 **Timers work live:** playtime counts up in real time and the daily countdown
 ticks down while the window is open (the client computes from the last synced
 base + elapsed time).
+
+**Persistence:** reward progress is **in-memory only** right now (no DataStore) —
+it resets on server restart / player leave. Add a DataStore later once the game
+is done.
 
 ## Heart image resolution (256px vs 512px)
 
