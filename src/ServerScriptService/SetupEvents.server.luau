@@ -35,6 +35,12 @@ local EVENT_NAMES = {
 	"PowerupGrant",    -- Server -> Client : server reveals the letter/word
 	"PurchasePowerup", -- Client -> Server : buy a powerup with robux (placeholder)
 	"LeaveSeat",       -- Client -> Server : player leaves their chair (cancel)
+	"RewardSync",      -- Server -> Client : rewards payload (categories/rows)
+	"RewardClaim",     -- Client -> Server : claim a reward (category, id)
+	"RewardRequestSync", -- Client -> Server : ask for a fresh sync
+	"SocialVisit",     -- Client -> Server : player visited an owner (social reward)
+	"AddRobuxSpent",   -- Client -> Server : add to robux-spent total (on purchase)
+	"NotifyPlayer",    -- Server -> Client : popup notification message
 }
 
 -- Idempotent: if the folder already exists, reuse it (don't wipe manual setup).

@@ -50,6 +50,11 @@ build it once. The full details are further down.
    player reaches 5 / 10 / 25 / 50 etc. Add the script to
    `ServerScriptService > Scripts`. Use **Scale, not offset**, for any labels you
    build.
+11. **RewardsService config** — add `RewardsService.server.luau` to
+   `ServerScriptService > Scripts`. Set the config at the top: `GROUP_ID` (your
+   group), `VIP_GAMEPASS_ID` (your VIP gamepass), `SOCIAL_OWNERS` (the owners to
+   follow), and fill in the reward image IDs in `REWARD_IMAGES` (both server and
+   client). The client `RewardsController` renders whatever the server sends.
 
 ---
 
@@ -74,6 +79,7 @@ ServerScriptService
 | `src/ServerScriptService/GameManager.server.luau`               | `ServerScriptService > Scripts` | Script   |
 | `src/ServerScriptService/Hearts.server.luau`                    | `ServerScriptService > Scripts` | Script   |
 | `src/ServerScriptService/Nametag.server.luau`                   | `ServerScriptService > Scripts` | Script   |
+| `src/ServerScriptService/RewardsService.server.luau`            | `ServerScriptService > Scripts` | Script   |
 | `src/ServerStorage/Modules/Dictionary.luau`                     | `ServerStorage > Modules`   | ModuleScript |
 | `src/ServerStorage/Modules/HeartHUDManager.luau`                | `ServerStorage > Modules`   | ModuleScript |
 | `src/ReplicatedStorage/LetterImages.luau`                      | `ReplicatedStorage`         | ModuleScript |

@@ -295,13 +295,21 @@ RewardsF  (Frame, main window, Visible=false)
 ```
 
 The `+` buttons on the StatsPanel open this window (via `_G.RewardsAPI`).
-Reward data lives in the `REWARDS` table at the top of `RewardsController`.
-Each entry can set `powerup` ("Letter"/"Word"), `uses`, and an optional
-`requirement` that gates claiming:
-- `{ type = "group", id = <groupId> }` — must be in the group (prompts to join).
-- `{ type = "gamepass", id = <gamepassId> }` — must own the gamepass (prompts to buy).
-- `{ type = "follow", users = {...} }` — must follow the owner(s).
-- `{ type = "robux", min = <amount> }` — must have spent that much Robux.
+
+**Server-authoritative:** the server (`RewardsService.server.luau`) owns all
+reward state (claimed, playtime, robux spent, daily reset, social visits) and
+sends a `payload` the client renders. The client `RewardsController` just
+displays it. Each row's ClaimBtn shows a state:
+- **CLAIMED** (green, disabled) — already claimed.
+- **CLAIM** (green, enabled) — ready.
+- **VISIT** (blue, enabled) — social: press to "visit" an owner, then wait.
+- **NOT READY** (grey, disabled) — requirement not met / on cooldown.
+
+Config lives at the top of `RewardsService.server.luau`: `GROUP_ID`, the
+`VIP_GAMEPASS_ID`, `SOCIAL_OWNERS` (owners to follow), and the reward tables
+(playtime/daily/group/social/vipdaily/robuxspent). Reward image ids are in
+`REWARD_IMAGES` on both server and client (matched by pattern text like
+"+1 Reveal Letter").
 
 Reveal Letter rewards are more common; Reveal Word rewards are rarer (fewer,
 lower uses).

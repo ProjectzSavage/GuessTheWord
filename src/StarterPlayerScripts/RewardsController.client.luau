@@ -4,349 +4,290 @@
 	Run this as a **LocalScript** in StarterPlayerScripts.
 
 	PURPOSE
-	Drives the "Rewards" window (RewardsF) with left-side tabs, a content area,
-	and reward rows. It builds the reward rows from the REWARDS config below by
-	cloning your RowTemplate (ImageTemplate reward icon + ClaimBtn).
+	Renders the server-driven RewardsF window. The SERVER (RewardsService) sends
+	a `payload` with categories + rows (id, left, rewards, claimed, ready). This
+	client clones the RowTemplate per row and styles the ClaimBtn:
+	  * CLAIMED (green, disabled)  -- already claimed
+	  * CLAIM   (green, enabled)   -- ready to claim
+	  * VISIT   (blue, enabled)    -- social: press to "visit" an owner
+	  * NOT READY (grey, disabled) -- requirement not met / on cooldown
 
-	REQUIRED UI - the `RewardsF` hierarchy (build it in a ScreenGui, e.g.
-	"Currency" or "RewardsGui"). See docs/UI_HIERARCHY.md for the full tree:
-		RewardsF
-		  ├── Content
-		  │     ├── CategoryTitle
-		  │     ├── CategorySubtitle
-		  │     └── RowsScroll
-		  │           └── RowTemplate
-		  │                 ├── LeftLbl
-		  │                 ├── RewardsContainer ── ImageTemplate
-		  │                 └── ClaimBtn
-		  ├── LeftTabs
-		  │     ├── DailyBtn   GroupBtn   PlaytimeBtn
-		  │     ├── RobuxSpentBtn   SocialBtn   VipDailyBtn
-		  ├── CloseBtn
-		  ├── MsgLbl
-		  └── TitleLbl
+	SETUP (hierarchy in docs/UI_HIERARCHY.md):
+	  RewardsF (in GameUI)
+	    ├── CloseBtn, MsgLbl, TitleLbl
+	    ├── LeftTabs: DailyBtn, GroupBtn, PlaytimeBtn, RobuxSpentBtn, SocialBtn, VipDailyBtn
+	    └── Content: CategoryTitle, CategorySubtitle, RowsScroll (RowTemplate)
+	RowTemplate: LeftLbl, RewardsContainer (ImageTemplate), ClaimBtn.
 
-	HOW TO ADD REWARDS
-	Edit the REWARDS table below. Each tab maps a button name to a list of reward
-	rows: { label (requirement text), reward (icon image id), claimed (bool) }.
-	Fill in your reward image IDs.
+	REWARD IMAGES: fill REWARD_PATTERNS/REWARD_IMAGES below so reward text like
+	"+1 Reveal Letter" maps to your icon.
 ]]
 
-local Players = game:GetService("Players")
+local Players       = game:GetService("Players")
+local SocialService = game:GetService("SocialService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local player = Players.LocalPlayer
-local PlayerGui = player:WaitForChild("PlayerGui")
+local player  = Players.LocalPlayer
+local gui     = player:WaitForChild("PlayerGui")
+local gameGui = gui:WaitForChild("GameUI")
 
--- ---------------------------------------------------------------------------
--- REWARD CONFIG - edit here (image ids are placeholders - fill yours in).
--- Each reward can grant powerup uses: powerup = "Letter"/"Word", uses = amount.
--- Reveal Letter is more common; Reveal Word is rarer (fewer rewards, lower uses).
--- Claiming a reward adds uses to the player's hidden Stats folder, which the
--- powerup buttons' PriceLbl reflects ("N Use" when they have uses).
---
--- Optional `requirement` field gates the reward:
---   { type = "group", id = 3597354 }        -> must be in the group to claim
---   { type = "follow", users = {...} }      -> must follow the owner(s)
---   { type = "gamepass", id = 0 }           -> must own the VIP gamepass
---   { type = "robux", min = 50 }            -> must have spent >= min robux
--- If unmet, clicking Claim prompts the player (join group / buy gamepass etc.).
--- ---------------------------------------------------------------------------
-local REWARDS = {
-	Daily = {
-		{ label = "Log in for 1 day",    reward = "rbxassetid://DAILY_1", claimed = false, powerup = "Letter", uses = 1 },
-		{ label = "Log in for 3 days",   reward = "rbxassetid://DAILY_3", claimed = false, powerup = "Letter", uses = 2 },
-		{ label = "Log in for 7 days",   reward = "rbxassetid://DAILY_7", claimed = false, powerup = "Word",   uses = 1 },
-	},
-	Group = {
-		{ label = "Join our group",      reward = "rbxassetid://GROUP_JOIN", claimed = false, powerup = "Letter", uses = 2,
-			requirement = { type = "group", id = 3597354 } },
-		{ label = "Group milestone 50 members", reward = "rbxassetid://GROUP_50", claimed = false, powerup = "Word", uses = 1,
-			requirement = { type = "group", id = 3597354 } },
-	},
-	Playtime = {
-		{ label = "Play for 1 hour",     reward = "rbxassetid://TIME_1H", claimed = false, powerup = "Letter", uses = 2 },
-		{ label = "Play for 5 hours",    reward = "rbxassetid://TIME_5H", claimed = false, powerup = "Letter", uses = 3 },
-		{ label = "Play for 20 hours",   reward = "rbxassetid://TIME_20H", claimed = false, powerup = "Word", uses = 1 },
-	},
-	RobuxSpent = {
-		{ label = "Spend 50 Robux",      reward = "rbxassetid://RBX_50", claimed = false, powerup = "Letter", uses = 1,
-			requirement = { type = "robux", min = 50 } },
-		{ label = "Spend 250 Robux",     reward = "rbxassetid://RBX_250", claimed = false, powerup = "Letter", uses = 2,
-			requirement = { type = "robux", min = 250 } },
-		{ label = "Spend 1000 Robux",    reward = "rbxassetid://RBX_1000", claimed = false, powerup = "Word", uses = 1,
-			requirement = { type = "robux", min = 1000 } },
-		{ label = "Spend 5000 Robux",    reward = "rbxassetid://RBX_5000", claimed = false, powerup = "Word", uses = 2,
-			requirement = { type = "robux", min = 5000 } },
-		{ label = "Spend 10000 Robux",   reward = "rbxassetid://RBX_10000", claimed = false, powerup = "Word", uses = 3,
-			requirement = { type = "robux", min = 10000 } },
-	},
-	Social = {
-		{ label = "Follow TheCoolBaconHairIsMe", reward = "rbxassetid://SOCIAL_OWNER1", claimed = false, powerup = "Letter", uses = 1,
-			requirement = { type = "follow", users = { "TheCoolBaconHairIsMe" } } },
-		{ label = "Follow YurisMatrix",  reward = "rbxassetid://SOCIAL_OWNER2", claimed = false, powerup = "Letter", uses = 2,
-			requirement = { type = "follow", users = { "YurisMatrix" } } },
-		{ label = "Follow both owners",  reward = "rbxassetid://SOCIAL_BOTH", claimed = false, powerup = "Word", uses = 1,
-			requirement = { type = "follow", users = { "TheCoolBaconHairIsMe", "YurisMatrix" } } },
-	},
-	VipDaily = {
-		{ label = "VIP daily reward",    reward = "rbxassetid://VIP_DAILY", claimed = false, powerup = "Letter", uses = 5,
-			requirement = { type = "gamepass", id = 0 } }, -- set your VIP gamepass id
-		{ label = "VIP weekly reward",   reward = "rbxassetid://VIP_WEEKLY", claimed = false, powerup = "Word", uses = 2,
-			requirement = { type = "gamepass", id = 0 } },
-	},
+local root     = gameGui:WaitForChild("RewardsF")
+local closeBtn = root:WaitForChild("CloseBtn")
+
+local leftTabs    = root:WaitForChild("LeftTabs")
+local content     = root:WaitForChild("Content")
+local titleLbl    = content:WaitForChild("CategoryTitle")
+local subLbl      = content:WaitForChild("CategorySubtitle")
+local rowsScroll  = content:WaitForChild("RowsScroll")
+local rowTemplate = rowsScroll:WaitForChild("RowTemplate")
+
+local Events             = ReplicatedStorage:WaitForChild("Events")
+local RewardSync         = Events:WaitForChild("RewardSync")
+local RewardClaim        = Events:WaitForChild("RewardClaim")
+local RewardRequestSync  = Events:WaitForChild("RewardRequestSync")
+local SocialVisit        = Events:WaitForChild("SocialVisit")
+local NotifyPlayer       = Events:WaitForChild("NotifyPlayer")
+
+local TAB_TO_CAT = {
+	PlaytimeBtn   = "playtime",
+	DailyBtn      = "daily",
+	GroupBtn      = "group",
+	SocialBtn     = "social",
+	VipDailyBtn   = "vipdaily",
+	RobuxSpentBtn = "robuxspent",
 }
 
--- Button -> tab name map (as named in the LeftTabs frame).
-local TAB_MAP = {
-	DailyBtn = "Daily",
-	GroupBtn = "Group",
-	PlaytimeBtn = "Playtime",
-	RobuxSpentBtn = "RobuxSpent",
-	SocialBtn = "Social",
-	VipDailyBtn = "VipDaily",
+local CAT_TITLE = {
+	playtime   = "Playtime Rewards",
+	daily      = "Daily Rewards",
+	group      = "Group Rewards",
+	social     = "Social Rewards",
+	vipdaily   = "VIP Daily Rewards",
+	robuxspent = "Robux Spent Rewards",
 }
 
-local TITLE_MAP = {
-	Daily = "Daily Rewards",
-	Group = "Group Rewards",
-	Playtime = "Playtime Rewards",
-	RobuxSpent = "Robux Milestones",
-	Social = "Social Rewards",
-	VipDaily = "VIP Rewards",
+-- Reward image ids (fill in your assets). Pattern text is matched against the
+-- server's `rewards` string.
+local REWARD_IMAGES = {
+	letter_1 = "rbxassetid://REVEAL_LETTER_1",
+	letter_2 = "rbxassetid://REVEAL_LETTER_2",
+	letter_3 = "rbxassetid://REVEAL_LETTER_3",
+	word_1   = "rbxassetid://REVEAL_WORD_1",
+	word_2   = "rbxassetid://REVEAL_WORD_2",
+	word_3   = "rbxassetid://REVEAL_WORD_3",
+}
+local REWARD_PATTERNS = {
+	{ pattern = "+1 Reveal Letter", image = "letter_1" },
+	{ pattern = "+2 Reveal Letter", image = "letter_2" },
+	{ pattern = "+3 Reveal Letter", image = "letter_3" },
+	{ pattern = "+1 Reveal Word",   image = "word_1" },
+	{ pattern = "+2 Reveal Word",   image = "word_2" },
+	{ pattern = "+3 Reveal Word",   image = "word_3" },
 }
 
-local SUBTITLE_MAP = {
-	Daily = "Log in each day to earn rewards!",
-	Group = "Rewards for being part of the group.",
-	Playtime = "Earn rewards the longer you play.",
-	RobuxSpent = "Milestones for supporting the game.",
-	Social = "Follow us to unlock bonus rewards.",
-	VipDaily = "Exclusive daily rewards for VIPs.",
-}
+local payload   = nil
+local activeCat = "playtime"
+local isOpen    = false
 
--------------------------------------------------------------------------------
--- FIND UI
--------------------------------------------------------------------------------
--- Search the PlayerGui for the RewardsF window.
-local RewardsF
-local function findRewardsUI()
-	-- Wait up to 10s for it to appear (rewards frame is inside GameUI).
-	for _, child in PlayerGui:GetChildren() do
-		local rf = child:FindFirstChild("RewardsF", true)
-		if rf then
-			return rf
-		end
-	end
-	-- Fallback: wait on GameUI.RewardsF
-	local gameUI = PlayerGui:WaitForChild("GameUI", 10)
-	return gameUI and gameUI:WaitForChild("RewardsF", 5)
+local function requestSync()
+	RewardRequestSync:FireServer()
 end
 
-RewardsF = findRewardsUI()
+local function setMsg(text)
+	local msg = root:FindFirstChild("MsgLbl")
+	if msg then
+		msg.Text = text
+		task.delay(3, function()
+			if msg then msg.Text = "" end
+		end)
+	end
+end
 
--- Forward-declared so makeRow() below can call it (defined further down).
-local setMsg
-
--------------------------------------------------------------------------------
--- BUILD ROWS
--------------------------------------------------------------------------------
-local function clearRows(scroll)
-	for _, c in scroll:GetChildren() do
-		if c.Name == "RewardRow" then
+local function clearRows()
+	for _, c in ipairs(rowsScroll:GetChildren()) do
+		if c:IsA("Frame") and c ~= rowTemplate then
 			c:Destroy()
 		end
 	end
 end
 
--- ---------------------------------------------------------------------------
--- REQUIREMENT CHECK + PROMPT
--- ---------------------------------------------------------------------------
-local MarketplaceService = game:GetService("MarketplaceService")
-
--- Check if the player meets a reward's requirement.
--- (Note: follow-status & robux-spent are placeholders that return true so the
---  reward can be claimed; wire real checks later via web API / gamepass.)
-local function requirementMet(req)
-	if not req then
-		return true
-	end
-	if req.type == "group" then
-		local ok, inGroup = pcall(function()
-			return player:IsInGroup(req.id)
-		end)
-		return ok and inGroup
-	elseif req.type == "gamepass" then
-		local ok, owns = pcall(function()
-			return MarketplaceService:UserOwnsGamePassAsync(player.UserId, req.id)
-		end)
-		return ok and owns
-	elseif req.type == "robux" then
-		-- Placeholder: assume met if they've claimed a robux reward before.
-		-- (Real robux-spent tracking would use a server/DataStore value.)
-		return true
-	elseif req.type == "follow" then
-		-- Placeholder: social follow status is checked externally (not via API).
-		return true
-	end
-	return true
-end
-
--- Prompt the player when they don't meet a requirement.
-local function promptRequirement(req)
-	if not req then
-		return
-	end
-	if req.type == "group" then
-		local ok, err = pcall(function()
-			MarketplaceService:PromptGroupMembershipPurchase(player, req.id)
-		end)
-		setMsg("Join the group to claim this reward!")
-		if not ok then
-			warn("[Rewards] Group prompt failed: ", err)
-		end
-	elseif req.type == "gamepass" then
-		local ok, err = pcall(function()
-			MarketplaceService:PromptGamePassPurchase(player, req.id)
-		end)
-		setMsg("Buy the VIP gamepass to claim this reward!")
-		if not ok then
-			warn("[Rewards] Gamepass prompt failed: ", err)
-		end
-	elseif req.type == "follow" then
-		setMsg("Follow the owners to claim this reward!")
-	elseif req.type == "robux" then
-		setMsg("Spend more Robux to unlock this reward!")
+local function styleClaim(btn, row, categoryId)
+	btn.AutoButtonColor = false
+	if row.claimed then
+		btn.Text = "CLAIMED"
+		btn.BackgroundColor3 = Color3.fromRGB(60, 220, 60)
+		btn.Active = false
+	elseif row.ready then
+		btn.Text = "CLAIM"
+		btn.BackgroundColor3 = Color3.fromRGB(60, 220, 60)
+		btn.Active = true
+	elseif categoryId == "social" then
+		btn.Text = "VISIT"
+		btn.BackgroundColor3 = Color3.fromRGB(70, 140, 255)
+		btn.Active = true
+	else
+		btn.Text = "NOT READY"
+		btn.BackgroundColor3 = Color3.fromRGB(140, 140, 140)
+		btn.Active = false
 	end
 end
 
--- Grant powerup uses to the player's Stats folder.
-local function grantPowerupUses(powerup, uses)
-	local stats = player:FindFirstChild("Stats")
-	if not stats then
-		return
-	end
-	local useName = (powerup == "Word") and "RevealWordUses" or "RevealLetterUses"
-	local val = stats:FindFirstChild(useName)
-	if val then
-		val.Value = val.Value + (uses or 1)
-	end
-end
-
--- Clone RowTemplate and fill one reward row.
-local function makeRow(scroll, rowTemplate, data)
-	local row = rowTemplate:Clone()
-	row.Name = "RewardRow"
-	row.Visible = true
-
-	local left = row:WaitForChild("LeftLbl")
-	left.Text = data.label
-
-	local container = row:WaitForChild("RewardsContainer")
-	local img = container:WaitForChild("ImageTemplate")
-	img.Image = data.reward
-	img.Visible = true
-
-	local claim = row:WaitForChild("ClaimBtn")
-	claim.Visible = true
-
-	local function refreshClaimUI()
-		if data.claimed then
-			claim.Text = "Claimed"
-			claim.Interactable = false
-		else
-			claim.Text = "Claim"
-			claim.Interactable = true
+local function parseRewardImages(rewardsText)
+	local images = {}
+	local txt = tostring(rewardsText or "")
+	for _, p in ipairs(REWARD_PATTERNS) do
+		if txt:find(p.pattern) then
+			table.insert(images, p.image)
 		end
 	end
-	refreshClaimUI()
+	return images
+end
 
-	claim.Activated:Connect(function()
-		if not data.claimed then
-			-- Check the requirement first.
-			if not requirementMet(data.requirement) then
-				promptRequirement(data.requirement)
-				return -- do NOT claim; keep it un-claimed
+local function renderRow(categoryId, idx, row)
+	local clone = rowTemplate:Clone()
+	clone.Visible = true
+	clone.Name = "Row_" .. tostring(row.id or idx)
+
+	local left = clone:FindFirstChild("LeftLbl")
+	if left then
+		if categoryId == "playtime" then left.Text = row.left or ""
+		elseif categoryId == "daily" then left.Text = "Day " .. tostring(idx)
+		elseif categoryId == "group" then left.Text = "Group"
+		elseif categoryId == "vipdaily" then left.Text = "VIP"
+		elseif categoryId == "robuxspent" then left.Text = "R$" .. tostring(row.left or "")
+		elseif categoryId == "social" then left.Text = row.left or ""
+		end
+	end
+
+	local container = clone:FindFirstChild("RewardsContainer")
+	local template = container and container:FindFirstChild("ImageTemplate")
+	if template and template:IsA("ImageLabel") then
+		local keys = parseRewardImages(row.rewards)
+		-- Show up to 3 reward icons (clone the template).
+		template.Visible = false
+		for i, key in ipairs(keys) do
+			local img = template:Clone()
+			img.Visible = true
+			img.Image = REWARD_IMAGES[key] or key
+			img.Position = UDim2.new(0, (i - 1) * 34, 0.5, -16)
+			img.Size = UDim2.new(0, 32, 0, 32)
+			img.Parent = container
+			if i >= 3 then break end
+		end
+	end
+
+	local claim = clone:FindFirstChild("ClaimBtn")
+	if claim and claim:IsA("TextButton") then
+		styleClaim(claim, row, categoryId)
+		claim.MouseButton1Click:Connect(function()
+			if categoryId == "social" and not row.ready and not row.claimed then
+				pcall(function()
+					SocialService:PromptGameInvite(player)
+				end)
+				SocialVisit:FireServer(row.id)
+				setMsg("Visited! Wait a moment, then claim.")
+				task.delay(1, requestSync)
+				task.delay(6, requestSync)
+				return
 			end
-			data.claimed = true
-			-- Grant the powerup uses to the player (updates the buttons' PriceLbl).
-			if data.powerup then
-				grantPowerupUses(data.powerup, data.uses)
-			end
-			refreshClaimUI()
-			setMsg("Claimed! Powerup uses added.")
-		end
-	end)
-
-	row.Parent = scroll
-	return row
-end
-
--- Show a tab's rewards.
-local function showTab(tabName)
-	if not RewardsF then
-		return
-	end
-	local content = RewardsF:WaitForChild("Content")
-	local title = content:WaitForChild("CategoryTitle")
-	local subtitle = content:WaitForChild("CategorySubtitle")
-	local scroll = content:WaitForChild("RowsScroll")
-
-	title.Text = TITLE_MAP[tabName] or tabName
-	subtitle.Text = SUBTITLE_MAP[tabName] or ""
-
-	clearRows(scroll)
-	local rowTemplate = scroll:WaitForChild("RowTemplate")
-	for _, data in REWARDS[tabName] or {} do
-		makeRow(scroll, rowTemplate, data)
-	end
-end
-
-function setMsg(text)
-	if RewardsF then
-		local msg = RewardsF:WaitForChild("MsgLbl")
-		msg.Text = text
-		task.delay(3, function()
-			if msg then
-				msg.Text = ""
+			if row.ready and not row.claimed then
+				RewardClaim:FireServer(categoryId, row.id)
 			end
 		end)
 	end
+
+	clone.Parent = rowsScroll
 end
 
--------------------------------------------------------------------------------
--- WIRE UI
--------------------------------------------------------------------------------
-if RewardsF then
-	local leftTabs = RewardsF:WaitForChild("LeftTabs")
-	for btnName, tabName in pairs(TAB_MAP) do
-		local btn = leftTabs:FindFirstChild(btnName)
-		if btn and btn:IsA("GuiButton") then
-			btn.Activated:Connect(function()
-				showTab(tabName)
-			end)
-		end
+local function renderRows()
+	clearRows()
+	local rows = payload and payload.categories and payload.categories[activeCat] or {}
+	for idx, row in ipairs(rows) do
+		renderRow(activeCat, idx, row)
 	end
-
-	local close = RewardsF:WaitForChild("CloseBtn")
-	close.Activated:Connect(function()
-		RewardsF.Visible = false
-	end)
-
-	-- Default to the Daily tab.
-	RewardsF.Visible = false
-	showTab("Daily")
 end
 
--- Expose helpers for the "+" buttons (StatsPanel) to open this window.
+local function refreshSubtitle()
+	if not payload then subLbl.Text = "Waiting for server sync..."; return end
+	if activeCat == "robuxspent" then
+		subLbl.Text = "Total Robux spent: R$" .. tostring(payload.robuxSpentTotal or 0)
+	elseif activeCat == "playtime" then
+		subLbl.Text = "You played for " .. tostring(math.floor((payload.totalPlaytime or 0) / 60)) .. " minutes"
+	elseif activeCat == "daily" then
+		subLbl.Text = (payload.dailyCountdown or 0) > 0 and "Ready in a few hours" or "Daily reward ready"
+	elseif activeCat == "social" then
+		subLbl.Text = "Visit the owners and claim your rewards!"
+	elseif activeCat == "group" then
+		subLbl.Text = "Like the game + Join the group"
+	elseif activeCat == "vipdaily" then
+		subLbl.Text = "Become VIP to claim"
+	else
+		subLbl.Text = ""
+	end
+end
+
+local function render()
+	if not root then return end
+	titleLbl.Text = CAT_TITLE[activeCat] or "Rewards"
+	if not payload then
+		subLbl.Text = "Waiting for server sync..."
+		clearRows()
+		return
+	end
+	refreshSubtitle()
+	renderRows()
+end
+
+local function selectCategory(cat)
+	activeCat = cat
+	if isOpen then render() end
+end
+
+local function onOpen()
+	root.Visible = true
+	root.Active = true
+	isOpen = true
+	requestSync()
+	render()
+end
+
+local function onClose()
+	root.Visible = false
+	root.Active = false
+	isOpen = false
+end
+
+for btnName, cat in pairs(TAB_TO_CAT) do
+	local btn = leftTabs:FindFirstChild(btnName)
+	if btn and btn:IsA("TextButton") then
+		btn.MouseButton1Click:Connect(function()
+			selectCategory(cat)
+		end)
+	end
+end
+
+closeBtn.MouseButton1Click:Connect(onClose)
+
+RewardSync.OnClientEvent:Connect(function(newPayload)
+	if type(newPayload) ~= "table" then return end
+	payload = newPayload
+	if isOpen then render() end
+end)
+
+NotifyPlayer.OnClientEvent:Connect(function(info)
+	if type(info) == "table" and info.message then
+		setMsg(info.message)
+	end
+end)
+
+-- The "+" buttons on StatsPanel open this via _G.RewardsAPI.
 local RewardsAPI = {}
 function RewardsAPI.open()
-	if RewardsF then
-		RewardsF.Visible = true
-		showTab("Daily")
-	end
+	onOpen()
 end
 function RewardsAPI.isAvailable()
-	return RewardsF ~= nil
+	return root ~= nil
 end
-
 _G.RewardsAPI = RewardsAPI
+
+requestSync()

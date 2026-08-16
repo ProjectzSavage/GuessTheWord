@@ -22,7 +22,8 @@ src/
 │   ├── SetupEvents.server.luau     # auto-creates ReplicatedStorage.Events
 │   ├── GameManager.server.luau     # seats, matches, rounds, bot, validation
 │   ├── Hearts.server.luau          # above-head hearts BillboardGui
-│   └── Nametag.server.luau         # name + 🔥win-streak BillboardGui
+│   ├── Nametag.server.luau         # name + 🔥win-streak BillboardGui
+│   └── RewardsService.server.luau  # server-authoritative rewards + DataStore
 ├── ServerStorage/
 │   └── Modules/
 │       ├── Dictionary.luau         # server-only word/image dictionary
@@ -37,7 +38,7 @@ src/
     ├── CameraController.client.luau# focuses the table between two players
     ├── RerollController.client.luau# cash-reward reroll animation on the table
     ├── StatsPanel.client.luau      # Cash & Wins HUD + "+" buttons
-    └── RewardsController.client.luau# RewardsF window (tabs + reward rows)
+    └── RewardsController.client.luau# renders server payload in RewardsF
 
 ## Cash & streak
 - `leaderstats.Cash` (first) + `leaderstats.Wins` show on the leaderboard.
