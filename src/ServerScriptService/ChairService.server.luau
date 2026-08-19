@@ -187,20 +187,71 @@ end)
 -- When a player sits on a game seat, swap the seat's chair model to their
 -- equipped chair.
 -------------------------------------------------------------------------------
--- Cache: seat -> the active chair Model currently shown there.
-local activeChair = {}
+-- Cache: seat -> { equipped = name, base = defaultChairModel, spawned = spawnedChairModel }
+local seatChairState = {}
 
--- Find a chair model at a seat: look for a Model sibling in the seat's parent
--- whose name is a valid chair name (e.g. the default "Wooden").
+-- Hide/show every BasePart (and its surfaces) of a model by Transparency.
+local function setModelHidden(model, hidden)
+	if not model then return end
+	local t = hidden and 1 or 0
+	for _, p in model:GetDescendants() do
+		if p:IsA("BasePart") then
+			p.Transparency = t
+		end
+	end
+	-- Model itself has no Transparency; toggle via a root part if present.
+	if model:IsA("BasePart") then
+		model.Transparency = t
+	end
+end
+
+-- Find the default/base chair model at a seat. We pick the Model sibling in
+-- the seat's parent that is CLOSEST to the seat, excluding the Table, the seats
+-- themselves, and the spawned equipped-chair clones. This handles base chairs
+-- named anything ("Chair1", "Chair2", "Wooden", ...).
 local function findSeatChair(seat)
 	local parent = seat.Parent
 	if not parent then return nil end
+	local best, bestDist
+	local seatPos = seat.Position
 	for _, child in parent:GetChildren() do
-		if child:IsA("Model") and CHAIR_NAMES[child.Name] then
-			return child
+		if child:IsA("Model")
+			and not child:IsA("Seat")
+			and not child:IsA("VehicleSeat")
+			and child.Name ~= "Table"
+			and child.Name ~= "SpawnedChair"
+		then
+			local root = child.PrimaryPart or child:FindFirstChildWhichIsA("BasePart")
+			if root then
+				local d = (root.Position - seatPos).Magnitude
+				if not bestDist or d < bestDist then
+					best = child
+					bestDist = d
+				end
+			end
 		end
 	end
-	return nil
+	return best
+end
+
+-- Build a CFrame that points the chair's "front" axis toward the seat's front
+-- (so the chair faces the table / opponent instead of sideways).
+local FRONT_VECTORS = {
+	["-Z"] = Vector3.new(0, 0, -1),
+	["+Z"] = Vector3.new(0, 0, 1),
+	["-X"] = Vector3.new(-1, 0, 0),
+	["+X"] = Vector3.new(1, 0, 0),
+}
+local frontVec = FRONT_VECTORS[ChairsConfig.FrontAxis] or Vector3.new(0, 0, -1)
+
+local function chairFacingCFrame(seat)
+	local seatCF = seat.CFrame
+	local pos = seatCF.Position
+	-- The seat's front direction (toward the table) is its look-vector.
+	local fwd = seatCF.LookVector
+	local look = CFrame.lookAt(pos, pos + fwd)
+	-- Rotate so the chair's FrontAxis lines up with the seat's forward.
+	return look * CFrame.Angles(0, math.atan2(-frontVec.X, -frontVec.Z), 0)
 end
 
 local function cloneChair(name, seat)
@@ -208,48 +259,55 @@ local function cloneChair(name, seat)
 	local template = ChairModels:FindFirstChild(name)
 	if not template then return nil end
 	local clone = template:Clone()
-	clone.Name = name
-	clone:PivotTo(seat.CFrame * CFrame.new(0, 1, 0)) -- sit above the seat
+	clone.Name = "SpawnedChair" -- excluded from findSeatChair
+	clone:PivotTo(chairFacingCFrame(seat) * CFrame.new(0, ChairsConfig.ChairHeight, 0))
 	clone.Parent = seat.Parent or Workspace
 	return clone
 end
 
--- Apply the equipped chair to a seat.
+-- Apply the equipped chair to a seat, replacing the base chair.
 local function applyChairToSeat(player, seat)
 	local state = ensureState(player)
 	local equipped = state.equipped or "Wooden"
 
-	-- Remove the previous active chair clone at this seat (if any).
-	local old = activeChair[seat]
-	if old then
-		if old.Parent then old:Destroy() end
-		activeChair[seat] = nil
+	local st = seatChairState[seat] or {}
+	seatChairState[seat] = st
+
+	-- Capture the base chair once.
+	if st.base == nil then
+		st.base = findSeatChair(seat)
 	end
 
-	-- Hide the default chair model if it exists and differs.
-	local default = findSeatChair(seat)
-	if default and default.Name ~= equipped then
-		default.Transparency = 1
-		-- Also hide any BaseParts inside the default model.
-		for _, p in default:GetDescendants() do
-			if p:IsA("BasePart") then p.Transparency = 1 end
+	-- Remove any previously spawned equipped chair.
+	if st.spawned then
+		if st.spawned.Parent then st.spawned:Destroy() end
+		st.spawned = nil
+	end
+
+	-- Base chair: show only if we're using Wooden (the default).
+	if st.base then
+		setModelHidden(st.base, equipped ~= "Wooden")
+	end
+
+	-- Spawn the equipped chair (if not the default Wooden).
+	if equipped ~= "Wooden" then
+		local newChair = cloneChair(equipped, seat)
+		if newChair then
+			st.spawned = newChair
 		end
 	end
+end
 
-	-- If equipped is Wooden (or default), nothing extra to spawn.
-	if equipped == "Wooden" then
-		if default then
-			for _, p in default:GetDescendants() do
-				if p:IsA("BasePart") then p.Transparency = 0 end
-			end
-			default.Transparency = 0
-		end
-		return
+-- Restore the base chair and remove any spawned one when the player stands up.
+local function restoreChair(seat)
+	local st = seatChairState[seat]
+	if not st then return end
+	if st.spawned then
+		if st.spawned.Parent then st.spawned:Destroy() end
+		st.spawned = nil
 	end
-
-	local newChair = cloneChair(equipped, seat)
-	if newChair then
-		activeChair[seat] = newChair
+	if st.base then
+		setModelHidden(st.base, false)
 	end
 end
 
@@ -270,11 +328,15 @@ Players.PlayerAdded:Connect(function(player)
 	player.CharacterAdded:Connect(function(character)
 		local humanoid = character:WaitForChild("Humanoid", 10)
 		if not humanoid then return end
+
+		-- Apply the equipped chair when sitting, restore the base when standing.
 		humanoid.Seated:Connect(function(seated)
-			if seated then
-				local seat = humanoid.SeatPart
-				if seat and isGameSeat(seat) then
+			local seat = humanoid.SeatPart
+			if seat and isGameSeat(seat) then
+				if seated then
 					applyChairToSeat(player, seat)
+				else
+					restoreChair(seat)
 				end
 			end
 		end)
@@ -284,6 +346,33 @@ Players.PlayerAdded:Connect(function(player)
 	task.delay(1, function()
 		syncClient(player)
 	end)
+end)
+
+-- Also poll seats (same approach as GameManager) so the chair swaps even if
+-- Humanoid.Seated misses the event, and restore when the seat empties.
+local function seatOccupiedBy(seat)
+	local h = seat.Occupant
+	return h and Players:GetPlayerFromCharacter(h.Parent) or nil
+end
+
+task.spawn(function()
+	while true do
+		task.wait(0.5)
+		for _, tableFolder in GAME_AREA:GetChildren() do
+			if tableFolder:IsA("Folder") and string.sub(tableFolder.Name, 1, 5) == "Table" then
+				for _, seat in tableFolder:GetChildren() do
+					if (seat:IsA("Seat") or seat:IsA("VehicleSeat")) then
+						local player = seatOccupiedBy(seat)
+						if player then
+							applyChairToSeat(player, seat)
+						else
+							restoreChair(seat)
+						end
+					end
+				end
+			end
+		end
+	end
 end)
 
 -- On player leave, clean up their active chairs.

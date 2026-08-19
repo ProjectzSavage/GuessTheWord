@@ -163,6 +163,21 @@ GameUI
 - **Sit:** when a player sits on a game seat, the seat's chair model is replaced
   with their equipped chair (Wooden = default).
 
+**Which folder for the chair models?** Put the actual chair Models in
+**`ReplicatedStorage.Chairs`** (so both server and client can access them). The
+**`Workspace.DisplayChairs`** folder holds the on-display chairs (those get the
+buy ProximityPrompt). Names must match the `ChairsConfig` keys exactly.
+
+**Orientation / facing:** when a chair spawns, it's rotated to face the seat's
+forward (toward the table). Most chair models have their front on the **-Z**
+axis (default). If a chair spawns sideways or backward, change that chair's
+`FrontAxis` in `ChairsConfig` to `"+Z"`, `"-X"`, or `"+X"`.
+
+**Base chair replacement:** the base chair near each seat is detected by
+proximity (any name), hidden when an equipped chair spawns, and restored when
+the player stands up. Spawned chairs are named `SpawnedChair` so they're not
+mistaken for base chairs.
+
 ## Heart container details
 
 Each heart `ImageLabel` is 24×24. You can space them with a `UIListLayout`
