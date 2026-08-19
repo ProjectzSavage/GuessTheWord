@@ -38,7 +38,8 @@ src/
     ├── CameraController.client.luau# focuses the table between two players
     ├── RerollController.client.luau# cash-reward reroll animation on the table
     ├── StatsPanel.client.luau      # Cash & Wins HUD + "+" buttons
-    └── RewardsController.client.luau# renders server payload in RewardsF
+    ├── RewardsController.client.luau# renders server payload in RewardsF
+    └── ButtonsController.client.luau# Features buttons (Rewards/Shop/Inventory)
 
 ## Cash & streak
 - `leaderstats.Cash` (first) + `leaderstats.Wins` show on the leaderboard.

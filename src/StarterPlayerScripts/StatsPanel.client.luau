@@ -26,6 +26,8 @@
 ]]
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
@@ -181,6 +183,38 @@ if ls then
 	end
 end
 update()
+
+-------------------------------------------------------------------------------
+-- SLIDE OUT TO TOP (before the puzzle appears)
+-- After the cash roll finishes, the StatsPanel slides up off-screen so it's out
+-- of the way while the puzzle is in play; it slides back in on game over.
+-------------------------------------------------------------------------------
+local panelRestPos = panel.Position
+local SLIDE_OFFSET = UDim2.new(0, 0, -0.15, 0) -- up off the top
+
+local function slideStatsOut()
+	if not panel then return end
+	panel.ZIndex = 1
+	TweenService:Create(panel, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+		{ Position = panelRestPos + SLIDE_OFFSET }):Play()
+end
+
+local function slideStatsIn()
+	if not panel then return end
+	TweenService:Create(panel, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ Position = panelRestPos }):Play()
+end
+
+-- After the money roll is done (and before the puzzle appears), slide out.
+local Events = ReplicatedStorage:WaitForChild("Events")
+Events:WaitForChild("CashAwarded").OnClientEvent:Connect(function()
+	slideStatsOut()
+end)
+
+-- When the match ends, bring the StatsPanel back.
+Events:WaitForChild("GameOver").OnClientEvent:Connect(function()
+	slideStatsIn()
+end)
 
 -------------------------------------------------------------------------------
 -- "+" BUTTONS (shop placeholders)

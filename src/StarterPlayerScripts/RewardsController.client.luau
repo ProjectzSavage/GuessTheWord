@@ -30,6 +30,8 @@ local player  = Players.LocalPlayer
 local gui     = player:WaitForChild("PlayerGui")
 local gameGui = gui:WaitForChild("GameUI")
 
+local UIFX = require(ReplicatedStorage:WaitForChild("UIFX"))
+
 local root     = gameGui:WaitForChild("RewardsF")
 local closeBtn = root:WaitForChild("CloseBtn")
 
@@ -273,17 +275,18 @@ local function selectCategory(cat)
 end
 
 local function onOpen()
-	root.Visible = true
-	root.Active = true
 	isOpen = true
+	root.Active = true
+	UIFX.popIn(root) -- intro animation
 	requestSync()
 	render()
 end
 
 local function onClose()
-	root.Visible = false
-	root.Active = false
+	if not isOpen then return end
 	isOpen = false
+	root.Active = false
+	UIFX.popOut(root) -- outro animation (hides when done)
 end
 
 for btnName, cat in pairs(TAB_TO_CAT) do

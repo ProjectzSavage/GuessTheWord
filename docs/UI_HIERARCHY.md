@@ -77,6 +77,22 @@ StarterGui
 > `AnswerBox` and rebuilds one slot per letter on every change. Leave it empty;
 > do not add children by hand.
 
+## Buttons ScreenGui (Features)
+
+A separate ScreenGui (e.g. `Buttons`) with a `Features` frame holding the 3 menu
+buttons. `ButtonsController.client.luau` wires them:
+
+```
+Buttons  (ScreenGui)
+└── Features  (Frame)
+    ├── Inventory  (TextButton)   -- setup soon (placeholder)
+    ├── Rewards    (TextButton)   -- opens RewardsF (via _G.RewardsAPI.open)
+    └── Shop       (TextButton)   -- setup soon + looping scale pulse (has a UIScale)
+```
+
+- **Rewards** opens the RewardsF window (which now has a UIFX intro/outro).
+- **Shop** pulses up/down via its `UIScale` (eye-catching) and is a placeholder.
+
 ## Heart container details
 
 Each heart `ImageLabel` is 24×24. You can space them with a `UIListLayout`
@@ -231,6 +247,12 @@ LocalScript auto-creates the rows, labels, and "+" buttons (in Scale). It reads
 - **Wins** is shown as `2,145` (commas only, no `$`).
 The `+` buttons are placeholders that will open the Shop later (they currently
 just print).
+
+**Slide behavior:** after the cash roll finishes (and before the puzzle area
+appears), the StatsPanel slides up off-screen to the top so it's out of the way
+during play; it slides back in when the match ends. Set its `Position`
+(`{0.5,0},{0.071,0}`) and `AnchorPoint` (`0.5,0.5`) in Studio — the script
+remembers that resting position and tweens from it.
 
 ## Powerups (inside PuzzleArea)
 
