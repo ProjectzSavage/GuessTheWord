@@ -168,15 +168,12 @@ GameUI
 **`Workspace.DisplayChairs`** folder holds the on-display chairs (those get the
 buy ProximityPrompt). Names must match the `ChairsConfig` keys exactly.
 
-**Orientation / facing:** when a chair spawns, it's rotated to face the seat's
-forward (toward the table). Most chair models have their front on the **-Z**
-axis (default). If a chair spawns sideways or backward, change that chair's
-`FrontAxis` in `ChairsConfig` to `"+Z"`, `"-X"`, or `"+X"`.
-
 **Base chair replacement:** the base chair near each seat is detected by
 proximity (any name), hidden when an equipped chair spawns, and restored when
-the player stands up. Spawned chairs are named `SpawnedChair` so they're not
-mistaken for base chairs.
+the player stands up. The equipped chair is cloned **at the base chair's exact
+position and orientation**, so it faces the same way and sits at the same ground
+level as the base chair (no sideways / floating). Spawned chairs are named
+`SpawnedChair` so they're not mistaken for base chairs.
 
 ## Heart container details
 

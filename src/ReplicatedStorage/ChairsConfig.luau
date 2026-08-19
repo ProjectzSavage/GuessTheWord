@@ -15,15 +15,6 @@
 ]]
 
 return {
-	-- How high above a seat the chair model should spawn (studs).
-	ChairHeight = 1.0,
-
-	-- Which axis of a chair model is its "front" (points toward the table /
-	-- the player facing the opponent). Standard Roblox furniture fronts are
-	-- usually -Z. If a chair faces backward or sideways, change this to
-	-- "+Z", "-X", or "+X" for that chair.
-	FrontAxis = "-Z",
-
 	-- Name -> price (cash). Model in ReplicatedStorage.Chairs must match Name.
 	Chairs = {
 		Gamer     = 15000,

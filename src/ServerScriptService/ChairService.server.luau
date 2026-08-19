@@ -234,34 +234,18 @@ local function findSeatChair(seat)
 	return best
 end
 
--- Build a CFrame that points the chair's "front" axis toward the seat's front
--- (so the chair faces the table / opponent instead of sideways).
-local FRONT_VECTORS = {
-	["-Z"] = Vector3.new(0, 0, -1),
-	["+Z"] = Vector3.new(0, 0, 1),
-	["-X"] = Vector3.new(-1, 0, 0),
-	["+X"] = Vector3.new(1, 0, 0),
-}
-local frontVec = FRONT_VECTORS[ChairsConfig.FrontAxis] or Vector3.new(0, 0, -1)
-
-local function chairFacingCFrame(seat)
-	local seatCF = seat.CFrame
-	local pos = seatCF.Position
-	-- The seat's front direction (toward the table) is its look-vector.
-	local fwd = seatCF.LookVector
-	local look = CFrame.lookAt(pos, pos + fwd)
-	-- Rotate so the chair's FrontAxis lines up with the seat's forward.
-	return look * CFrame.Angles(0, math.atan2(-frontVec.X, -frontVec.Z), 0)
-end
-
-local function cloneChair(name, seat)
+-- Clone an equipped chair at a given CFrame (position + orientation). If a base
+-- chair exists, we use ITS pivot so the equipped chair lands exactly where the
+-- base chair was - inheriting its correct facing and ground level. Otherwise we
+-- fall back to the seat's CFrame.
+local function cloneChairAt(name, cf)
 	if not ChairModels then return nil end
 	local template = ChairModels:FindFirstChild(name)
 	if not template then return nil end
 	local clone = template:Clone()
 	clone.Name = "SpawnedChair" -- excluded from findSeatChair
-	clone:PivotTo(chairFacingCFrame(seat) * CFrame.new(0, ChairsConfig.ChairHeight, 0))
-	clone.Parent = seat.Parent or Workspace
+	clone:PivotTo(cf)
+	clone.Parent = Workspace
 	return clone
 end
 
@@ -291,7 +275,15 @@ local function applyChairToSeat(player, seat)
 
 	-- Spawn the equipped chair (if not the default Wooden).
 	if equipped ~= "Wooden" then
-		local newChair = cloneChair(equipped, seat)
+		-- Place it exactly where the base chair is (inherits facing + ground
+		-- level). If no base chair was found, use the seat's CFrame.
+		local cf
+		if st.base then
+			cf = st.base:GetPivot()
+		else
+			cf = seat.CFrame
+		end
+		local newChair = cloneChairAt(equipped, cf)
 		if newChair then
 			st.spawned = newChair
 		end
