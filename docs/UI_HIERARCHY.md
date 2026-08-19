@@ -136,6 +136,33 @@ just containers and are ignored.
 DoubleStreak, DoubleWins, VIPPack → sets a `ShopPerks` BoolValue) and adds the
 Robux spent to the rewards system.
 
+## Chair System
+
+Buy chairs with Cash via ProximityPrompts, then equip them in the Inventory.
+
+```
+ReplicatedStorage
+└── Chairs  (Folder)           -- the chair Models (Gamer, ProGamer, SuperFire, ...)
+Workspace
+└── DisplayChairs  (Folder)    -- display chairs; each gets a ProximityPrompt
+GameUI
+└── InventoryF  (Frame, Visible=false)   -- chair inventory
+    ├── TitleLbl   (TextLabel)
+    ├── Scroll     (ScrollingFrame)
+    │   └── RowTemplate  (Frame, Visible=false)
+    │       ├── ChairName  (TextLabel)
+    │       └── EquipBtn   (TextButton)
+    └── CloseBtn   (TextButton)
+```
+
+- Prices come from `ReplicatedStorage.ChairsConfig` (Wooden = 0, Broken = 500,
+  ..., Gamer = 15000).
+- **Buy:** a ProximityPrompt is auto-added to each display chair; triggering it
+  deducts Cash and adds the chair to the player's owned list.
+- **Equip:** the Inventory lists owned chairs; clicking EQUIP fires `EquipChair`.
+- **Sit:** when a player sits on a game seat, the seat's chair model is replaced
+  with their equipped chair (Wooden = default).
+
 ## Heart container details
 
 Each heart `ImageLabel` is 24×24. You can space them with a `UIListLayout`

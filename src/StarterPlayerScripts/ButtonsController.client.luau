@@ -40,10 +40,12 @@ if RewardsBtn then
 	end)
 end
 
--- Inventory placeholder.
+-- Inventory opens the chair inventory (equip owned chairs).
 if InventoryBtn then
 	InventoryBtn.Activated:Connect(function()
-		print("[Buttons] Inventory clicked (setup soon).")
+		if _G.InventoryAPI and _G.InventoryAPI.open then
+			_G.InventoryAPI.open()
+		end
 	end)
 end
 

@@ -24,14 +24,16 @@ src/
 │   ├── Hearts.server.luau          # above-head hearts BillboardGui
 │   ├── Nametag.server.luau         # name + 🔥win-streak BillboardGui
 │   ├── RewardsService.server.luau  # server-authoritative rewards
-│   └── ShopService.server.luau     # Robux dev-product purchases + grants
+│   ├── ShopService.server.luau     # Robux dev-product purchases + grants
+│   └── ChairService.server.luau    # buy/equip chairs + swap on sit
 ├── ServerStorage/
 │   └── Modules/
 │       ├── Dictionary.luau         # server-only word/image dictionary
 │       └── HeartHUDManager.luau    # server-side hearts for players + bot
 ├── ReplicatedStorage/
 │   ├── LetterImages.luau           # A-Z letter images for the UI
-│   └── HoverFX.luau                # reusable hover/pop effect
+│   ├── HoverFX.luau                # reusable hover/pop effect
+│   └── ChairsConfig.luau           # chair names + cash prices
 └── StarterPlayerScripts/
     ├── InputHandler.client.luau    # hybrid click + keyboard input + UI
     ├── HoverController.client.luau # applies HoverFX to clues + letter tiles
@@ -41,7 +43,8 @@ src/
     ├── StatsPanel.client.luau      # Cash & Wins HUD + "+" buttons
     ├── RewardsController.client.luau# renders server payload in RewardsF
     ├── ButtonsController.client.luau# Features buttons (Rewards/Shop/Inventory)
-    └── ShopController.client.luau   # ShopF window + Robux buy prompts
+    ├── ShopController.client.luau   # ShopF window + Robux buy prompts
+    └── InventoryController.client.luau# chair inventory (equip owned chairs)
 
 ## Cash & streak
 - `leaderstats.Cash` (first) + `leaderstats.Wins` show on the leaderboard.

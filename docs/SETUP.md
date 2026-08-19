@@ -55,6 +55,12 @@ build it once. The full details are further down.
    group), `VIP_GAMEPASS_ID` (your VIP gamepass), `SOCIAL_OWNERS` (the owners to
    follow), and fill in the reward image IDs in `REWARD_IMAGES` (both server and
    client). The client `RewardsController` renders whatever the server sends.
+12. **Chair system** — create `ReplicatedStorage.Chairs` (Folder) with the chair
+    Models named like the `ChairsConfig` keys (Gamer, ProGamer, SuperFire,
+    Diamond, Toxic, Thunder, Icey, Steel, Broken, Wooden). Keep your display
+    chairs in `Workspace.DisplayChairs` (prompts are added automatically). Build
+    the `InventoryF` UI (or let the controller auto-create it). Add
+    `ChairService.server.luau` to `ServerScriptService > Scripts`.
 
 ---
 
@@ -96,6 +102,9 @@ ServerScriptService
 | `src/StarterPlayerScripts/ButtonsController.client.luau`        | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/ShopController.client.luau`           | `StarterPlayerScripts`      | LocalScript |
 | `src/ServerScriptService/ShopService.server.luau`               | `ServerScriptService > Scripts` | Script   |
+| `src/ServerScriptService/ChairService.server.luau`              | `ServerScriptService > Scripts` | Script   |
+| `src/ReplicatedStorage/ChairsConfig.luau`                      | `ReplicatedStorage`         | ModuleScript |
+| `src/StarterPlayerScripts/InventoryController.client.luau`      | `StarterPlayerScripts`      | LocalScript |
 
 > **Tip:** For each file, right-click the target container in Studio →
 > **Insert Object** → choose the right type, name it, then paste the file's

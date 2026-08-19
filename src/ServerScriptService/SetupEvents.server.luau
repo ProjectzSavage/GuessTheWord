@@ -40,6 +40,9 @@ local EVENT_NAMES = {
 	"RewardRequestSync", -- Client -> Server : ask for a fresh sync
 	"AddRobuxSpent",   -- Client -> Server : add to robux-spent total (on purchase)
 	"NotifyPlayer",    -- Server -> Client : popup notification message
+	"BuyChair",        -- Client -> Server : buy a chair (name)
+	"EquipChair",      -- Client -> Server : equip a chair (name)
+	"ChairSync",       -- Server -> Client : owned chairs + equipped chair
 }
 
 -- Idempotent: if the folder already exists, reuse it (don't wipe manual setup).
