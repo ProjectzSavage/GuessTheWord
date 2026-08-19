@@ -93,6 +93,49 @@ Buttons  (ScreenGui)
 - **Rewards** opens the RewardsF window (which now has a UIFX intro/outro).
 - **Shop** pulses up/down via its `UIScale` (eye-catching) and is a placeholder.
 
+## ShopF (Shop window, Robux purchases)
+
+A window (in GameUI) with items sold for **Robux** via dev products.
+`ShopController.client.luau` drives it (open/close + BuyBtn → purchase prompt),
+and `ShopService.server.luau` grants the item on receipt.
+
+```
+ShopF  (Frame, Visible=false)
+├── CloseBtn  (TextButton)
+├── TitleLbl  (TextLabel)
+└── Scroll  (ScrollingFrame)
+    ├── Cash5000  (Frame)                 -- item
+    │     ├── BuyBtn (TextButton)
+    │     ├── ImageLabel (x4)
+    │     └── PriceLbl (TextLabel)
+    ├── Cash  (Frame, category)           -- just a container
+    │     └── UIListLayout
+    │         ├── Cash1000 (Frame)  [item]  ├ BuyBtn, ImageLabel x2, PriceLbl
+    │         ├── Cash2500 (Frame)  [item]  ├ BuyBtn, ImageLabel x3, PriceLbl
+    │         └── Cash300  (Frame)  [item]  └ BuyBtn, Icon, PriceLbl
+    ├── Wins  (Frame, category)
+    │     └── UIListLayout
+    │         ├── Wins10  (Frame) [item]
+    │         ├── Wins25  (Frame) [item]
+    │         └── Wins50  (Frame) [item]
+    ├── Wins100  (Frame) [item]  (outside the Wins category)
+    ├── GP  (Frame, category)
+    │     └── UIListLayout
+    │         ├── DoubleCash   (Frame) [item]
+    │         ├── DoubleStreak (Frame) [item]
+    │         └── DoubleWins   (Frame) [item]
+    └── VIPPack  (Frame) [item]
+          ├── BuyBtn, Icon, TextLabel x4
+```
+
+Every **item frame** (a frame containing a `BuyBtn`) maps by its NAME to a dev
+product id in `PRODUCT_IDS` (ShopController). Category frames (Cash/Wins/GP) are
+just containers and are ignored.
+
+**Grant:** `ShopService.ProcessReceipt` grants Cash / Wins / a perk (DoubleCash,
+DoubleStreak, DoubleWins, VIPPack → sets a `ShopPerks` BoolValue) and adds the
+Robux spent to the rewards system.
+
 ## Heart container details
 
 Each heart `ImageLabel` is 24×24. You can space them with a `UIListLayout`

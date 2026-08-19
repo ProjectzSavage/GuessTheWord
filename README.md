@@ -23,7 +23,8 @@ src/
 │   ├── GameManager.server.luau     # seats, matches, rounds, bot, validation
 │   ├── Hearts.server.luau          # above-head hearts BillboardGui
 │   ├── Nametag.server.luau         # name + 🔥win-streak BillboardGui
-│   └── RewardsService.server.luau  # server-authoritative rewards + DataStore
+│   ├── RewardsService.server.luau  # server-authoritative rewards
+│   └── ShopService.server.luau     # Robux dev-product purchases + grants
 ├── ServerStorage/
 │   └── Modules/
 │       ├── Dictionary.luau         # server-only word/image dictionary
@@ -39,7 +40,8 @@ src/
     ├── RerollController.client.luau# cash-reward reroll animation on the table
     ├── StatsPanel.client.luau      # Cash & Wins HUD + "+" buttons
     ├── RewardsController.client.luau# renders server payload in RewardsF
-    └── ButtonsController.client.luau# Features buttons (Rewards/Shop/Inventory)
+    ├── ButtonsController.client.luau# Features buttons (Rewards/Shop/Inventory)
+    └── ShopController.client.luau   # ShopF window + Robux buy prompts
 
 ## Cash & streak
 - `leaderstats.Cash` (first) + `leaderstats.Wins` show on the leaderboard.

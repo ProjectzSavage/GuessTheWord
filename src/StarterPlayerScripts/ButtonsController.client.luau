@@ -47,10 +47,12 @@ if InventoryBtn then
 	end)
 end
 
--- Shop: placeholder + looping scale pulse (eye-catching).
+-- Shop: opens the ShopF window + looping scale pulse (eye-catching).
 if ShopBtn then
 	ShopBtn.Activated:Connect(function()
-		print("[Buttons] Shop clicked (setup soon).")
+		if _G.ShopAPI and _G.ShopAPI.open then
+			_G.ShopAPI.open()
+		end
 	end)
 
 	-- Looping pulse using the button's existing UIScale (up + down forever).

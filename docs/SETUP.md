@@ -94,6 +94,8 @@ ServerScriptService
 | `src/StarterPlayerScripts/StatsPanel.client.luau`               | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/RewardsController.client.luau`        | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/ButtonsController.client.luau`        | `StarterPlayerScripts`      | LocalScript |
+| `src/StarterPlayerScripts/ShopController.client.luau`           | `StarterPlayerScripts`      | LocalScript |
+| `src/ServerScriptService/ShopService.server.luau`               | `ServerScriptService > Scripts` | Script   |
 
 > **Tip:** For each file, right-click the target container in Studio →
 > **Insert Object** → choose the right type, name it, then paste the file's
