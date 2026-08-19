@@ -4,21 +4,28 @@
 	Run this as a **LocalScript** in StarterPlayerScripts.
 
 	PURPOSE
-	Placeholder inventory GUI for chairs. It shows a list of your OWNED chairs
-	(with a button to EQUIP each). It reads the server-synced `Chairs` folder on
-	the player (BoolValue per owned chair + `Equipped` StringValue).
+	Drives the chair inventory panel. Each owned chair is shown in a cell of a
+	ScrollingFrame grid, with a **3D ViewportFrame preview** of the chair model
+	plus its name and an Equip button.
 
-	REQUIRED UI (in GameUI):
-		InventoryF  (Frame, Visible=false)
-		  ├── CloseBtn   (TextButton)
-		  ├── TitleLbl   (TextLabel)
-		  └── Scroll     (ScrollingFrame)
-		      └── RowTemplate  (Frame, Visible=false)
-		            ├── ChairName  (TextLabel)
-		            └── EquipBtn   (TextButton)
+	REQUIRED UI (in GameUI - the panel you built):
+		ChairInvPanel  (Frame, Visible=false)
+		├── Grid  (ScrollingFrame)
+		│   ├── UIGridLayout
+		│   ├── UIPadding
+		│   └── Template  (Frame, Visible=false)   -- cloned per chair
+		│       ├── EquipBtn  (TextButton)
+		│       └── NameLbl   (TextLabel)
+		├── CloseBtn  (TextButton)
+		│   └── Icon  (ImageLabel)
+		└── TitleLbl  (TextLabel)
 
-	The script clones RowTemplate per owned chair and wires EquipBtn to fire
-	EquipChair. If the template is missing, it auto-builds simple rows.
+	The script AUTO-ADDS a `ViewportFrame` (named "ChairPreview") into each cell
+	to render the 3D chair. Chair models come from ReplicatedStorage.Chairs
+	(named like the ChairsConfig keys).
+
+	NOTE: if the panel is named `InventoryF` instead (older layout), it still
+	works and auto-builds a grid.
 ]]
 
 local Players = game:GetService("Players")
@@ -31,118 +38,197 @@ local gameGui = PlayerGui:WaitForChild("GameUI")
 local Events = ReplicatedStorage:WaitForChild("Events")
 local EquipChair = Events:WaitForChild("EquipChair")
 local ChairSync = Events:WaitForChild("ChairSync")
-
-local InventoryF = gameGui:FindFirstChild("InventoryF")
 local UIFX = require(ReplicatedStorage:WaitForChild("UIFX"))
+local ChairsConfig = require(ReplicatedStorage:WaitForChild("ChairsConfig"))
+
+-- Chair model templates live here (client can read ReplicatedStorage).
+local ChairModels = ReplicatedStorage:FindFirstChild("Chairs")
+
+-- The inventory panel (either the new ChairInvPanel or older InventoryF).
+local Panel = gameGui:FindFirstChild("ChairInvPanel") or gameGui:FindFirstChild("InventoryF")
 
 local InventoryAPI = {}
 
--- If no InventoryF, auto-create a simple one so the button still works.
-local function ensureInventoryUI()
-	if InventoryF then return end
-	InventoryF = Instance.new("Frame")
-	InventoryF.Name = "InventoryF"
-	InventoryF.Size = UDim2.new(0.4, 0, 0.5, 0)
-	InventoryF.Position = UDim2.new(0.3, 0, 0.25, 0)
-	InventoryF.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-	InventoryF.Visible = false
-	InventoryF.Parent = gameGui
+-------------------------------------------------------------------------------
+-- FALLBACK: auto-create a simple grid panel if neither exists.
+-------------------------------------------------------------------------------
+local function ensurePanel()
+	if Panel then return end
+	Panel = Instance.new("Frame")
+	Panel.Name = "ChairInvPanel"
+	Panel.Size = UDim2.new(0.5, 0, 0.6, 0)
+	Panel.Position = UDim2.new(0.25, 0, 0.2, 0)
+	Panel.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+	Panel.Visible = false
+	Panel.Parent = gameGui
 
 	local title = Instance.new("TextLabel")
 	title.Name = "TitleLbl"
-	title.Size = UDim2.new(1, 0, 0.1, 0)
+	title.Size = UDim2.new(1, 0, 0.08, 0)
 	title.BackgroundTransparency = 1
-	title.Font = Enum.Font.GothamBold
-	title.Text = "Inventory"
+	title.Text = "Chair Inventory"
 	title.TextScaled = true
-	title.Parent = InventoryF
+	title.Parent = Panel
 
-	local scroll = Instance.new("ScrollingFrame")
-	scroll.Name = "Scroll"
-	scroll.Size = UDim2.new(1, 0, 0.8, 0)
-	scroll.Position = UDim2.new(0, 0, 0.12, 0)
-	scroll.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-	scroll.Parent = InventoryF
+	local grid = Instance.new("ScrollingFrame")
+	grid.Name = "Grid"
+	grid.Size = UDim2.new(1, 0, 0.84, 0)
+	grid.Position = UDim2.new(0, 0, 0.1, 0)
+	grid.Parent = Panel
+
+	local layout = Instance.new("UIGridLayout")
+	layout.CellSize = UDim2.new(0.3, 0, 0.45, 0)
+	layout.CellPadding = UDim2.new(0.03, 0, 0.03, 0)
+	layout.Parent = grid
+
+	-- Template
+	local template = Instance.new("Frame")
+	template.Name = "Template"
+	template.Size = UDim2.new(1, 0, 1, 0)
+	template.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
+	template.Visible = false
+	template.Parent = grid
+
+	local nameLbl = Instance.new("TextLabel")
+	nameLbl.Name = "NameLbl"
+	nameLbl.Size = UDim2.new(1, 0, 0.2, 0)
+	nameLbl.Position = UDim2.new(0, 0, 0.75, 0)
+	nameLbl.BackgroundTransparency = 1
+	nameLbl.TextScaled = true
+	nameLbl.Parent = template
+
+	local equipBtn = Instance.new("TextButton")
+	equipBtn.Name = "EquipBtn"
+	equipBtn.Size = UDim2.new(1, 0, 0.2, 0)
+	equipBtn.Position = UDim2.new(0, 0, 0.9, 0)
+	equipBtn.BackgroundColor3 = Color3.fromRGB(60, 140, 70)
+	equipBtn.Text = "EQUIP"
+	equipBtn.TextScaled = true
+	equipBtn.Parent = template
 
 	local close = Instance.new("TextButton")
 	close.Name = "CloseBtn"
-	close.Size = UDim2.new(0.3, 0, 0.08, 0)
-	close.Position = UDim2.new(0.35, 0, 0.9, 0)
-	close.Text = "Close"
-	close.Parent = InventoryF
+	close.Size = UDim2.new(0.2, 0, 0.08, 0)
+	close.Position = UDim2.new(0.8, 0, 0, 0)
+	close.Text = "X"
+	close.Parent = Panel
 	close.Activated:Connect(function()
 		InventoryAPI.close()
 	end)
 end
-ensureInventoryUI()
+ensurePanel()
 
-local Scroll = InventoryF and InventoryF:FindFirstChild("Scroll")
-local RowTemplate = Scroll and Scroll:FindFirstChild("RowTemplate")
-local CloseBtn = InventoryF and InventoryF:FindFirstChild("CloseBtn")
+local Grid = Panel and Panel:FindFirstChild("Grid")
+local Template = Grid and Grid:FindFirstChild("Template")
+local CloseBtn = Panel and Panel:FindFirstChild("CloseBtn")
 
-local function clearRows()
-	if not Scroll then return end
-	for _, c in Scroll:GetChildren() do
-		if c:IsA("Frame") and c ~= RowTemplate then
+-------------------------------------------------------------------------------
+-- 3D PREVIEW (ViewportFrame)
+-------------------------------------------------------------------------------
+-- Ensure a cell's template has a ViewportFrame (added as the FIRST child so the
+-- user's NameLbl/EquipBtn render on top of it).
+local function ensurePreviewFrame(template)
+	local vf = template:FindFirstChild("ChairPreview")
+	if not vf then
+		vf = Instance.new("ViewportFrame")
+		vf.Name = "ChairPreview"
+		vf.Size = UDim2.new(1, 0, 0.75, 0)
+		vf.Position = UDim2.new(0, 0, 0, 0)
+		vf.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+		vf.CurrentCamera = nil
+		-- Insert as first child so it sits behind NameLbl/EquipBtn.
+		vf.ZIndex = 1
+		vf.Parent = template
+	end
+	local world = vf:FindFirstChildOfClass("WorldModel")
+	if not world then
+		world = Instance.new("WorldModel")
+		world.Name = "World"
+		world.Parent = vf
+	end
+	-- Give the ViewportFrame its own camera.
+	if not vf:FindFirstChildOfClass("Camera") then
+		local cam = Instance.new("Camera")
+		cam.Name = "Cam"
+		cam.Parent = vf
+	end
+	vf.CurrentCamera = vf:FindFirstChildOfClass("Camera")
+	return vf, world
+end
+
+-- Clone a chair model into a WorldModel and frame the camera on it.
+local function renderChairPreview(vf, world, chairName)
+	for _, c in world:GetChildren() do c:Destroy() end
+	if not ChairModels then return end
+	local template = ChairModels:FindFirstChild(chairName)
+	if not template then return end
+	local clone = template:Clone()
+	clone:PivotTo(CFrame.identity)
+	clone.Parent = world
+
+	local cam = vf.CurrentCamera
+	if not cam or not world.GetBoundingBox then return end
+	local ok, cf, size = pcall(function()
+		return world:GetBoundingBox()
+	end)
+	if not ok or not cf then return end
+	local maxDim = math.max(size.X, math.max(size.Y, size.Z)) or 1
+	local dist = maxDim * 2.2 + 2
+	cam.CFrame = CFrame.lookAt(cf.Position + Vector3.new(0, 0, dist), cf.Position)
+end
+
+-------------------------------------------------------------------------------
+-- BUILD CELLS
+-------------------------------------------------------------------------------
+local function clearGrid()
+	if not Grid then return end
+	for _, c in Grid:GetChildren() do
+		if c:IsA("Frame") and c ~= Template then
 			c:Destroy()
 		end
 	end
 end
 
--- Auto-build a simple row if no template exists.
-local function makeRow(scroll, chairName, equipped)
-	local row
-	if RowTemplate and RowTemplate:IsA("Frame") then
-		row = RowTemplate:Clone()
-		row.Visible = true
-		local nameLbl = row:FindFirstChild("ChairName")
-		if nameLbl then nameLbl.Text = chairName end
-		local btn = row:FindFirstChild("EquipBtn")
-		if btn then
-			btn.Text = (equipped == chairName) and "EQUIPPED" or "EQUIP"
-		end
-	else
-		row = Instance.new("Frame")
-		row.Size = UDim2.new(1, -16, 0, 50)
-		row.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-		row.Parent = nil
+local function makeCell(chairName, equipped)
+	if not Template then return end
+	local cell = Template:Clone()
+	cell.Name = "Cell_" .. chairName
+	cell.Visible = true
 
-		local nameLbl = Instance.new("TextLabel")
-		nameLbl.Name = "ChairName"
-		nameLbl.Size = UDim2.new(0.6, 0, 1, 0)
-		nameLbl.BackgroundTransparency = 1
+	-- Name label.
+	local nameLbl = cell:FindFirstChild("NameLbl")
+	if nameLbl and nameLbl:IsA("TextLabel") then
 		nameLbl.Text = chairName
-		nameLbl.TextScaled = true
-		nameLbl.Parent = row
-
-		local btn = Instance.new("TextButton")
-		btn.Name = "EquipBtn"
-		btn.Size = UDim2.new(0.4, 0, 1, 0)
-		btn.Position = UDim2.new(0.6, 0, 0, 0)
-		btn.Text = (equipped == chairName) and "EQUIPPED" or "EQUIP"
-		btn.Parent = row
 	end
 
-	row.Name = "Row_" .. chairName
-	row.Parent = scroll
-	return row
+	-- Equip button.
+	local equipBtn = cell:FindFirstChild("EquipBtn")
+	if equipBtn and equipBtn:IsA("TextButton") then
+		equipBtn.Text = (equipped == chairName) and "EQUIPPED" or "EQUIP"
+		equipBtn.Activated:Connect(function()
+			EquipChair:FireServer(chairName)
+		end)
+	end
+
+	-- 3D preview.
+	local vf, world = ensurePreviewFrame(cell)
+	renderChairPreview(vf, world, chairName)
+
+	cell.Parent = Grid
+	return cell
 end
 
 local function render(owned, equipped)
-	clearRows()
-	if not Scroll then return end
+	clearGrid()
+	if not Grid then return end
 	for _, name in owned do
-		local row = makeRow(Scroll, name, equipped)
-		local btn = row and row:FindFirstChild("EquipBtn")
-		if btn then
-			btn.Activated:Connect(function()
-				EquipChair:FireServer(name)
-			end)
-		end
+		makeCell(name, equipped)
 	end
 end
 
--- Server sync: read owned + equipped.
+-------------------------------------------------------------------------------
+-- SYNC
+-------------------------------------------------------------------------------
 local function readFromFolder()
 	local folder = player:FindFirstChild("Chairs")
 	if not folder then return {}, nil end
@@ -161,7 +247,6 @@ ChairSync.OnClientEvent:Connect(function(data)
 	render(data.owned or {}, data.equipped)
 end)
 
--- Also re-render when the Chairs folder updates.
 player.ChildAdded:Connect(function(child)
 	if child.Name == "Chairs" then
 		local owned, equipped = readFromFolder()
@@ -175,25 +260,24 @@ if CloseBtn then
 	end)
 end
 
--- Default: read from the folder if it already exists.
 local owned0, equipped0 = readFromFolder()
 render(owned0, equipped0)
 
 function InventoryAPI.open()
-	if not InventoryF then return end
-	InventoryF.Visible = true
-	UIFX.popIn(InventoryF)
+	if not Panel then return end
+	Panel.Visible = true
+	UIFX.popIn(Panel)
 	local owned, equipped = readFromFolder()
 	render(owned, equipped)
 end
 
 function InventoryAPI.close()
-	if not InventoryF then return end
-	UIFX.popOut(InventoryF)
+	if not Panel then return end
+	UIFX.popOut(Panel)
 end
 
 function InventoryAPI.isAvailable()
-	return InventoryF ~= nil
+	return Panel ~= nil
 end
 
 _G.InventoryAPI = InventoryAPI

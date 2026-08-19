@@ -146,14 +146,22 @@ ReplicatedStorage
 Workspace
 └── DisplayChairs  (Folder)    -- display chairs; each gets a ProximityPrompt
 GameUI
-└── InventoryF  (Frame, Visible=false)   -- chair inventory
-    ├── TitleLbl   (TextLabel)
-    ├── Scroll     (ScrollingFrame)
-    │   └── RowTemplate  (Frame, Visible=false)
-    │       ├── ChairName  (TextLabel)
-    │       └── EquipBtn   (TextButton)
-    └── CloseBtn   (TextButton)
+└── ChairInvPanel  (Frame, Visible=false)   -- chair inventory (grid + 3D previews)
+    ├── Grid  (ScrollingFrame)
+    │   ├── UIGridLayout
+    │   ├── UIPadding
+    │   └── Template  (Frame, Visible=false)
+    │       ├── EquipBtn  (TextButton)
+    │       └── NameLbl   (TextLabel)
+    ├── CloseBtn  (TextButton)
+    │   └── Icon  (ImageLabel)
+    └── TitleLbl  (TextLabel)
 ```
+
+The script auto-adds a **`ViewportFrame`** (`ChairPreview`) into each cloned cell
+to render the **3D chair model** (from `ReplicatedStorage.Chairs`), so each
+inventory cell shows a live preview of the chair. `NameLbl` + `EquipBtn` render
+on top of it.
 
 - Prices come from `ReplicatedStorage.ChairsConfig` (Wooden = 0, Broken = 500,
   ..., Gamer = 15000).
