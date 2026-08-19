@@ -58,50 +58,56 @@ local PRODUCT_IDS = {
 }
 
 -------------------------------------------------------------------------------
--- FIND SHOPF
+-- FIND SHOPF (GameUI only, WaitForChild so it never misses on slow connections)
 -------------------------------------------------------------------------------
--- Search PlayerGui for the ShopF window (in any ScreenGui).
-local ShopF
-for _, gui in PlayerGui:GetChildren() do
-	local f = gui:FindFirstChild("ShopF", true)
-	if f then
-		ShopF = f
-		break
-	end
-end
+local gameGui = PlayerGui:WaitForChild("GameUI")
+local ShopF = gameGui:WaitForChild("ShopF")
 
 local ShopAPI = {}
 
--- Wire up if found.
-if ShopF then
-	local closeBtn = ShopF:FindFirstChild("CloseBtn", true)
-	if closeBtn then
-		closeBtn.Activated:Connect(function()
-			ShopAPI.close()
-		end)
-	end
+-- Wire the close button.
+local closeBtn = ShopF:WaitForChild("CloseBtn", true)
+if closeBtn then
+	closeBtn.Activated:Connect(function()
+		ShopAPI.close()
+	end)
+end
 
-	-- Wire every item's BuyBtn to start a purchase.
-	-- Item frames have a BuyBtn; category frames (Cash/Wins/GP) have a UIListLayout.
-	local function wireBuyButtons()
-		for _, item in ShopF:GetDescendants() do
-			if item:IsA("GuiButton") and item.Name == "BuyBtn" then
-				-- The item frame is the BuyBtn's parent.
-				local itemFrame = item.Parent
-				local itemName = itemFrame and itemFrame.Name
-				local productId = itemName and PRODUCT_IDS[itemName]
-				item.Activated:Connect(function()
-					if not productId or productId == 0 then
-						warn("[Shop] No dev product set for", itemName)
-						return
-					end
-					MarketplaceService:PromptProductPurchase(player, productId)
-				end)
-			end
+-- Wire every item's BuyBtn to start a purchase. Item frames have a BuyBtn;
+-- category frames (Cash/Wins/GP) have a UIListLayout and are ignored.
+local function wireBuyButtons()
+	for _, item in ShopF:GetDescendants() do
+		if item:IsA("GuiButton") and item.Name == "BuyBtn" then
+			local itemFrame = item.Parent
+			local itemName = itemFrame and itemFrame.Name
+			local productId = itemName and PRODUCT_IDS[itemName]
+			item.Activated:Connect(function()
+				if not productId or productId == 0 then
+					warn("[Shop] No dev product set for", itemName)
+					return
+				end
+				MarketplaceService:PromptProductPurchase(player, productId)
+			end)
 		end
 	end
-	wireBuyButtons()
 end
+wireBuyButtons()
+
+-- Also wire any BuyBtn that appears later (slow-loading shop rows).
+ShopF.DescendantAdded:Connect(function(item)
+	if item:IsA("GuiButton") and item.Name == "BuyBtn" then
+		local itemFrame = item.Parent
+		local itemName = itemFrame and itemFrame.Name
+		local productId = itemName and PRODUCT_IDS[itemName]
+		item.Activated:Connect(function()
+			if not productId or productId == 0 then
+				warn("[Shop] No dev product set for", itemName)
+				return
+			end
+			MarketplaceService:PromptProductPurchase(player, productId)
+		end)
+	end
+end)
 
 function ShopAPI.open()
 	if not ShopF then return end
