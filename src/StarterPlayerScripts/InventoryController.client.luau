@@ -30,6 +30,8 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
@@ -156,7 +158,8 @@ local function ensurePreviewFrame(template)
 	return vf, world
 end
 
--- Clone a chair model into a WorldModel and frame the camera on it.
+-- Clone a chair model into a WorldModel, frame the camera on it, and register
+-- it for rotation.
 local function renderChairPreview(vf, world, chairName)
 	for _, c in world:GetChildren() do c:Destroy() end
 	if not ChairModels then return end
@@ -165,6 +168,10 @@ local function renderChairPreview(vf, world, chairName)
 	local clone = template:Clone()
 	clone:PivotTo(CFrame.identity)
 	clone.Parent = world
+
+	-- Register for rotation (reset angle + store pivot).
+	rotatingPreviews[world] = nil -- remove stale entry
+	table.insert(rotatingPreviews, { world = world, pivotCF = CFrame.identity, angle = 0 })
 
 	local cam = vf.CurrentCamera
 	if not cam or not world.GetBoundingBox then return end
@@ -178,9 +185,28 @@ local function renderChairPreview(vf, world, chairName)
 end
 
 -------------------------------------------------------------------------------
+-- ROTATING 3D PREVIEWS
+-- Each cell's chair rotates slowly. We store the WorldModel's root so we can
+-- rotate it each frame.
+-------------------------------------------------------------------------------
+local rotatingPreviews = {} -- { world, pivotCF, angle }
+
+RunService.Heartbeat:Connect(function()
+	local dt = RunService:GetLastFrameTime() -- nil-safe on some versions
+	if not dt then dt = 1 / 60 end
+	for _, p in rotatingPreviews do
+		if p and p.world and p.world.Parent then
+			p.angle = (p.angle or 0) + dt * 0.6
+			p.world:PivotTo(p.pivotCF * CFrame.Angles(0, p.angle, 0))
+		end
+	end
+end)
+
+-------------------------------------------------------------------------------
 -- BUILD CELLS
 -------------------------------------------------------------------------------
 local function clearGrid()
+	rotatingPreviews = {}
 	if not Grid then return end
 	for _, c in Grid:GetChildren() do
 		if c:IsA("Frame") and c ~= Template then
@@ -207,6 +233,22 @@ local function makeCell(chairName, equipped)
 		equipBtn.Text = (equipped == chairName) and "EQUIPPED" or "EQUIP"
 		equipBtn.Activated:Connect(function()
 			EquipChair:FireServer(chairName)
+		end)
+
+		-- Hover: grow on enter, shrink back on leave.
+		local us = equipBtn:FindFirstChildOfClass("UIScale")
+		if not us then
+			us = Instance.new("UIScale")
+			us.Scale = 1
+			us.Parent = equipBtn
+		end
+		equipBtn.MouseEnter:Connect(function()
+			TweenService:Create(us, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{ Scale = 1.15 }):Play()
+		end)
+		equipBtn.MouseLeave:Connect(function()
+			TweenService:Create(us, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{ Scale = 1 }):Play()
 		end)
 	end
 
@@ -278,6 +320,10 @@ end
 
 function InventoryAPI.isAvailable()
 	return Panel ~= nil
+end
+
+function InventoryAPI.isOpen()
+	return Panel ~= nil and Panel.Visible
 end
 
 _G.InventoryAPI = InventoryAPI

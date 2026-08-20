@@ -31,30 +31,51 @@ local InventoryBtn = Features:FindFirstChild("Inventory")
 local RewardsBtn = Features:FindFirstChild("Rewards")
 local ShopBtn = Features:FindFirstChild("Shop")
 
--- Rewards button opens the rewards window.
+-- Central toggle registry: each panel exposes open/close/isOpen. Clicking a
+-- button toggles ITS panel, and closes the other panels (only one open at a time).
+local PANELS = {
+	{ name = "Rewards",   api = function() return _G.RewardsAPI end },
+	{ name = "Inventory", api = function() return _G.InventoryAPI end },
+	{ name = "Shop",      api = function() return _G.ShopAPI end },
+}
+
+local function closeOthers(exceptApi)
+	for _, p in PANELS do
+		local api = p.api()
+		if api and api ~= exceptApi and api.isOpen and api.isOpen() then
+			api.close()
+		end
+	end
+end
+
+local function togglePanel(api)
+	if not api then return end
+	if api.isOpen and api.isOpen() then
+		api.close() -- already open -> close it
+	else
+		closeOthers(api) -- close the others first
+		api.open()
+	end
+end
+
+-- Rewards button opens/toggles the rewards window.
 if RewardsBtn then
 	RewardsBtn.Activated:Connect(function()
-		if _G.RewardsAPI and _G.RewardsAPI.open then
-			_G.RewardsAPI.open()
-		end
+		togglePanel(_G.RewardsAPI)
 	end)
 end
 
--- Inventory opens the chair inventory (equip owned chairs).
+-- Inventory toggles the chair inventory.
 if InventoryBtn then
 	InventoryBtn.Activated:Connect(function()
-		if _G.InventoryAPI and _G.InventoryAPI.open then
-			_G.InventoryAPI.open()
-		end
+		togglePanel(_G.InventoryAPI)
 	end)
 end
 
--- Shop: opens the ShopF window + looping scale pulse (eye-catching).
+-- Shop: toggles the ShopF window + looping scale pulse (eye-catching).
 if ShopBtn then
 	ShopBtn.Activated:Connect(function()
-		if _G.ShopAPI and _G.ShopAPI.open then
-			_G.ShopAPI.open()
-		end
+		togglePanel(_G.ShopAPI)
 	end)
 
 	-- Looping pulse using the button's existing UIScale (up + down forever).

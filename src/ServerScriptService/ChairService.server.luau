@@ -250,12 +250,21 @@ local function cloneChairAt(name, cf)
 end
 
 -- Apply the equipped chair to a seat, replacing the base chair.
+-- IDEMPOTENT: if this seat is already showing the player's equipped chair,
+-- it does nothing (so the poll loop doesn't re-clone every 0.5s).
 local function applyChairToSeat(player, seat)
 	local state = ensureState(player)
 	local equipped = state.equipped or "Wooden"
 
 	local st = seatChairState[seat] or {}
 	seatChairState[seat] = st
+
+	-- No change needed if we already applied this equipped chair.
+	if st.appliedFor == player and st.appliedEquipped == equipped then
+		return
+	end
+	st.appliedFor = player
+	st.appliedEquipped = equipped
 
 	-- Capture the base chair once.
 	if st.base == nil then
@@ -301,6 +310,9 @@ local function restoreChair(seat)
 	if st.base then
 		setModelHidden(st.base, false)
 	end
+	-- Reset the applied marker so re-sitting re-applies.
+	st.appliedFor = nil
+	st.appliedEquipped = nil
 end
 
 -- Detect sitting on game seats (same layout as GameManager: GameArea.TableN).

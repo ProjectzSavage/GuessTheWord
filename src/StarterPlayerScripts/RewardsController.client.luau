@@ -331,6 +331,9 @@ end
 function RewardsAPI.isAvailable()
 	return root ~= nil
 end
+function RewardsAPI.isOpen()
+	return isOpen
+end
 _G.RewardsAPI = RewardsAPI
 
 requestSync()

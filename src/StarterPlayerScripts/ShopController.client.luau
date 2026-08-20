@@ -124,4 +124,8 @@ function ShopAPI.isAvailable()
 	return ShopF ~= nil
 end
 
+function ShopAPI.isOpen()
+	return ShopF ~= nil and ShopF.Visible
+end
+
 _G.ShopAPI = ShopAPI
