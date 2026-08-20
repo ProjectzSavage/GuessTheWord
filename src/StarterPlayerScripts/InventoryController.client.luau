@@ -124,6 +124,9 @@ local Grid = Panel and Panel:FindFirstChild("Grid")
 local Template = Grid and Grid:FindFirstChild("Template")
 local CloseBtn = Panel and Panel:FindFirstChild("CloseBtn")
 
+-- Declared BEFORE renderChairPreview (which inserts into it).
+local rotatingPreviews = {} -- { world, pivotCF, angle }
+
 -------------------------------------------------------------------------------
 -- 3D PREVIEW (ViewportFrame)
 -------------------------------------------------------------------------------
@@ -136,7 +139,7 @@ local function ensurePreviewFrame(template)
 		vf.Name = "ChairPreview"
 		vf.Size = UDim2.new(1, 0, 0.75, 0)
 		vf.Position = UDim2.new(0, 0, 0, 0)
-		vf.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+		vf.BackgroundTransparency = 1 -- transparent background
 		vf.CurrentCamera = nil
 		-- Insert as first child so it sits behind NameLbl/EquipBtn.
 		vf.ZIndex = 1
@@ -187,13 +190,14 @@ end
 -------------------------------------------------------------------------------
 -- ROTATING 3D PREVIEWS
 -- Each cell's chair rotates slowly. We store the WorldModel's root so we can
--- rotate it each frame.
+-- rotate it each frame. Uses os.clock() delta (no GetLastFrameTime - it's not
+-- a valid RunService member).
 -------------------------------------------------------------------------------
-local rotatingPreviews = {} -- { world, pivotCF, angle }
-
+local lastRotate = os.clock()
 RunService.Heartbeat:Connect(function()
-	local dt = RunService:GetLastFrameTime() -- nil-safe on some versions
-	if not dt then dt = 1 / 60 end
+	local now = os.clock()
+	local dt = now - lastRotate
+	lastRotate = now
 	for _, p in rotatingPreviews do
 		if p and p.world and p.world.Parent then
 			p.angle = (p.angle or 0) + dt * 0.6
@@ -234,27 +238,25 @@ local function makeCell(chairName, equipped)
 		equipBtn.Activated:Connect(function()
 			EquipChair:FireServer(chairName)
 		end)
-
-		-- Hover: grow on enter, shrink back on leave.
-		local us = equipBtn:FindFirstChildOfClass("UIScale")
-		if not us then
-			us = Instance.new("UIScale")
-			us.Scale = 1
-			us.Parent = equipBtn
-		end
-		equipBtn.MouseEnter:Connect(function()
-			TweenService:Create(us, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-				{ Scale = 1.15 }):Play()
-		end)
-		equipBtn.MouseLeave:Connect(function()
-			TweenService:Create(us, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-				{ Scale = 1 }):Play()
-		end)
 	end
 
-	-- 3D preview.
+	-- 3D preview (grows on hover).
 	local vf, world = ensurePreviewFrame(cell)
 	renderChairPreview(vf, world, chairName)
+	local us = vf:FindFirstChildOfClass("UIScale")
+	if not us then
+		us = Instance.new("UIScale")
+		us.Scale = 1
+		us.Parent = vf
+	end
+	vf.MouseEnter:Connect(function()
+		TweenService:Create(us, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{ Scale = 1.1 }):Play()
+	end)
+	vf.MouseLeave:Connect(function()
+		TweenService:Create(us, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{ Scale = 1 }):Play()
+	end)
 
 	cell.Parent = Grid
 	return cell
