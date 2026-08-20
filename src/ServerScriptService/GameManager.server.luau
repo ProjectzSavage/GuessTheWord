@@ -759,6 +759,13 @@ local function runCashReroll(tableState)
 	-- clearly shown before the game starts.
 	task.wait(REROLL_DURATION + REWARD_SHOW_WAIT)
 
+	-- Tell clients the roll is done (StatsPanel slides out to the top here).
+	for _, occ in tableState.occupants do
+		if occ ~= "BOT" and occ then
+			CashAwarded:FireClient(occ, reward)
+		end
+	end
+
 	return reward
 end
 

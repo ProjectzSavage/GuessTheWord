@@ -42,8 +42,10 @@ local PANELS = {
 local function closeOthers(exceptApi)
 	for _, p in PANELS do
 		local api = p.api()
-		if api and api ~= exceptApi and api.isOpen and api.isOpen() then
-			api.close()
+		if api and api ~= exceptApi then
+			if api.isOpen and api.isOpen() and api.close then
+				api.close()
+			end
 		end
 	end
 end
@@ -51,10 +53,10 @@ end
 local function togglePanel(api)
 	if not api then return end
 	if api.isOpen and api.isOpen() then
-		api.close() -- already open -> close it
+		if api.close then api.close() end -- already open -> close it
 	else
 		closeOthers(api) -- close the others first
-		api.open()
+		if api.open then api.open() end
 	end
 end
 
