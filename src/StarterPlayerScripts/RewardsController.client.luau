@@ -68,6 +68,10 @@ local CAT_TITLE = {
 
 -- Reward image ids (fill in your assets). Pattern text is matched against the
 -- server's `rewards` string.
+-- IMPORTANT: These reward images are PLACEHOLDER asset ids. They will NOT show
+-- until you replace each `rbxassetid://...` with a REAL asset id you uploaded.
+-- (letter = reveal-letter icon, word = reveal-word icon, cash = cash icon,
+--  chair = random-chair icon.)
 local REWARD_IMAGES = {
 	letter_1 = "rbxassetid://REVEAL_LETTER_1",
 	letter_2 = "rbxassetid://REVEAL_LETTER_2",
@@ -79,6 +83,7 @@ local REWARD_IMAGES = {
 	cash_300 = "rbxassetid://CASH_300",
 	cash_500 = "rbxassetid://CASH_500",
 	cash_1000 = "rbxassetid://CASH_1000",
+	chair    = "rbxassetid://RANDOM_CHAIR",
 }
 local REWARD_PATTERNS = {
 	{ pattern = "+1 Reveal Letter", image = "letter_1" },
@@ -91,6 +96,7 @@ local REWARD_PATTERNS = {
 	{ pattern = "+$300",            image = "cash_300" },
 	{ pattern = "+$500",            image = "cash_500" },
 	{ pattern = "+$1000",           image = "cash_1000" },
+	{ pattern = "Random Chair",     image = "chair" },
 }
 
 local payload   = nil

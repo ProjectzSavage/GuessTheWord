@@ -387,4 +387,28 @@ Players.PlayerRemoving:Connect(function(player)
 	end
 end)
 
+-------------------------------------------------------------------------------
+-- PUBLIC API (used by RewardsService to grant chairs)
+-------------------------------------------------------------------------------
+-- Return the set of chair names the player owns (e.g. { Wooden=true, ... }).
+_G.ChairsGetOwned = function(player)
+	if not player then return {} end
+	local state = ensureState(player)
+	local owned = {}
+	for name in pairs(state.owned) do owned[name] = true end
+	return owned
+end
+
+-- Grant a specific chair to a player (adds to owned + syncs client).
+_G.ChairsGrant = function(player, chairName)
+	if not player or typeof(chairName) ~= "string" then return false end
+	if not CHAIR_NAMES[chairName] then return false end
+	local state = ensureState(player)
+	if state.owned[chairName] then return false end
+	state.owned[chairName] = true
+	syncClient(player)
+	notify(player, "You got the " .. chairName .. " chair!")
+	return true
+end
+
 print("[ChairService] Ready")

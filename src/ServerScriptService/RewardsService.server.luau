@@ -78,19 +78,29 @@ local REWARD_IMAGES = {
 	letter_3 = "rbxassetid://REVEAL_LETTER_3",
 	word_1   = "rbxassetid://REVEAL_WORD_1",
 	word_2   = "rbxassetid://REVEAL_WORD_2",
+	word_3   = "rbxassetid://REVEAL_WORD_3",
 	cash_100 = "rbxassetid://CASH_100",
 	cash_300 = "rbxassetid://CASH_300",
 	cash_500 = "rbxassetid://CASH_500",
 	cash_1000 = "rbxassetid://CASH_1000",
+	chair    = "rbxassetid://RANDOM_CHAIR",
 }
 
--- Each reward: id, rewards (text for icon matching), and grants (cash + powerup).
--- Reveal Letter is common; Reveal Word is rarer.
+-- The 5 cheapest chairs (excluding Wooden, the free default) - used by the
+-- Random Chair reward. Sorted by price ascending.
+local CHEAP_CHAIRS = { "Broken", "Steel", "Icey", "Thunder", "Toxic" }
+
+-- Each reward: id, required (for playtime/robux), rewards (text for icon
+-- matching), and grants: cash / powerup (Letter/Word) / chair (random).
+-- Reveal Letter is common; Reveal Word rarer; Random Chair is a treat.
 local PLAYTIME = {
-	{ id = "pt_1",  requiredMin = 1,  cash = 100, rewards = "+$100" },
-	{ id = "pt_3",  requiredMin = 3,  powerup = "Letter", uses = 1, rewards = "+1 Reveal Letter" },
-	{ id = "pt_10", requiredMin = 10, cash = 300, powerup = "Letter", uses = 2, rewards = "+$300, +2 Reveal Letter" },
-	{ id = "pt_20", requiredMin = 20, powerup = "Word", uses = 1, rewards = "+1 Reveal Word" },
+	{ id = "pt_5",    requiredMin = 5,    cash = 100, rewards = "+$100" },
+	{ id = "pt_10",   requiredMin = 10,   powerup = "Letter", uses = 1, rewards = "+1 Reveal Letter" },
+	{ id = "pt_30",   requiredMin = 30,   cash = 300, powerup = "Letter", uses = 1, rewards = "+$300, +1 Reveal Letter" },
+	{ id = "pt_60",   requiredMin = 60,   powerup = "Letter", uses = 2, rewards = "+2 Reveal Letter" },
+	{ id = "pt_300",  requiredMin = 300,  cash = 500, powerup = "Word", uses = 1, rewards = "+$500, +1 Reveal Word" },
+	{ id = "pt_600",  requiredMin = 600,  powerup = "Word", uses = 2, rewards = "+2 Reveal Word" },
+	{ id = "pt_1440", requiredMin = 1440, cash = 1000, powerup = "Word", uses = 3, rewards = "+$1000, +3 Reveal Word" },
 }
 
 local DAILY = {
@@ -98,17 +108,17 @@ local DAILY = {
 	{ id = "d2", powerup = "Letter", uses = 1, rewards = "+1 Reveal Letter" },
 	{ id = "d3", cash = 300, rewards = "+$300" },
 	{ id = "d4", powerup = "Letter", uses = 2, rewards = "+2 Reveal Letter" },
-	{ id = "d5", cash = 500, rewards = "+$500" },
-	{ id = "d6", powerup = "Letter", uses = 3, rewards = "+3 Reveal Letter" },
-	{ id = "d7", powerup = "Word", uses = 2, cash = 500, rewards = "+$500, +2 Reveal Word" },
+	{ id = "d5", chair = true, rewards = "Random Chair" },
+	{ id = "d6", cash = 500, powerup = "Word", uses = 1, rewards = "+$500, +1 Reveal Word" },
+	{ id = "d7", cash = 1000, powerup = "Word", uses = 3, rewards = "+$1000, +3 Reveal Word" },
 }
 
 local ROBUX_SPENT = {
-	{ id = "rb_50",   required = 50,   cash = 100, rewards = "+$100" },
-	{ id = "rb_250",  required = 250,  powerup = "Letter", uses = 2, rewards = "+2 Reveal Letter" },
-	{ id = "rb_1000", required = 1000, cash = 1000, powerup = "Letter", uses = 3, rewards = "+$1000, +3 Reveal Letter" },
-	{ id = "rb_5000", required = 5000, powerup = "Word", uses = 2, rewards = "+2 Reveal Word" },
-	{ id = "rb_10000",required = 10000,powerup = "Word", uses = 3, cash = 1000, rewards = "+$1000, +3 Reveal Word" },
+	{ id = "rb_50",   required = 50,    cash = 100, rewards = "+$100" },
+	{ id = "rb_250",  required = 250,   powerup = "Letter", uses = 2, rewards = "+2 Reveal Letter" },
+	{ id = "rb_1000", required = 1000,  cash = 1000, powerup = "Word", uses = 1, rewards = "+$1000, +1 Reveal Word" },
+	{ id = "rb_5000", required = 5000,  powerup = "Word", uses = 2, rewards = "+2 Reveal Word" },
+	{ id = "rb_10000",required = 10000, cash = 1000, powerup = "Word", uses = 3, chair = true, rewards = "+$1000, +3 Reveal Word, Random Chair" },
 }
 
 -------------------------------------------------------------------------------
@@ -156,12 +166,27 @@ local function grantPowerupUses(player, powerup, uses)
 	val.Value = val.Value + (uses or 1)
 end
 
+local function grantRandomChair(player)
+	if not _G.ChairsGetOwned or not _G.ChairsGrant then return end
+	local owned = _G.ChairsGetOwned(player)
+	local pool = {}
+	for _, name in ipairs(CHEAP_CHAIRS) do
+		if not owned[name] then
+			table.insert(pool, name)
+		end
+	end
+	if #pool == 0 then return false end
+	local pick = pool[math.random(1, #pool)]
+	return _G.ChairsGrant(player, pick)
+end
+
 local function markClaimed(player, id, grant)
 	local data = ensureData(player)
 	data.claimed[id] = true
 	if grant then
 		if grant.cash then addCash(player, grant.cash) end
 		if grant.powerup then grantPowerupUses(player, grant.powerup, grant.uses) end
+		if grant.chair then grantRandomChair(player) end
 	end
 	saveData(player)
 end
@@ -266,7 +291,7 @@ local function buildPayload(player, data)
 	local ok, inGroup = pcall(function() return player:IsInGroup(GROUP_ID) end)
 	local groupClaimed = data.claimed["group_main"] == true
 	table.insert(categories.group, {
-		id = "group_main", rewards = "+$500, +2 Reveal Letter", left = "Join",
+		id = "group_main", rewards = "+$500, +2 Reveal Letter, Random Chair", left = "Join",
 		claimed = groupClaimed, ready = (ok and inGroup) and not groupClaimed,
 	})
 
@@ -279,7 +304,7 @@ local function buildPayload(player, data)
 	end
 	local vipClaimed = data.claimed["vip_main"] == true
 	table.insert(categories.vipdaily, {
-		id = "vip_main", rewards = "+3 Reveal Letter", left = "VIP",
+		id = "vip_main", rewards = "+$1000, +3 Reveal Letter, Random Chair", left = "VIP",
 		claimed = vipClaimed, ready = ownsVip and not vipClaimed,
 	})
 
@@ -287,7 +312,7 @@ local function buildPayload(player, data)
 		local qid = "social_" .. tostring(dev.userId)
 		local followed = isFollowing(player, dev.userId)
 		table.insert(categories.social, {
-			id = qid, left = "@" .. dev.username, rewards = "+1 Reveal Letter",
+			id = qid, left = "@" .. dev.username, rewards = "+$250, +1 Reveal Letter",
 			claimed = data.claimed[qid] == true,
 			ready = followed and not data.claimed[qid],
 			followed = followed,
@@ -349,11 +374,11 @@ RewardClaim.OnServerEvent:Connect(function(player, categoryId, rowId)
 	-- Determine the grant.
 	local grant
 	if categoryId == "social" then
-		grant = { powerup = "Letter", uses = 1 }
+		grant = { cash = 250, powerup = "Letter", uses = 1 }
 	elseif categoryId == "group" then
-		grant = { cash = 500, powerup = "Letter", uses = 2 }
+		grant = { cash = 500, powerup = "Letter", uses = 2, chair = true }
 	elseif categoryId == "vipdaily" then
-		grant = { powerup = "Letter", uses = 3 }
+		grant = { cash = 1000, powerup = "Letter", uses = 3, chair = true }
 	else
 		local lookup = { playtime = PLAYTIME, daily = DAILY, robuxspent = ROBUX_SPENT }
 		local defs = lookup[categoryId]
