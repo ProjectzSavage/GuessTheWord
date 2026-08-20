@@ -73,17 +73,17 @@ local FOLLOW_API = "https://friends.roproxy.com/v1/users/%d/followings"
 
 -- Reward image ids (fill in your assets).
 local REWARD_IMAGES = {
-	letter_1 = "rbxassetid://REVEAL_LETTER_1",
-	letter_2 = "rbxassetid://REVEAL_LETTER_2",
-	letter_3 = "rbxassetid://REVEAL_LETTER_3",
-	word_1   = "rbxassetid://REVEAL_WORD_1",
-	word_2   = "rbxassetid://REVEAL_WORD_2",
-	word_3   = "rbxassetid://REVEAL_WORD_3",
-	cash_100 = "rbxassetid://CASH_100",
-	cash_300 = "rbxassetid://CASH_300",
-	cash_500 = "rbxassetid://CASH_500",
-	cash_1000 = "rbxassetid://CASH_1000",
-	chair    = "rbxassetid://RANDOM_CHAIR",
+	letter_1 = "rbxassetid://106595471170578",
+	letter_2 = "rbxassetid://92700052607893",
+	letter_3 = "rbxassetid://104052674943721",
+	word_1   = "rbxassetid://95488023650173",
+	word_2   = "rbxassetid://102920484565439",
+	word_3   = "rbxassetid://78172314776394",
+	cash_200 = "rbxassetid://73475281808267",
+	cash_300 = "rbxassetid://72562550267593",
+	cash_500 = "rbxassetid://121749597294959",
+	cash_1000 = "rbxassetid://105125784128656",
+	chair    = "rbxassetid://133477499555789",
 }
 
 -- The 5 cheapest chairs (excluding Wooden, the free default) - used by the
@@ -94,7 +94,7 @@ local CHEAP_CHAIRS = { "Broken", "Steel", "Icey", "Thunder", "Toxic" }
 -- matching), and grants: cash / powerup (Letter/Word) / chair (random).
 -- Reveal Letter is common; Reveal Word rarer; Random Chair is a treat.
 local PLAYTIME = {
-	{ id = "pt_5",    requiredMin = 5,    cash = 100, rewards = "+$100" },
+	{ id = "pt_5",    requiredMin = 5,    cash = 200, rewards = "+$200" },
 	{ id = "pt_10",   requiredMin = 10,   powerup = "Letter", uses = 1, rewards = "+1 Reveal Letter" },
 	{ id = "pt_30",   requiredMin = 30,   cash = 300, powerup = "Letter", uses = 1, rewards = "+$300, +1 Reveal Letter" },
 	{ id = "pt_60",   requiredMin = 60,   powerup = "Letter", uses = 2, rewards = "+2 Reveal Letter" },
@@ -104,7 +104,7 @@ local PLAYTIME = {
 }
 
 local DAILY = {
-	{ id = "d1", cash = 100, rewards = "+$100" },
+	{ id = "d1", cash = 200, rewards = "+$200" },
 	{ id = "d2", powerup = "Letter", uses = 1, rewards = "+1 Reveal Letter" },
 	{ id = "d3", cash = 300, rewards = "+$300" },
 	{ id = "d4", powerup = "Letter", uses = 2, rewards = "+2 Reveal Letter" },
@@ -114,7 +114,7 @@ local DAILY = {
 }
 
 local ROBUX_SPENT = {
-	{ id = "rb_50",   required = 50,    cash = 100, rewards = "+$100" },
+	{ id = "rb_50",   required = 50,    cash = 200, rewards = "+$200" },
 	{ id = "rb_250",  required = 250,   powerup = "Letter", uses = 2, rewards = "+2 Reveal Letter" },
 	{ id = "rb_1000", required = 1000,  cash = 1000, powerup = "Word", uses = 1, rewards = "+$1000, +1 Reveal Word" },
 	{ id = "rb_5000", required = 5000,  powerup = "Word", uses = 2, rewards = "+2 Reveal Word" },
