@@ -102,6 +102,8 @@ ServerScriptService
 | `src/StarterPlayerScripts/ButtonsController.client.luau`        | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/ShopController.client.luau`           | `StarterPlayerScripts`      | LocalScript |
 | `src/ServerScriptService/ShopService.server.luau`               | `ServerScriptService > Scripts` | Script   |
+| `src/ServerScriptService/QuestService.server.luau`              | `ServerScriptService > Scripts` | Script   |
+| `src/StarterPlayerScripts/QuestController.client.luau`          | `StarterPlayerScripts`      | LocalScript |
 | `src/ServerScriptService/ChairService.server.luau`              | `ServerScriptService > Scripts` | Script   |
 | `src/ReplicatedStorage/ChairsConfig.luau`                      | `ReplicatedStorage`         | ModuleScript |
 | `src/StarterPlayerScripts/InventoryController.client.luau`      | `StarterPlayerScripts`      | LocalScript |

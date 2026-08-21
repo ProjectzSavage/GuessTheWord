@@ -424,6 +424,7 @@ function gameOver(tableState, winnerSeatIndex)
 			break
 		end
 	end
+	local difficulty = isBotMatch and (tableState.botDifficulty or "Easy") or nil
 
 	for seatIndex, occ in tableState.occupants do
 		if occ ~= "BOT" and occ then
@@ -435,6 +436,12 @@ function gameOver(tableState, winnerSeatIndex)
 					and (tableState.occupants[winnerSeatIndex] :: Player).Name
 					or "Bot"
 				GameOver:FireClient(occ, winnerName, won, false, isBotMatch)
+				-- Notify the quest system (server-to-server via _G bridge).
+				if _G.QuestOnMatchEnded then
+					task.spawn(_G.QuestOnMatchEnded, occ, {
+						won = won, vsBot = isBotMatch, difficulty = difficulty,
+					})
+				end
 			end
 			OpponentState:FireClient(occ, false) -- hide the toggle; game is over
 		end

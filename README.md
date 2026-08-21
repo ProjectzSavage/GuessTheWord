@@ -25,7 +25,8 @@ src/
 │   ├── Nametag.server.luau         # name + 🔥win-streak BillboardGui
 │   ├── RewardsService.server.luau  # server-authoritative rewards
 │   ├── ShopService.server.luau     # Robux dev-product purchases + grants
-│   └── ChairService.server.luau    # buy/equip chairs + swap on sit
+│   ├── ChairService.server.luau    # buy/equip chairs + swap on sit
+│   └── QuestService.server.luau    # daily quests (win friend/hard bot, etc.)
 ├── ServerStorage/
 │   └── Modules/
 │       ├── Dictionary.luau         # server-only word/image dictionary
@@ -44,7 +45,8 @@ src/
     ├── RewardsController.client.luau# renders server payload in RewardsF
     ├── ButtonsController.client.luau# Features buttons (Rewards/Shop/Inventory)
     ├── ShopController.client.luau   # ShopF window + Robux buy prompts
-    └── InventoryController.client.luau# chair inventory (equip owned chairs)
+    ├── InventoryController.client.luau# chair inventory (equip owned chairs)
+    └── QuestController.client.luau   # daily quests gui (toggle + timer + claim)
 
 ## Cash & streak
 - `leaderstats.Cash` (first) + `leaderstats.Wins` show on the leaderboard.

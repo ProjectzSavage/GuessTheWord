@@ -43,6 +43,8 @@ local EVENT_NAMES = {
 	"BuyChair",        -- Client -> Server : buy a chair (name)
 	"EquipChair",      -- Client -> Server : equip a chair (name)
 	"ChairSync",       -- Server -> Client : owned chairs + equipped chair
+	"QuestSync",       -- Server -> Client : quests payload (progress + claimed)
+	"QuestClaim",      -- Client -> Server : claim a completed quest
 }
 
 -- Idempotent: if the folder already exists, reuse it (don't wipe manual setup).
