@@ -1,0 +1,338 @@
+-- FriendOnlinePopupController v3 (scale layout + anti-spam + test button)
+print("[FriendOnlinePopup] Starting...")
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local SocialService = game:GetService("SocialService")
+
+local player = Players.LocalPlayer
+local gameGui = player:WaitForChild("PlayerGui"):WaitForChild("GameGui")
+
+local POPUP_NAME = "FriendOnlinePopup"
+local POPUP_SECONDS = 12
+local REWARD_TEXT = "+$50 CASH"
+
+local POLL_INTERVAL = 15
+local GLOBAL_POPUP_COOLDOWN = 90
+local PER_FRIEND_COOLDOWN = 1200
+local MAX_POPUPS_PER_SESSION = 8
+local MAX_QUEUE_SIZE = 8
+
+local popup, titleLbl, closeBtn, avatarImg, rewardLbl, inviteBtn, countdownFill, countdownText, testBtn
+local countdownConn = nil
+
+local knownOnline = {}
+local queuedById = {}
+local queue = {}
+
+local lastPopupAt = 0
+local popupCount = 0
+local lastShownByFriend = {}
+
+local function makeCornerScale(inst, scaleRadius)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(scaleRadius, 0)
+	c.Parent = inst
+	return c
+end
+
+local function makeStroke(inst, color, thickness)
+	local s = Instance.new("UIStroke")
+	s.Color = color
+	s.Thickness = thickness
+	s.Parent = inst
+	return s
+end
+
+local function createGui()
+	local old = gameGui:FindFirstChild(POPUP_NAME)
+	if old then old:Destroy() end
+
+	popup = Instance.new("Frame")
+	popup.Name = POPUP_NAME
+	popup.AnchorPoint = Vector2.new(0.5, 0)
+	popup.Position = UDim2.fromScale(0.5, -0.24)
+	popup.Size = UDim2.fromScale(0.42, 0.21)
+	popup.BackgroundColor3 = Color3.fromRGB(52, 60, 84)
+	popup.BackgroundTransparency = 0.08
+	popup.Visible = false
+	popup.ZIndex = 50
+	popup.Parent = gameGui
+	makeCornerScale(popup, 0.11)
+	makeStroke(popup, Color3.fromRGB(89, 255, 77), 3)
+
+	titleLbl = Instance.new("TextLabel")
+	titleLbl.Name = "HeaderTitle"
+	titleLbl.BackgroundTransparency = 1
+	titleLbl.Position = UDim2.fromScale(0.03, 0.03)
+	titleLbl.Size = UDim2.fromScale(0.82, 0.22)
+	titleLbl.Font = Enum.Font.GothamBlack
+	titleLbl.TextScaled = true
+	titleLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+	titleLbl.TextStrokeTransparency = 0.2
+	titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+	titleLbl.Text = "Friend is online!"
+	titleLbl.ZIndex = 51
+	titleLbl.Parent = popup
+
+	closeBtn = Instance.new("TextButton")
+	closeBtn.Name = "PopupCloseBtn"
+	closeBtn.AnchorPoint = Vector2.new(1, 0)
+	closeBtn.Position = UDim2.fromScale(0.98, 0.04)
+	closeBtn.Size = UDim2.fromScale(0.08, 0.22)
+	closeBtn.BackgroundColor3 = Color3.fromRGB(232, 62, 62)
+	closeBtn.Text = "X"
+	closeBtn.Font = Enum.Font.GothamBlack
+	closeBtn.TextScaled = true
+	closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	closeBtn.ZIndex = 52
+	closeBtn.Parent = popup
+	makeCornerScale(closeBtn, 0.25)
+
+	avatarImg = Instance.new("ImageLabel")
+	avatarImg.Name = "AvatarImage"
+	avatarImg.BackgroundColor3 = Color3.fromRGB(15, 17, 27)
+	avatarImg.Position = UDim2.fromScale(0.03, 0.30)
+	avatarImg.Size = UDim2.fromScale(0.19, 0.52)
+	avatarImg.Image = "rbxassetid://0"
+	avatarImg.ZIndex = 51
+	avatarImg.Parent = popup
+	makeCornerScale(avatarImg, 0.18)
+
+	local onlineDot = Instance.new("Frame")
+	onlineDot.Name = "OnlineDot"
+	onlineDot.AnchorPoint = Vector2.new(1, 0)
+	onlineDot.Position = UDim2.fromScale(0.99, 0.02)
+	onlineDot.Size = UDim2.fromScale(0.22, 0.27)
+	onlineDot.BackgroundColor3 = Color3.fromRGB(73, 255, 67)
+	onlineDot.ZIndex = 52
+	onlineDot.Parent = avatarImg
+	makeCornerScale(onlineDot, 1)
+	makeStroke(onlineDot, Color3.fromRGB(15, 17, 27), 2)
+
+	rewardLbl = Instance.new("TextLabel")
+	rewardLbl.Name = "RewardText"
+	rewardLbl.BackgroundTransparency = 1
+	rewardLbl.Position = UDim2.fromScale(0.28, 0.39)
+	rewardLbl.Size = UDim2.fromScale(0.37, 0.24)
+	rewardLbl.Font = Enum.Font.GothamBlack
+	rewardLbl.TextScaled = true
+	rewardLbl.TextColor3 = Color3.fromRGB(255, 240, 80)
+	rewardLbl.TextStrokeTransparency = 0.2
+	rewardLbl.TextXAlignment = Enum.TextXAlignment.Left
+	rewardLbl.Text = REWARD_TEXT
+	rewardLbl.ZIndex = 51
+	rewardLbl.Parent = popup
+
+	inviteBtn = Instance.new("TextButton")
+	inviteBtn.Name = "InviteBtn"
+	inviteBtn.Position = UDim2.fromScale(0.43, 0.64)
+	inviteBtn.Size = UDim2.fromScale(0.27, 0.26)
+	inviteBtn.BackgroundColor3 = Color3.fromRGB(77, 242, 72)
+	inviteBtn.Text = "INVITE"
+	inviteBtn.Font = Enum.Font.GothamBlack
+	inviteBtn.TextScaled = true
+	inviteBtn.TextColor3 = Color3.fromRGB(18, 30, 18)
+	inviteBtn.ZIndex = 52
+	inviteBtn.Parent = popup
+	makeCornerScale(inviteBtn, 0.24)
+	makeStroke(inviteBtn, Color3.fromRGB(34, 120, 31), 2)
+
+	local countdownBar = Instance.new("Frame")
+	countdownBar.Name = "CountdownBar"
+	countdownBar.Position = UDim2.fromScale(0.03, 0.90)
+	countdownBar.Size = UDim2.fromScale(0.94, 0.06)
+	countdownBar.BackgroundColor3 = Color3.fromRGB(30, 33, 46)
+	countdownBar.ZIndex = 51
+	countdownBar.Parent = popup
+	makeCornerScale(countdownBar, 1)
+
+	countdownFill = Instance.new("Frame")
+	countdownFill.Name = "CountdownFill"
+	countdownFill.Size = UDim2.fromScale(1, 1)
+	countdownFill.BackgroundColor3 = Color3.fromRGB(79, 215, 255)
+	countdownFill.ZIndex = 52
+	countdownFill.Parent = countdownBar
+	makeCornerScale(countdownFill, 1)
+
+	countdownText = Instance.new("TextLabel")
+	countdownText.Name = "CountdownText"
+	countdownText.BackgroundTransparency = 1
+	countdownText.AnchorPoint = Vector2.new(1, 1)
+	countdownText.Position = UDim2.fromScale(0.97, 0.87)
+	countdownText.Size = UDim2.fromScale(0.24, 0.08)
+	countdownText.Font = Enum.Font.FredokaOne
+	countdownText.TextScaled = true
+	countdownText.TextColor3 = Color3.fromRGB(210, 240, 255)
+	countdownText.TextXAlignment = Enum.TextXAlignment.Right
+	countdownText.Text = ""
+	countdownText.ZIndex = 52
+	countdownText.Parent = popup
+
+	--testBtn = Instance.new("TextButton")
+	--testBtn.Name = "TestPopupBtn"
+	--testBtn.AnchorPoint = Vector2.new(1, 1)
+	--testBtn.Position = UDim2.fromScale(0.985, 0.985)
+	--testBtn.Size = UDim2.fromScale(0.12, 0.05)
+	--testBtn.BackgroundColor3 = Color3.fromRGB(20, 28, 42)
+	--testBtn.TextColor3 = Color3.fromRGB(230, 240, 255)
+	--testBtn.Text = "Test Popup"
+	--testBtn.TextScaled = true
+	--testBtn.Font = Enum.Font.GothamBold
+	--testBtn.ZIndex = 48
+	--testBtn.Parent = gameGui
+	--makeCornerScale(testBtn, 0.25)
+	--makeStroke(testBtn, Color3.fromRGB(92, 130, 220), 1.5)
+end
+
+local function setAvatar(userId)
+	local ok, thumb = pcall(function()
+		return Players:GetUserThumbnailAsync(userId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size420x420)
+	end)
+	avatarImg.Image = ok and thumb or "rbxassetid://0"
+end
+
+local function hidePopup()
+	if countdownConn then
+		countdownConn:Disconnect()
+		countdownConn = nil
+	end
+
+	if popup and popup.Visible then
+		local tw = TweenService:Create(
+			popup,
+			TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+			{ Position = UDim2.fromScale(0.5, -0.24) }
+		)
+		tw:Play()
+		tw.Completed:Wait()
+	end
+	popup.Visible = false
+end
+
+local function showPopup(friendName, friendUserId)
+	lastPopupAt = tick()
+	popupCount += 1
+	lastShownByFriend[friendUserId] = tick()
+
+	titleLbl.Text = string.format("%s is online!", friendName)
+	rewardLbl.Text = REWARD_TEXT
+	setAvatar(friendUserId)
+
+	popup.Position = UDim2.fromScale(0.5, -0.24)
+	popup.Visible = true
+
+	TweenService:Create(
+		popup,
+		TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+		{ Position = UDim2.fromScale(0.5, 0.02) }
+	):Play()
+
+	local started = tick()
+	countdownFill.Size = UDim2.fromScale(1, 1)
+
+	if countdownConn then countdownConn:Disconnect() end
+	countdownConn = RunService.Heartbeat:Connect(function()
+		local elapsed = tick() - started
+		local left = math.max(0, POPUP_SECONDS - elapsed)
+		local ratio = left / POPUP_SECONDS
+
+		countdownFill.Size = UDim2.fromScale(ratio, 1)
+		countdownText.Text = string.format("Closes in %ds", math.ceil(left))
+
+		if left <= 0 then
+			hidePopup()
+		end
+	end)
+end
+
+local function fetchFriendsOnline()
+	local ok, list = pcall(function()
+		return player:GetFriendsOnline(200)
+	end)
+	if not ok or type(list) ~= "table" then
+		return {}
+	end
+	return list
+end
+
+local function enqueueFriend(name, userId)
+	if queuedById[userId] then return end
+	if #queue >= MAX_QUEUE_SIZE then return end
+	queuedById[userId] = true
+	table.insert(queue, { name = name, userId = userId })
+end
+
+local function canShow(userId)
+	local now = tick()
+	if popupCount >= MAX_POPUPS_PER_SESSION then return false end
+	if (now - lastPopupAt) < GLOBAL_POPUP_COOLDOWN then return false end
+	local prev = lastShownByFriend[userId] or 0
+	if (now - prev) < PER_FRIEND_COOLDOWN then return false end
+	return true
+end
+
+local function tryShowFromQueue()
+	if popup.Visible then return end
+	if #queue == 0 then return end
+
+	local item = table.remove(queue, 1)
+	queuedById[item.userId] = nil
+
+	if canShow(item.userId) then
+		showPopup(item.name, item.userId)
+	end
+end
+
+local function bootstrapPresence()
+	for _, entry in ipairs(fetchFriendsOnline()) do
+		if entry.IsOnline and entry.VisitorId then
+			knownOnline[entry.VisitorId] = true
+		end
+	end
+end
+
+local function pollForNewOnlineFriend()
+	local list = fetchFriendsOnline()
+	local nowOnline = {}
+
+	for _, entry in ipairs(list) do
+		local uid = entry.VisitorId
+		if entry.IsOnline and uid then
+			nowOnline[uid] = true
+			local wasOnline = knownOnline[uid] == true
+			if not wasOnline then
+				enqueueFriend(entry.UserName or "Friend", uid)
+			end
+		end
+	end
+
+	knownOnline = nowOnline
+	tryShowFromQueue()
+end
+
+createGui()
+
+inviteBtn.MouseButton1Click:Connect(function()
+	pcall(function()
+		SocialService:PromptGameInvite(player)
+	end)
+end)
+
+closeBtn.MouseButton1Click:Connect(hidePopup)
+
+--testBtn.MouseButton1Click:Connect(function()
+--	showPopup("PopupTestUser", player.UserId)
+--end)
+
+bootstrapPresence()
+
+task.spawn(function()
+	while true do
+		pollForNewOnlineFriend()
+		task.wait(POLL_INTERVAL)
+	end
+end)
+
+print("[FriendOnlinePopup] Ready")
