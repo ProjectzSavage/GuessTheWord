@@ -4,21 +4,13 @@
 	Run this as a **LocalScript** in StarterPlayerScripts.
 
 	PURPOSE
-	Renders the DAILY QUESTS gui and drives its toggle. The server (QuestService)
-	sends a `payload` with active quests (desc, progress, target, reward, claimed, done)
-	and a reset countdown. This client fills the Quest gui rows, wires ClaimBtns,
-	and slides the panel closed/opened via ToggleBtn.
-
-	REQUIRED UI:
-		GameUI
-		└── DailyQuestsF  (Frame, Position {0.776,0},{0.034,0})
-		    └── Quest  (Frame)
-		        ├── UIListLayout
-		        ├── Quest1  (Frame)
-		        │   ├── ClaimBtn (TextButton), DescLbl, ProgressLbl, RewardLbl
-		        ├── Quest2  (Frame)  (same children)
-		        ├── ToggleBtn (TextButton)
-		        └── TitleLbl  (TextLabel)   shows "DAILY QUESTS (07:00:00)"
+	Renders the DAILY QUESTS gui (strictly 2 active quests).
+	Features:
+	  * Displays exactly 2 quests with live progress and claim buttons.
+	  * ToggleBtn manual collapse / expand.
+	  * State-memory: if open when a GUI (Shop/Rewards) opens, slides closed,
+	    and when that GUI closes, slides back open ONLY IF it wasn't previously
+	    collapsed by the user. If already collapsed, it stays collapsed.
 ]]
 
 local Players = game:GetService("Players")
@@ -34,7 +26,7 @@ local QuestSync = Events and (Events:FindFirstChild("QuestSync") or Events:WaitF
 local QuestClaim = Events and (Events:FindFirstChild("QuestClaim") or Events:WaitForChild("QuestClaim", 10))
 local QuestRequestSync = Events and (Events:FindFirstChild("QuestRequestSync") or Events:WaitForChild("QuestRequestSync", 10))
 
--- Safely locate GameUI inside PlayerGui (with fallback search)
+-- Safely locate GameUI inside PlayerGui
 local function resolveGameUI(): Instance
 	local target = PlayerGui:FindFirstChild("GameUI") or PlayerGui:FindFirstChild("GameGui")
 	if target then
@@ -93,7 +85,7 @@ local Quest = Panel:FindFirstChild("Quest") or Panel:FindFirstChild("Quests") or
 local ToggleBtn = Panel:FindFirstChild("ToggleBtn", true) :: TextButton?
 local TitleLbl = Panel:FindFirstChild("TitleLbl", true) :: TextLabel?
 
--- Save a clean RowTemplate before doing any clearing so we can always clone it
+-- Save a clean RowTemplate
 local rowTemplate: GuiObject? = nil
 if Quest then
 	for _, child in ipairs(Quest:GetChildren()) do
@@ -106,17 +98,23 @@ if Quest then
 	end
 end
 
--- The panel's resting position + slide-out position (to the right).
+-- Resting position + slide-out position (to the right)
 local REST_POS = Panel.Position
 local CLOSED_POS = REST_POS + UDim2.new(0.22, 0, 0, 0)
-local isOpen = true
+
+local isVisuallyOpen = true
+local userWantsOpen = true -- Memory state: true if user left it open, false if user collapsed it
 local payload = nil
 
 -------------------------------------------------------------------------------
--- TOGGLE (slide closed/opened to the right)
+-- TOGGLE & STATE MEMORY
 -------------------------------------------------------------------------------
-local function setOpen(open)
-	isOpen = open
+local function setPanelOpen(open: boolean, isUserAction: boolean)
+	if isUserAction then
+		userWantsOpen = open
+	end
+	isVisuallyOpen = open
+
 	if ToggleBtn then
 		ToggleBtn.Text = open and ">" or "<"
 	end
@@ -129,12 +127,25 @@ end
 
 if ToggleBtn then
 	ToggleBtn.Activated:Connect(function()
-		setOpen(not isOpen)
+		setPanelOpen(not isVisuallyOpen, true)
 	end)
 end
 
+-- State-Memory: only restores if user had left it open before opening GUI
+_G.SetQuestsHiddenByGui = function(guiIsOpen: boolean)
+	if guiIsOpen then
+		if userWantsOpen and isVisuallyOpen then
+			setPanelOpen(false, false)
+		end
+	else
+		if userWantsOpen and not isVisuallyOpen then
+			setPanelOpen(true, false)
+		end
+	end
+end
+
 -------------------------------------------------------------------------------
--- RENDER ACTIVE QUESTS
+-- RENDER QUESTS (STRICTLY 2 QUESTS)
 -------------------------------------------------------------------------------
 local function formatCountdown(secs)
 	secs = math.max(0, math.floor(secs))
@@ -157,7 +168,9 @@ local function render(quests)
 	if not Quest or not rowTemplate then return end
 	clearRows()
 
-	for idx, q in ipairs(quests) do
+	local maxQuests = math.min(#quests, 2)
+	for idx = 1, maxQuests do
+		local q = quests[idx]
 		local row = rowTemplate:Clone()
 		row.Name = "Quest" .. tostring(idx)
 		row.Visible = true
@@ -227,10 +240,9 @@ if QuestSync then
 	end)
 end
 
--- Request initial sync from server immediately
 if QuestRequestSync then
 	QuestRequestSync:FireServer()
 end
 
-setOpen(true)
-print("[QuestController] Ready - Active quests rendering active")
+setPanelOpen(true, true)
+print("[QuestController] Ready - 2 Quests max & State-Memory toggle active")

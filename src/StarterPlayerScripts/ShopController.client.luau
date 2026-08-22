@@ -6,11 +6,10 @@
 	PURPOSE
 	Drives the ShopF window: opens/closes it (with UIFX intro/outro), wires the
 	CloseBtn, and makes every item's BuyBtn start a REAL Robux purchase
-	(MarketplaceService:PromptProductPurchase). Each item frame's NAME maps to a
-	dev product id in PRODUCT_IDS below. The actual grant happens server-side
-	(ShopService.ProcessReceipt).
+	(MarketplaceService:PromptProductPurchase or PromptGamePassPurchase).
+	Each item frame's NAME maps to a dev product or gamepass id in PRODUCT_IDS.
 
-	REQUIRED UI (hierarchy):
+	REQUIRED UI:
 		ShopF  (Frame, Visible=false)
 		├── CloseBtn  (TextButton)
 		├── TitleLbl  (TextLabel)
@@ -18,16 +17,8 @@
 		    ├── Cash5000   -> item frame with a BuyBtn
 		    ├── Cash (Frame, category) -> Cash1000, Cash2500, Cash300
 		    ├── Wins (Frame, category) -> Wins10, Wins25, Wins50, Wins100
-		    ├── GP   (Frame, category) -> DoubleCash, DoubleStreak, DoubleWins
-		    └── VIPPack -> item frame with a BuyBtn
-
-	Every ITEM frame (has a BuyBtn) is found recursively by name and mapped to a
-	dev product id via PRODUCT_IDS. Category frames (Cash/Wins/GP) are just
-	containers with a UIListLayout and are ignored.
-
-	SETUP
-	* Fill PRODUCT_IDS: itemName -> devProductId (from Creator Hub).
-	* Clicking Buy fires the Robux purchase prompt for that product.
+		    ├── GP   (Frame, category) -> DoubleCash, DoubleStreak, DoubleWins, VIPPack
+		    └── Exclusive Chairs (Frame, category) -> HackerChair, SpacialMist, PinkVortex
 ]]
 
 local Players = game:GetService("Players")
@@ -37,12 +28,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
 local UIFX = require(ReplicatedStorage:WaitForChild("UIFX"))
+local ChairsConfig = require(ReplicatedStorage:WaitForChild("ChairsConfig"))
 
--------------------------------------------------------------------------------
--- DEV PRODUCT MAPPING  (fill in your Creator Hub dev product ids)
--- itemFrameName = productId
--------------------------------------------------------------------------------
 local PRODUCT_IDS = {
+	-- Dev Products
 	Cash5000  = 0,
 	Cash1000  = 0,
 	Cash2500  = 0,
@@ -51,63 +40,106 @@ local PRODUCT_IDS = {
 	Wins25    = 0,
 	Wins50    = 0,
 	Wins100   = 0,
+
+	-- Gamepasses
 	DoubleCash   = 0,
 	DoubleStreak = 0,
 	DoubleWins   = 0,
-	VIPPack   = 0,
+	VIPPack      = 0,
+
+	-- Robux Exclusive Chairs (Gamepasses)
+	HackerChair  = 0,
+	SpacialMist  = 0,
+	PinkVortex   = 0,
 }
 
--------------------------------------------------------------------------------
--- FIND SHOPF (GameUI only, WaitForChild so it never misses on slow connections)
--------------------------------------------------------------------------------
-local gameGui = PlayerGui:WaitForChild("GameUI")
-local ShopF = gameGui:WaitForChild("ShopF")
+local GAMEPASS_NAMES = {
+	DoubleCash = true,
+	DoubleStreak = true,
+	DoubleWins = true,
+	VIPPack = true,
+	HackerChair = true,
+	SpacialMist = true,
+	PinkVortex = true,
+}
+
+-- Merge IDs from ChairsConfig if defined
+if ChairsConfig.GamepassChairs then
+	for k, v in pairs(ChairsConfig.GamepassChairs) do
+		if v and v > 0 then
+			PRODUCT_IDS[k] = v
+		end
+	end
+end
+
+local gameGui = PlayerGui:WaitForChild("GameUI", 10) or PlayerGui:FindFirstChildWhichIsA("ScreenGui")
+local ShopF = gameGui and (gameGui:FindFirstChild("ShopF", true) or gameGui:WaitForChild("ShopF", 8))
 
 local ShopAPI = {}
 
--- Wire the close button.
-local closeBtn = ShopF:WaitForChild("CloseBtn", true)
+local closeBtn = ShopF and (ShopF:FindFirstChild("CloseBtn", true) :: GuiButton?)
 if closeBtn then
 	closeBtn.Activated:Connect(function()
 		ShopAPI.close()
 	end)
 end
 
--- Wire every item's BuyBtn to start a purchase. Item frames have a BuyBtn;
--- category frames (Cash/Wins/GP) have a UIListLayout and are ignored.
+local function handlePurchase(itemName: string, productId: number)
+	if not productId or productId == 0 then
+		warn("[Shop] No ID configured for:", itemName)
+		if _G.Notify then
+			_G.Notify({
+				title = "Shop",
+				message = "Configure the Gamepass / Product ID in ShopController!",
+				kind = "warn",
+			})
+		end
+		return
+	end
+
+	local isGamepass = GAMEPASS_NAMES[itemName] == true
+	if isGamepass then
+		MarketplaceService:PromptGamePassPurchase(player, productId)
+	else
+		MarketplaceService:PromptProductPurchase(player, productId)
+	end
+end
+
 local function wireBuyButtons()
-	for _, item in ShopF:GetDescendants() do
-		if item:IsA("GuiButton") and item.Name == "BuyBtn" then
+	if not ShopF then return end
+	for _, item in ipairs(ShopF:GetDescendants()) do
+		if item:IsA("GuiButton") and (item.Name == "BuyBtn" or item.Name == "PurchaseBtn") then
 			local itemFrame = item.Parent
 			local itemName = itemFrame and itemFrame.Name
 			local productId = itemName and PRODUCT_IDS[itemName]
-			item.Activated:Connect(function()
-				if not productId or productId == 0 then
-					warn("[Shop] No dev product set for", itemName)
-					return
-				end
-				MarketplaceService:PromptProductPurchase(player, productId)
-			end)
+
+			if not item:GetAttribute("BuyBound") then
+				item.Activated:Connect(function()
+					handlePurchase(itemName, productId)
+				end)
+				item:SetAttribute("BuyBound", true)
+			end
 		end
 	end
 end
 wireBuyButtons()
 
--- Also wire any BuyBtn that appears later (slow-loading shop rows).
-ShopF.DescendantAdded:Connect(function(item)
-	if item:IsA("GuiButton") and item.Name == "BuyBtn" then
-		local itemFrame = item.Parent
-		local itemName = itemFrame and itemFrame.Name
-		local productId = itemName and PRODUCT_IDS[itemName]
-		item.Activated:Connect(function()
-			if not productId or productId == 0 then
-				warn("[Shop] No dev product set for", itemName)
-				return
+if ShopF then
+	ShopF.DescendantAdded:Connect(function(item)
+		if item:IsA("GuiButton") and (item.Name == "BuyBtn" or item.Name == "PurchaseBtn") then
+			local itemFrame = item.Parent
+			local itemName = itemFrame and itemFrame.Name
+			local productId = itemName and PRODUCT_IDS[itemName]
+
+			if not item:GetAttribute("BuyBound") then
+				item.Activated:Connect(function()
+					handlePurchase(itemName, productId)
+				end)
+				item:SetAttribute("BuyBound", true)
 			end
-			MarketplaceService:PromptProductPurchase(player, productId)
-		end)
-	end
-end)
+		end
+	end)
+end
 
 function ShopAPI.open()
 	if not ShopF then return end
@@ -129,3 +161,4 @@ function ShopAPI.isOpen()
 end
 
 _G.ShopAPI = ShopAPI
+print("[ShopController] Ready - Robux exclusive chairs (HackerChair, SpacialMist, PinkVortex) supported")

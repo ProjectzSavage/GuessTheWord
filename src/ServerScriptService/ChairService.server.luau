@@ -8,29 +8,22 @@
 	  1. Buying  - each display chair in Workspace.DisplayChairs has a
 	              ProximityPrompt. Interacting deducts Cash (leaderstats.Cash)
 	              and adds the chair to the player's owned list.
-	  2. Equip   - the client tells the server which owned chair to equip.
-	  3. Replace - when a player sits on a game seat (Seat1/Seat2 in a TableN
+	  2. Gamepass Chairs - checks ownership of exclusive Robux chairs
+	              (HackerChair, SpacialMist, PinkVortex) and grants them automatically.
+	  3. Equip   - the client tells the server which owned chair to equip.
+	  4. Replace - when a player sits on a game seat (Seat1/Seat2 in a TableN
 	              folder), the chair model at that seat is replaced with the
 	              player's equipped chair (Wooden is the default/basic).
-
-	MODELS (you create these):
-	  * ReplicatedStorage.Chairs  (Folder)  - the chair Models, named exactly
-	    like the keys in ChairsConfig (Gamer, ProGamer, SuperFire, ...).
-	  * Workspace.DisplayChairs   (Folder)  - the on-display chairs (these get
-	    the ProximityPrompt). Names must match the config too.
-
-	OWNERSHIP
-	Owned chairs + equipped chair are stored in-memory per player session
-	(resets on server restart) AND mirrored into a `Chairs` folder on the player
-	so the client Inventory can read them.
 ]]
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
+local MarketplaceService = game:GetService("MarketplaceService")
 
 local ChairsConfig = require(ReplicatedStorage:WaitForChild("ChairsConfig"))
 local CHAIR_NAMES = ChairsConfig.Chairs
+local GAMEPASS_CHAIRS = ChairsConfig.GamepassChairs or {}
 
 local Events = ReplicatedStorage:WaitForChild("Events")
 local BuyChair = Events:WaitForChild("BuyChair")
@@ -61,14 +54,28 @@ local function setCash(player, amount)
 	end
 end
 
+local function checkGamepassChairs(player, state)
+	for chairName, passId in pairs(GAMEPASS_CHAIRS) do
+		if passId and passId > 0 and not state.owned[chairName] then
+			local ok, owns = pcall(function()
+				return MarketplaceService:UserOwnsGamePassAsync(player.UserId, passId)
+			end)
+			if ok and owns then
+				state.owned[chairName] = true
+			end
+		end
+	end
+end
+
 local function ensureState(player)
 	if not playerChair[player.UserId] then
 		playerChair[player.UserId] = { owned = { Wooden = true }, equipped = "Wooden" }
+		checkGamepassChairs(player, playerChair[player.UserId])
 	end
 	return playerChair[player.UserId]
 end
 
--- Mirror state into a folder on the player (for the client Inventory).
+-- Mirror state into a folder on the player (for client Inventory).
 local function syncChairFolder(player, state)
 	local folder = player:FindFirstChild("Chairs")
 	if not folder then
@@ -76,7 +83,6 @@ local function syncChairFolder(player, state)
 		folder.Name = "Chairs"
 		folder.Parent = player
 	end
-	-- Owned booleans.
 	for name in pairs(state.owned) do
 		if not folder:FindFirstChild(name) then
 			local bv = Instance.new("BoolValue")
@@ -85,7 +91,6 @@ local function syncChairFolder(player, state)
 			bv.Parent = folder
 		end
 	end
-	-- Equipped string.
 	local eq = folder:FindFirstChild("Equipped")
 	if not eq then
 		eq = Instance.new("StringValue")
@@ -105,48 +110,59 @@ local function syncClient(player)
 	ChairSync:FireClient(player, { owned = owned, equipped = state.equipped })
 end
 
-local function notify(player, message)
-	NotifyPlayer:FireClient(player, { title = "Chairs", message = message, kind = "info", duration = 3 })
+local function notify(player, title, message, kind)
+	NotifyPlayer:FireClient(player, {
+		title = title or "Chairs",
+		message = message,
+		kind = kind or "info",
+		duration = 3.5,
+	})
 end
 
 -------------------------------------------------------------------------------
 -- BUY (via display chairs)
 -------------------------------------------------------------------------------
--- Handle a purchase for a player + chair name.
 local function processBuy(player, chairName)
 	if typeof(chairName) ~= "string" then return end
 	local price = CHAIR_NAMES[chairName]
 	if not price then
-		notify(player, "Unknown chair.")
+		notify(player, "Shop", "Unknown chair.", "warn")
 		return
 	end
+	if type(price) == "string" and price == "Gamepass" then
+		local passId = GAMEPASS_CHAIRS[chairName]
+		if passId and passId > 0 then
+			MarketplaceService:PromptGamePassPurchase(player, passId)
+		else
+			notify(player, "Exclusive Chair", chairName .. " is a Robux exclusive chair!", "info")
+		end
+		return
+	end
+
 	local state = ensureState(player)
 	if state.owned[chairName] then
-		notify(player, "You already own " .. chairName .. ".")
+		notify(player, "Already Owned", "You already own " .. chairName .. "!", "info")
 		return
 	end
 	if getCash(player) < price then
-		notify(player, "Not enough cash for " .. chairName .. " (R$" .. price .. ").")
+		notify(player, "Insufficient Funds", "Not enough cash for " .. chairName .. " ($" .. price .. ").", "warn")
 		return
 	end
 	setCash(player, getCash(player) - price)
 	state.owned[chairName] = true
 	syncClient(player)
-	notify(player, "Bought " .. chairName .. "!")
+	notify(player, "Purchase Successful!", "You unlocked the " .. chairName .. " chair!", "success")
 end
 
--- Add a ProximityPrompt to each display chair in Workspace.DisplayChairs.
--- Triggering it buys that chair (server-authoritative).
-local DISPLAY = Workspace:WaitForChild("DisplayChairs")
+local DISPLAY = Workspace:FindFirstChild("DisplayChairs") or Workspace:WaitForChild("DisplayChairs", 10)
 local function setupDisplayChairs()
-	for _, display in DISPLAY:GetChildren() do
+	if not DISPLAY then return end
+	for _, display in ipairs(DISPLAY:GetChildren()) do
 		if display:IsA("Model") then
-			-- Use the display model's name as the chair name (e.g. "Gamer").
 			local chairName = display.Name
-			-- The prompt can be on the PrimaryPart or any BasePart.
 			local promptPart = display.PrimaryPart or display:FindFirstChildWhichIsA("BasePart")
 			if promptPart then
-				local prompt = Instance.new("ProximityPrompt")
+				local prompt = promptPart:FindFirstChild("BuyPrompt") or Instance.new("ProximityPrompt")
 				prompt.Name = "BuyPrompt"
 				prompt.ObjectText = "Buy " .. chairName
 				prompt.ActionText = "Buy"
@@ -161,7 +177,7 @@ local function setupDisplayChairs()
 		end
 	end
 end
-setupDisplayChairs()
+if DISPLAY then setupDisplayChairs() end
 
 BuyChair.OnServerEvent:Connect(function(player, chairName)
 	processBuy(player, chairName)
@@ -174,186 +190,93 @@ EquipChair.OnServerEvent:Connect(function(player, chairName)
 	if typeof(chairName) ~= "string" then return end
 	local state = ensureState(player)
 	if not state.owned[chairName] then
-		notify(player, "You don't own " .. chairName .. ".")
+		notify(player, "Not Owned", "You don't own " .. chairName .. ".", "warn")
 		return
 	end
 	state.equipped = chairName
 	syncClient(player)
-	notify(player, "Equipped " .. chairName .. ".")
+	notify(player, "Equipped", "Equipped " .. chairName .. ".", "info")
 end)
 
 -------------------------------------------------------------------------------
 -- REPLACE CHAIR ON SIT
--- When a player sits on a game seat, swap the seat's chair model to their
--- equipped chair.
 -------------------------------------------------------------------------------
--- Cache: seat -> { equipped = name, base = defaultChairModel, spawned = spawnedChairModel }
 local seatChairState = {}
 
--- Hide/show every BasePart (and its surfaces) of a model by Transparency.
 local function setModelHidden(model, hidden)
 	if not model then return end
 	local t = hidden and 1 or 0
-	for _, p in model:GetDescendants() do
+	for _, p in ipairs(model:GetDescendants()) do
 		if p:IsA("BasePart") then
 			p.Transparency = t
 		end
 	end
-	-- Model itself has no Transparency; toggle via a root part if present.
-	if model:IsA("BasePart") then
-		model.Transparency = t
-	end
 end
 
--- Find the default/base chair model at a seat. We pick the Model sibling in
--- the seat's parent that is CLOSEST to the seat, excluding the Table, the seats
--- themselves, and the spawned equipped-chair clones. This handles base chairs
--- named anything ("Chair1", "Chair2", "Wooden", ...).
-local function findSeatChair(seat)
-	local parent = seat.Parent
-	if not parent then return nil end
-	local best, bestDist
-	local seatPos = seat.Position
-	for _, child in parent:GetChildren() do
-		if child:IsA("Model")
-			and not child:IsA("Seat")
-			and not child:IsA("VehicleSeat")
-			and child.Name ~= "Table"
-			and child.Name ~= "SpawnedChair"
-		then
-			local root = child.PrimaryPart or child:FindFirstChildWhichIsA("BasePart")
-			if root then
-				local d = (root.Position - seatPos).Magnitude
-				if not bestDist or d < bestDist then
-					best = child
-					bestDist = d
-				end
-			end
+local function findSeatChairModel(seat)
+	local p = seat.Parent
+	if not p then return nil end
+	for _, c in ipairs(p:GetChildren()) do
+		if c:IsA("Model") and c ~= seat and string.find(string.lower(c.Name), "chair") then
+			return c
 		end
 	end
-	return best
+	return nil
 end
 
--- Clone an equipped chair at a given CFrame (position + orientation). If a base
--- chair exists, we use ITS pivot so the equipped chair lands exactly where the
--- base chair was - inheriting its correct facing and ground level. Otherwise we
--- fall back to the seat's CFrame.
-local function cloneChairAt(name, cf)
-	if not ChairModels then return nil end
-	local template = ChairModels:FindFirstChild(name)
-	if not template then return nil end
-	local clone = template:Clone()
-	clone.Name = "SpawnedChair" -- excluded from findSeatChair
-	clone:PivotTo(cf)
-	clone.Parent = Workspace
-	return clone
-end
-
--- Apply the equipped chair to a seat, replacing the base chair.
--- IDEMPOTENT: if this seat is already showing the player's equipped chair,
--- it does nothing (so the poll loop doesn't re-clone every 0.5s).
 local function applyChairToSeat(player, seat)
 	local state = ensureState(player)
-	local equipped = state.equipped or "Wooden"
+	local equippedName = state.equipped or "Wooden"
 
-	local st = seatChairState[seat] or {}
-	seatChairState[seat] = st
-
-	-- No change needed if we already applied this equipped chair.
-	if st.appliedFor == player and st.appliedEquipped == equipped then
+	local cached = seatChairState[seat]
+	if cached and cached.equipped == equippedName and cached.spawned and cached.spawned.Parent then
 		return
 	end
-	st.appliedFor = player
-	st.appliedEquipped = equipped
 
-	-- Capture the base chair once.
-	if st.base == nil then
-		st.base = findSeatChair(seat)
+	local baseModel = cached and cached.base or findSeatChairModel(seat)
+	if cached and cached.spawned and cached.spawned.Parent then
+		cached.spawned:Destroy()
 	end
 
-	-- Remove any previously spawned equipped chair.
-	if st.spawned then
-		if st.spawned.Parent then st.spawned:Destroy() end
-		st.spawned = nil
+	if equippedName == "Wooden" then
+		setModelHidden(baseModel, false)
+		seatChairState[seat] = { equipped = "Wooden", base = baseModel, spawned = nil }
+		return
 	end
 
-	-- Base chair: show only if we're using Wooden (the default).
-	if st.base then
-		setModelHidden(st.base, equipped ~= "Wooden")
+	setModelHidden(baseModel, true)
+	local template = ChairModels and ChairModels:FindFirstChild(equippedName)
+	if not template then
+		setModelHidden(baseModel, false)
+		seatChairState[seat] = { equipped = "Wooden", base = baseModel, spawned = nil }
+		return
 	end
 
-	-- Spawn the equipped chair (if not the default Wooden).
-	if equipped ~= "Wooden" then
-		-- Place it exactly where the base chair is (inherits facing + ground
-		-- level). If no base chair was found, use the seat's CFrame.
-		local cf
-		if st.base then
-			cf = st.base:GetPivot()
-		else
-			cf = seat.CFrame
-		end
-		local newChair = cloneChairAt(equipped, cf)
-		if newChair then
-			st.spawned = newChair
+	local spawned = template:Clone()
+	local refPart = baseModel and (baseModel.PrimaryPart or baseModel:FindFirstChildWhichIsA("BasePart")) or seat
+	spawned:PivotTo(refPart.CFrame)
+	for _, part in ipairs(spawned:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.Anchored = true
+			part.CanCollide = false
 		end
 	end
+	spawned.Parent = seat.Parent
+	seatChairState[seat] = { equipped = equippedName, base = baseModel, spawned = spawned }
 end
 
--- Restore the base chair and remove any spawned one when the player stands up.
 local function restoreChair(seat)
-	local st = seatChairState[seat]
-	if not st then return end
-	if st.spawned then
-		if st.spawned.Parent then st.spawned:Destroy() end
-		st.spawned = nil
+	local cached = seatChairState[seat]
+	if not cached then return end
+	if cached.spawned and cached.spawned.Parent then
+		cached.spawned:Destroy()
 	end
-	if st.base then
-		setModelHidden(st.base, false)
-	end
-	-- Reset the applied marker so re-sitting re-applies.
-	st.appliedFor = nil
-	st.appliedEquipped = nil
+	setModelHidden(cached.base, false)
+	seatChairState[seat] = nil
 end
 
--- Detect sitting on game seats (same layout as GameManager: GameArea.TableN).
-local GAME_AREA = Workspace:WaitForChild("GameArea")
-local function isGameSeat(seat)
-	local node = seat.Parent
-	while node do
-		if node:IsA("Folder") and string.sub(node.Name, 1, 5) == "Table" then
-			return true
-		end
-		node = node.Parent
-	end
-	return false
-end
+local GAME_AREA = Workspace:WaitForChild("Tables", 15) or Workspace
 
-Players.PlayerAdded:Connect(function(player)
-	player.CharacterAdded:Connect(function(character)
-		local humanoid = character:WaitForChild("Humanoid", 10)
-		if not humanoid then return end
-
-		-- Apply the equipped chair when sitting, restore the base when standing.
-		humanoid.Seated:Connect(function(seated)
-			local seat = humanoid.SeatPart
-			if seat and isGameSeat(seat) then
-				if seated then
-					applyChairToSeat(player, seat)
-				else
-					restoreChair(seat)
-				end
-			end
-		end)
-	end)
-
-	-- Send the client their initial chair data.
-	task.delay(1, function()
-		syncClient(player)
-	end)
-end)
-
--- Also poll seats (same approach as GameManager) so the chair swaps even if
--- Humanoid.Seated misses the event, and restore when the seat empties.
 local function seatOccupiedBy(seat)
 	local h = seat.Occupant
 	return h and Players:GetPlayerFromCharacter(h.Parent) or nil
@@ -362,15 +285,17 @@ end
 task.spawn(function()
 	while true do
 		task.wait(0.5)
-		for _, tableFolder in GAME_AREA:GetChildren() do
-			if tableFolder:IsA("Folder") and string.sub(tableFolder.Name, 1, 5) == "Table" then
-				for _, seat in tableFolder:GetChildren() do
-					if (seat:IsA("Seat") or seat:IsA("VehicleSeat")) then
-						local player = seatOccupiedBy(seat)
-						if player then
-							applyChairToSeat(player, seat)
-						else
-							restoreChair(seat)
+		if GAME_AREA then
+			for _, tableFolder in ipairs(GAME_AREA:GetChildren()) do
+				if tableFolder:IsA("Folder") and string.sub(tableFolder.Name, 1, 5) == "Table" then
+					for _, seat in ipairs(tableFolder:GetChildren()) do
+						if (seat:IsA("Seat") or seat:IsA("VehicleSeat")) then
+							local player = seatOccupiedBy(seat)
+							if player then
+								applyChairToSeat(player, seat)
+							else
+								restoreChair(seat)
+							end
 						end
 					end
 				end
@@ -379,18 +304,39 @@ task.spawn(function()
 	end
 end)
 
--- On player leave, clean up their active chairs.
+-------------------------------------------------------------------------------
+-- PLAYER JOIN / LEAVE / GAMEPASS EVENTS
+-------------------------------------------------------------------------------
+Players.PlayerAdded:Connect(function(player)
+	local state = ensureState(player)
+	task.delay(1, function()
+		if player.Parent then
+			checkGamepassChairs(player, state)
+			syncClient(player)
+		end
+	end)
+end)
+
 Players.PlayerRemoving:Connect(function(player)
-	local state = playerChair[player.UserId]
-	if state then
-		playerChair[player.UserId] = nil
+	playerChair[player.UserId] = nil
+end)
+
+MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, passId, wasPurchased)
+	if not wasPurchased or not player then return end
+	local state = ensureState(player)
+	for chairName, id in pairs(GAMEPASS_CHAIRS) do
+		if id == passId then
+			state.owned[chairName] = true
+			syncClient(player)
+			notify(player, "Gamepass Unlocked!", "You unlocked the exclusive " .. chairName .. " chair!", "success")
+			break
+		end
 	end
 end)
 
 -------------------------------------------------------------------------------
--- PUBLIC API (used by RewardsService to grant chairs)
+-- PUBLIC API
 -------------------------------------------------------------------------------
--- Return the set of chair names the player owns (e.g. { Wooden=true, ... }).
 _G.ChairsGetOwned = function(player)
 	if not player then return {} end
 	local state = ensureState(player)
@@ -399,7 +345,6 @@ _G.ChairsGetOwned = function(player)
 	return owned
 end
 
--- Grant a specific chair to a player (adds to owned + syncs client).
 _G.ChairsGrant = function(player, chairName)
 	if not player or typeof(chairName) ~= "string" then return false end
 	if not CHAIR_NAMES[chairName] then return false end
@@ -407,8 +352,8 @@ _G.ChairsGrant = function(player, chairName)
 	if state.owned[chairName] then return false end
 	state.owned[chairName] = true
 	syncClient(player)
-	notify(player, "You got the " .. chairName .. " chair!")
+	notify(player, "Reward Received!", "You unlocked the " .. chairName .. " chair!", "success")
 	return true
 end
 
-print("[ChairService] Ready")
+print("[ChairService] Ready - Exclusive Gamepass chairs configured")

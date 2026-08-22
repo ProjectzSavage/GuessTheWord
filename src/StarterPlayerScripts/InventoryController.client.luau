@@ -4,58 +4,37 @@
 	Run this as a **LocalScript** in StarterPlayerScripts.
 
 	PURPOSE
-	Drives the chair inventory panel. Each owned chair is shown in a cell of a
-	ScrollingFrame grid, with a **3D ViewportFrame preview** of the chair model
-	plus its name and an Equip button.
+	Drives the chair inventory panel and 3D chair displays.
+	Each owned chair is shown in a cell of a ScrollingFrame grid with a
+	3D ViewportFrame preview that floats UP and DOWN while ROTATING smoothly.
 
-	REQUIRED UI (in GameUI - the panel you built):
-		ChairInvPanel  (Frame, Visible=false)
-		├── Grid  (ScrollingFrame)
-		│   ├── UIGridLayout
-		│   ├── UIPadding
-		│   └── Template  (Frame, Visible=false)   -- cloned per chair
-		│       ├── EquipBtn  (TextButton)
-		│       └── NameLbl   (TextLabel)
-		├── CloseBtn  (TextButton)
-		│   └── Icon  (ImageLabel)
-		└── TitleLbl  (TextLabel)
-
-	The script AUTO-ADDS a `ViewportFrame` (named "ChairPreview") into each cell
-	to render the 3D chair. Chair models come from ReplicatedStorage.Chairs
-	(named like the ChairsConfig keys).
-
-	NOTE: if the panel is named `InventoryF` instead (older layout), it still
-	works and auto-builds a grid.
+	Also animates in-world Workspace.DisplayChairs with floating bob + spin.
 ]]
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
-local gameGui = PlayerGui:WaitForChild("GameUI")
+local gameGui = PlayerGui:WaitForChild("GameUI", 10) or PlayerGui:FindFirstChildWhichIsA("ScreenGui")
 
-local Events = ReplicatedStorage:WaitForChild("Events")
-local EquipChair = Events:WaitForChild("EquipChair")
-local ChairSync = Events:WaitForChild("ChairSync")
+local Events = ReplicatedStorage:WaitForChild("Events", 15)
+local EquipChair = Events and (Events:FindFirstChild("EquipChair") or Events:WaitForChild("EquipChair", 10))
+local ChairSync = Events and (Events:FindFirstChild("ChairSync") or Events:WaitForChild("ChairSync", 10))
 local UIFX = require(ReplicatedStorage:WaitForChild("UIFX"))
 local ChairsConfig = require(ReplicatedStorage:WaitForChild("ChairsConfig"))
 
--- Chair model templates live here (client can read ReplicatedStorage).
 local ChairModels = ReplicatedStorage:FindFirstChild("Chairs")
-
--- The inventory panel (either the new ChairInvPanel or older InventoryF).
-local Panel = gameGui:FindFirstChild("ChairInvPanel") or gameGui:FindFirstChild("InventoryF")
+local Panel = gameGui and (gameGui:FindFirstChild("ChairInvPanel", true) or gameGui:FindFirstChild("InventoryF", true))
 
 local InventoryAPI = {}
 
--------------------------------------------------------------------------------
--- FALLBACK: auto-create a simple grid panel if neither exists.
--------------------------------------------------------------------------------
 local function ensurePanel()
 	if Panel then return end
+	if not gameGui then return end
 	Panel = Instance.new("Frame")
 	Panel.Name = "ChairInvPanel"
 	Panel.Size = UDim2.new(0.5, 0, 0.6, 0)
@@ -83,7 +62,6 @@ local function ensurePanel()
 	layout.CellPadding = UDim2.new(0.03, 0, 0.03, 0)
 	layout.Parent = grid
 
-	-- Template
 	local template = Instance.new("Frame")
 	template.Name = "Template"
 	template.Size = UDim2.new(1, 0, 1, 0)
@@ -120,28 +98,20 @@ local function ensurePanel()
 end
 ensurePanel()
 
-local Grid = Panel and Panel:FindFirstChild("Grid")
-local Template = Grid and Grid:FindFirstChild("Template")
-local CloseBtn = Panel and Panel:FindFirstChild("CloseBtn")
+local Grid = Panel and (Panel:FindFirstChild("Grid", true) :: ScrollingFrame?)
+local Template = Grid and (Grid:FindFirstChild("Template", true) :: GuiObject?)
+local CloseBtn = Panel and (Panel:FindFirstChild("CloseBtn", true) :: GuiButton?)
 
--- Declared BEFORE renderChairPreview (which inserts into it).
 local rotatingPreviews = {} -- { world, pivotCF, angle }
 
--------------------------------------------------------------------------------
--- 3D PREVIEW (ViewportFrame)
--------------------------------------------------------------------------------
--- Ensure a cell's template has a ViewportFrame (added as the FIRST child so the
--- user's NameLbl/EquipBtn render on top of it).
-local function ensurePreviewFrame(template)
-	local vf = template:FindFirstChild("ChairPreview")
+local function ensurePreviewFrame(template: GuiObject)
+	local vf = template:FindFirstChild("ChairPreview") :: ViewportFrame?
 	if not vf then
 		vf = Instance.new("ViewportFrame")
 		vf.Name = "ChairPreview"
 		vf.Size = UDim2.new(1, 0, 0.75, 0)
 		vf.Position = UDim2.new(0, 0, 0, 0)
-		vf.BackgroundTransparency = 1 -- transparent background
-		vf.CurrentCamera = nil
-		-- Insert as first child so it sits behind NameLbl/EquipBtn.
+		vf.BackgroundTransparency = 1
 		vf.ZIndex = 1
 		vf.Parent = template
 	end
@@ -151,7 +121,6 @@ local function ensurePreviewFrame(template)
 		world.Name = "World"
 		world.Parent = vf
 	end
-	-- Give the ViewportFrame its own camera.
 	if not vf:FindFirstChildOfClass("Camera") then
 		local cam = Instance.new("Camera")
 		cam.Name = "Cam"
@@ -161,20 +130,17 @@ local function ensurePreviewFrame(template)
 	return vf, world
 end
 
--- Clone a chair model into a WorldModel, frame the camera on it, and register
--- it for rotation.
-local function renderChairPreview(vf, world, chairName)
-	for _, c in world:GetChildren() do c:Destroy() end
+local function renderChairPreview(vf: ViewportFrame, world: WorldModel, chairName: string)
+	for _, c in ipairs(world:GetChildren()) do c:Destroy() end
 	if not ChairModels then return end
 	local template = ChairModels:FindFirstChild(chairName)
 	if not template then return end
+
 	local clone = template:Clone()
 	clone:PivotTo(CFrame.identity)
 	clone.Parent = world
 
-	-- Register for rotation (reset angle + store pivot).
-	rotatingPreviews[world] = nil -- remove stale entry
-	table.insert(rotatingPreviews, { world = world, pivotCF = CFrame.identity, angle = 0 })
+	table.insert(rotatingPreviews, { world = world, pivotCF = CFrame.identity, angle = math.random() * math.pi })
 
 	local cam = vf.CurrentCamera
 	if not cam or not world.GetBoundingBox then return end
@@ -184,65 +150,85 @@ local function renderChairPreview(vf, world, chairName)
 	if not ok or not cf then return end
 	local maxDim = math.max(size.X, math.max(size.Y, size.Z)) or 1
 	local dist = maxDim * 2.2 + 2
-	cam.CFrame = CFrame.lookAt(cf.Position + Vector3.new(0, 0, dist), cf.Position)
+	cam.CFrame = CFrame.lookAt(cf.Position + Vector3.new(0, 0.2, dist), cf.Position)
 end
 
 -------------------------------------------------------------------------------
--- ROTATING 3D PREVIEWS
--- Each cell's chair rotates slowly. We store the WorldModel's root so we can
--- rotate it each frame. Uses os.clock() delta (no GetLastFrameTime - it's not
--- a valid RunService member).
+-- ROTATING + BOBBING UP & DOWN ANIMATION
 -------------------------------------------------------------------------------
 local lastRotate = os.clock()
-RunService.Heartbeat:Connect(function()
-	local now = os.clock()
-	local dt = now - lastRotate
-	lastRotate = now
-	for _, p in rotatingPreviews do
-		if p and p.world and p.world.Parent then
-			p.angle = (p.angle or 0) + dt * 0.6
-			p.world:PivotTo(p.pivotCF * CFrame.Angles(0, p.angle, 0))
+local inWorldDisplayPivots = {}
+
+task.spawn(function()
+	local displayFolder = Workspace:FindFirstChild("DisplayChairs") or Workspace:WaitForChild("DisplayChairs", 5)
+	if displayFolder then
+		for _, m in ipairs(displayFolder:GetChildren()) do
+			if m:IsA("Model") then
+				inWorldDisplayPivots[m] = m:GetPivot()
+			end
 		end
 	end
 end)
 
--------------------------------------------------------------------------------
--- BUILD CELLS
--------------------------------------------------------------------------------
+RunService.Heartbeat:Connect(function()
+	local now = os.clock()
+	local dt = now - lastRotate
+	lastRotate = now
+
+	-- 1. ViewportFrame In-Display Chairs (Inventory)
+	for _, p in ipairs(rotatingPreviews) do
+		if p and p.world and p.world.Parent then
+			p.angle = (p.angle or 0) + dt * 0.8
+			local bobY = math.sin(p.angle * 2.2) * 0.15
+			p.world:PivotTo(p.pivotCF * CFrame.new(0, bobY, 0) * CFrame.Angles(0, p.angle, 0))
+		end
+	end
+
+	-- 2. In-World Display Chairs (Workspace.DisplayChairs)
+	for model, basePivot in pairs(inWorldDisplayPivots) do
+		if model and model.Parent then
+			local bobY = math.sin(now * 2.0) * 0.25
+			local rotAngle = now * 0.7
+			model:PivotTo(basePivot * CFrame.new(0, bobY, 0) * CFrame.Angles(0, rotAngle, 0))
+		end
+	end
+end)
+
 local function clearGrid()
 	rotatingPreviews = {}
 	if not Grid then return end
-	for _, c in Grid:GetChildren() do
+	for _, c in ipairs(Grid:GetChildren()) do
 		if c:IsA("Frame") and c ~= Template then
 			c:Destroy()
 		end
 	end
 end
 
-local function makeCell(chairName, equipped)
+local function makeCell(chairName: string, equipped: string)
 	if not Template then return end
 	local cell = Template:Clone()
 	cell.Name = "Cell_" .. chairName
 	cell.Visible = true
 
-	-- Name label.
-	local nameLbl = cell:FindFirstChild("NameLbl")
+	local nameLbl = cell:FindFirstChild("NameLbl", true) :: TextLabel?
 	if nameLbl and nameLbl:IsA("TextLabel") then
 		nameLbl.Text = chairName
 	end
 
-	-- Equip button.
-	local equipBtn = cell:FindFirstChild("EquipBtn")
+	local equipBtn = cell:FindFirstChild("EquipBtn", true) :: TextButton?
 	if equipBtn and equipBtn:IsA("TextButton") then
 		equipBtn.Text = (equipped == chairName) and "EQUIPPED" or "EQUIP"
+		equipBtn.BackgroundColor3 = (equipped == chairName) and Color3.fromRGB(40, 180, 60) or Color3.fromRGB(60, 140, 70)
 		equipBtn.Activated:Connect(function()
-			EquipChair:FireServer(chairName)
+			if EquipChair then
+				EquipChair:FireServer(chairName)
+			end
 		end)
 	end
 
-	-- 3D preview (grows on hover).
 	local vf, world = ensurePreviewFrame(cell)
 	renderChairPreview(vf, world, chairName)
+
 	local us = vf:FindFirstChildOfClass("UIScale")
 	if not us then
 		us = Instance.new("UIScale")
@@ -262,34 +248,33 @@ local function makeCell(chairName, equipped)
 	return cell
 end
 
-local function render(owned, equipped)
+local function render(owned: { string }, equipped: string)
 	clearGrid()
 	if not Grid then return end
-	for _, name in owned do
+	for _, name in ipairs(owned) do
 		makeCell(name, equipped)
 	end
 end
 
--------------------------------------------------------------------------------
--- SYNC
--------------------------------------------------------------------------------
 local function readFromFolder()
 	local folder = player:FindFirstChild("Chairs")
-	if not folder then return {}, nil end
+	if not folder then return {}, "Wooden" end
 	local owned = {}
-	for _, child in folder:GetChildren() do
+	for _, child in ipairs(folder:GetChildren()) do
 		if child:IsA("BoolValue") and child.Value then
 			table.insert(owned, child.Name)
 		end
 	end
-	local eq = folder:FindFirstChild("Equipped")
-	return owned, eq and eq.Value or "Wooden"
+	local eq = folder:FindFirstChild("Equipped") :: StringValue?
+	return owned, (eq and eq.Value) or "Wooden"
 end
 
-ChairSync.OnClientEvent:Connect(function(data)
-	if type(data) ~= "table" then return end
-	render(data.owned or {}, data.equipped)
-end)
+if ChairSync then
+	ChairSync.OnClientEvent:Connect(function(data)
+		if type(data) ~= "table" then return end
+		render(data.owned or {}, data.equipped or "Wooden")
+	end)
+end
 
 player.ChildAdded:Connect(function(child)
 	if child.Name == "Chairs" then
@@ -329,3 +314,4 @@ function InventoryAPI.isOpen()
 end
 
 _G.InventoryAPI = InventoryAPI
+print("[InventoryController] Ready - 3D Chairs floating up & down + rotating active")
