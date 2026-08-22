@@ -1,6 +1,6 @@
 # GuessTheWord
 
-A fast-paced, 1v1 word guessing game in Roblox. Two players take turns picking letters and guessing words, with chairs, rewards, daily quests, and gamepasses.
+A fast-paced, 1v1 word guessing game in Roblox. Two players take turns picking letters and guessing words, with chairs, rewards, daily quests, gamepasses, and special offers.
 
 ---
 
@@ -8,8 +8,8 @@ A fast-paced, 1v1 word guessing game in Roblox. Two players take turns picking l
 
 ### 1. Daily Quests (`GameUI.DailyQuestsF`)
 - **Fix for Error**: `[Quest] DailyQuestsF not found in PlayerGui. - Client - QuestController:42`
-- `QuestController.client.luau` now safely resolves `PlayerGui.GameUI` (with fallbacks to `GameGui` and deep search across all ScreenGuis in `PlayerGui`).
-- Handles quest rows (`Quest1`..`Quest6` or dynamic row frames), live cycle countdown timers, and claim actions via `QuestClaim`.
+- **Active Quests Available**: Fixed `QuestService.server.luau` payload generator and `QuestController.client.luau` row rendering so active quests immediately show upon joining before the 7h timer resets.
+- Connects quest rows, live cycle countdown timer, and claim actions via `QuestClaim`.
 
 ### 2. Money Formatting & Gain Animations
 - **Money Formatting**: Added `NumberFormat` module in `ReplicatedStorage` to format cash with commas (`$1,250`) and compact notation (`$15.2k`, `$1M`).
@@ -39,7 +39,14 @@ A fast-paced, 1v1 word guessing game in Roblox. Two players take turns picking l
 ### 7. Fixed Rewards Toggler Button
 - Added the missing `RewardsAPI.close` implementation in `RewardsController.client.luau`.
 - Clicking `Buttons.Features.Rewards` when Rewards is closed opens it; clicking it again when Rewards is open closes it cleanly.
-- Reverts FOV, blur, and `StatsPanel` seamlessly upon closing.
+
+### 8. Friend Online Popup (`FriendOnlinePopupController.client.luau`)
+- Positioned compactly directly **UNDER the StatsPanel** in top-left.
+- Includes friend avatar thumbnail with online status indicator, `+$50 CASH` reward text, **INVITE** button (`SocialService:PromptGameInvite`), and auto-closing countdown bar.
+
+### 9. Offers UI & Gamepass Cycler (`OffersController.client.luau`)
+- **`CycleGpBtn`**: Automatically cycles through all gamepasses (VIP, 2x Streak, 2x Cash, 2x Wins) every 3.8s with smooth text/icon fade and scale pulse. Clicking prompts the gamepass purchase.
+- **`StarterPackBtn`**: Opens the `StarterPopup` displaying the 3 reward cards (`+1 Reveal Letter`, `Random Chair`, `+$500 CASH`) and prompts the Starter Pack purchase upon clicking `BuyBtn`.
 
 ---
 
@@ -75,9 +82,11 @@ A fast-paced, 1v1 word guessing game in Roblox. Two players take turns picking l
     └── StarterPlayerScripts/
         ├── ButtonsController.client.luau
         ├── CameraController.client.luau
+        ├── FriendOnlinePopupController.client.luau
         ├── HoverController.client.luau
         ├── InputHandler.client.luau
         ├── InventoryController.client.luau
+        ├── OffersController.client.luau
         ├── Preloader.client.luau
         ├── QuestController.client.luau
         ├── RerollController.client.luau

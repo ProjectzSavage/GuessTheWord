@@ -5,7 +5,7 @@
 
 	PURPOSE
 	Renders the DAILY QUESTS gui and drives its toggle. The server (QuestService)
-	sends a `payload` with quests (desc, progress, target, reward, claimed, done)
+	sends a `payload` with active quests (desc, progress, target, reward, claimed, done)
 	and a reset countdown. This client fills the Quest gui rows, wires ClaimBtns,
 	and slides the panel closed/opened via ToggleBtn.
 
@@ -32,6 +32,7 @@ local PlayerGui = player:WaitForChild("PlayerGui")
 local Events = ReplicatedStorage:WaitForChild("Events", 15)
 local QuestSync = Events and (Events:FindFirstChild("QuestSync") or Events:WaitForChild("QuestSync", 10))
 local QuestClaim = Events and (Events:FindFirstChild("QuestClaim") or Events:WaitForChild("QuestClaim", 10))
+local QuestRequestSync = Events and (Events:FindFirstChild("QuestRequestSync") or Events:WaitForChild("QuestRequestSync", 10))
 
 -- Safely locate GameUI inside PlayerGui (with fallback search)
 local function resolveGameUI(): Instance
@@ -49,7 +50,6 @@ local function resolveGameUI(): Instance
 		task.wait(0.1)
 	end
 
-	-- Search across all ScreenGuis for DailyQuestsF
 	for _, child in ipairs(PlayerGui:GetChildren()) do
 		if child:IsA("ScreenGui") and child:FindFirstChild("DailyQuestsF", true) then
 			return child
@@ -68,13 +68,11 @@ local function resolvePanel(): GuiObject?
 		return f
 	end
 
-	-- Check PlayerGui as fallback
 	f = PlayerGui:FindFirstChild("DailyQuestsF", true) or PlayerGui:FindFirstChild("DailyQuestF", true)
 	if f and f:IsA("GuiObject") then
 		return f
 	end
 
-	-- Wait with timeout
 	local ok, res = pcall(function()
 		return gameUI:WaitForChild("DailyQuestsF", 8)
 	end)
@@ -94,6 +92,19 @@ end
 local Quest = Panel:FindFirstChild("Quest") or Panel:FindFirstChild("Quests") or Panel
 local ToggleBtn = Panel:FindFirstChild("ToggleBtn", true) :: TextButton?
 local TitleLbl = Panel:FindFirstChild("TitleLbl", true) :: TextLabel?
+
+-- Save a clean RowTemplate before doing any clearing so we can always clone it
+local rowTemplate: GuiObject? = nil
+if Quest then
+	for _, child in ipairs(Quest:GetChildren()) do
+		if child:IsA("Frame") and string.match(child.Name, "^Quest%d*") then
+			rowTemplate = child:Clone()
+			rowTemplate.Name = "QuestTemplate"
+			rowTemplate.Visible = false
+			break
+		end
+	end
+end
 
 -- The panel's resting position + slide-out position (to the right).
 local REST_POS = Panel.Position
@@ -123,7 +134,7 @@ if ToggleBtn then
 end
 
 -------------------------------------------------------------------------------
--- RENDER QUESTS
+-- RENDER ACTIVE QUESTS
 -------------------------------------------------------------------------------
 local function formatCountdown(secs)
 	secs = math.max(0, math.floor(secs))
@@ -135,46 +146,36 @@ end
 
 local function clearRows()
 	if not Quest then return end
-	for _, c in Quest:GetChildren() do
-		if c:IsA("Frame") and c.Name:match("^Quest%d+$") then
+	for _, c in ipairs(Quest:GetChildren()) do
+		if c:IsA("Frame") and string.match(c.Name, "^Quest%d+") then
 			c:Destroy()
 		end
 	end
 end
 
 local function render(quests)
+	if not Quest or not rowTemplate then return end
 	clearRows()
-	if not Quest then return end
-	for _, q in quests do
-		-- Find an existing QuestN frame to reuse (there should be 2 pre-made).
-		local row = nil
-		for _, c in Quest:GetChildren() do
-			if c:IsA("Frame") and c.Name:match("^Quest%d+$") and not c:GetAttribute("Used") then
-				row = c
-				c:SetAttribute("Used", true)
-				break
-			end
-		end
-		-- If no free pre-made row, build one by cloning a used row.
-		if not row then
-			local anyRow
-			for _, c in Quest:GetChildren() do
-				if c:IsA("Frame") and c.Name:match("^Quest%d+$") then anyRow = c break end
-			end
-			if not anyRow then break end
-			row = anyRow:Clone()
-			row.Parent = Quest
-		end
+
+	for idx, q in ipairs(quests) do
+		local row = rowTemplate:Clone()
+		row.Name = "Quest" .. tostring(idx)
 		row.Visible = true
 
 		local desc = row:FindFirstChild("DescLbl", true) :: TextLabel?
-		if desc and desc:IsA("TextLabel") then desc.Text = q.desc end
+		if desc and desc:IsA("TextLabel") then
+			desc.Text = tostring(q.desc or "Quest")
+		end
 
 		local prog = row:FindFirstChild("ProgressLbl", true) :: TextLabel?
-		if prog and prog:IsA("TextLabel") then prog.Text = tostring(q.progress) .. " / " .. tostring(q.target) end
+		if prog and prog:IsA("TextLabel") then
+			prog.Text = tostring(q.progress or 0) .. " / " .. tostring(q.target or 1)
+		end
 
 		local rw = row:FindFirstChild("RewardLbl", true) :: TextLabel?
-		if rw and rw:IsA("TextLabel") then rw.Text = q.reward end
+		if rw and rw:IsA("TextLabel") then
+			rw.Text = tostring(q.reward or "")
+		end
 
 		local claim = row:FindFirstChild("ClaimBtn", true) :: TextButton?
 		if claim and claim:IsA("TextButton") then
@@ -195,16 +196,15 @@ local function render(quests)
 				claim.BackgroundColor3 = Color3.fromRGB(80, 80, 85)
 			end
 
-			if not row:GetAttribute("ClaimBound") then
-				claim.Activated:Connect(function()
-					if q.done and not q.claimed and QuestClaim then
-						claim.Text = "..."
-						QuestClaim:FireServer(q.id)
-					end
-				end)
-				row:SetAttribute("ClaimBound", true)
-			end
+			claim.Activated:Connect(function()
+				if q.done and not q.claimed and QuestClaim then
+					claim.Text = "..."
+					QuestClaim:FireServer(q.id)
+				end
+			end)
 		end
+
+		row.Parent = Quest
 	end
 end
 
@@ -227,5 +227,10 @@ if QuestSync then
 	end)
 end
 
+-- Request initial sync from server immediately
+if QuestRequestSync then
+	QuestRequestSync:FireServer()
+end
+
 setOpen(true)
-print("[QuestController] Ready - Loaded successfully from GameUI")
+print("[QuestController] Ready - Active quests rendering active")
