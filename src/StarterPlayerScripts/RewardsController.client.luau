@@ -1,0 +1,356 @@
+--[[
+	RewardsController.client.luau
+	----------------------------------------------------------------------------
+	Run this as a **LocalScript** in StarterPlayerScripts.
+
+	PURPOSE
+	Renders the server-driven RewardsF window. The SERVER (RewardsService) sends
+	a `payload` with categories + rows (id, left, rewards, claimed, ready). This
+	client clones the RowTemplate per row and styles the ClaimBtn:
+	  * CLAIMED (green, disabled)  -- already claimed
+	  * CLAIM   (green, enabled)   -- ready to claim
+	  * FOLLOW  (blue, enabled)    -- social: you must follow the owner on Roblox
+	  * NOT READY (grey, disabled) -- requirement not met / on cooldown
+
+	SETUP (hierarchy in docs/UI_HIERARCHY.md):
+	  RewardsF (in GameUI)
+	    ├── CloseBtn, MsgLbl, TitleLbl
+	    ├── LeftTabs: DailyBtn, GroupBtn, PlaytimeBtn, RobuxSpentBtn, SocialBtn, VipDailyBtn
+	    └── Content: CategoryTitle, CategorySubtitle, RowsScroll (RowTemplate)
+	RowTemplate: LeftLbl, RewardsContainer (ImageTemplate), ClaimBtn.
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local player  = Players.LocalPlayer
+local gui     = player:WaitForChild("PlayerGui")
+local gameGui = gui:WaitForChild("GameUI")
+
+local UIFX = require(ReplicatedStorage:WaitForChild("UIFX"))
+local NumberFormat = require(ReplicatedStorage:WaitForChild("NumberFormat"))
+
+local root     = gameGui:WaitForChild("RewardsF")
+local closeBtn = root:WaitForChild("CloseBtn")
+
+local leftTabs    = root:WaitForChild("LeftTabs")
+local content     = root:WaitForChild("Content")
+local titleLbl    = content:WaitForChild("CategoryTitle")
+local subLbl      = content:WaitForChild("CategorySubtitle")
+local rowsScroll  = content:WaitForChild("RowsScroll")
+local rowTemplate = rowsScroll:WaitForChild("RowTemplate")
+
+local Events             = ReplicatedStorage:WaitForChild("Events", 15)
+local RewardSync         = Events and (Events:FindFirstChild("RewardSync") or Events:WaitForChild("RewardSync", 10))
+local RewardClaim        = Events and (Events:FindFirstChild("RewardClaim") or Events:WaitForChild("RewardClaim", 10))
+local RewardRequestSync  = Events and (Events:FindFirstChild("RewardRequestSync") or Events:WaitForChild("RewardRequestSync", 10))
+local NotifyPlayer       = Events and (Events:FindFirstChild("NotifyPlayer") or Events:WaitForChild("NotifyPlayer", 10))
+
+local TAB_TO_CAT = {
+	PlaytimeBtn   = "playtime",
+	DailyBtn      = "daily",
+	GroupBtn      = "group",
+	SocialBtn     = "social",
+	VipDailyBtn   = "vipdaily",
+	RobuxSpentBtn = "robuxspent",
+}
+
+local CAT_TITLE = {
+	playtime   = "Playtime Rewards",
+	daily      = "Daily Rewards",
+	group      = "Group Rewards",
+	social     = "Social Rewards",
+	vipdaily   = "VIP Daily Rewards",
+	robuxspent = "Robux Spent Rewards",
+}
+
+local REWARD_IMAGES = {
+	letter_1 = "rbxassetid://106595471170578",
+	letter_2 = "rbxassetid://92700052607893",
+	letter_3 = "rbxassetid://104052674943721",
+	word_1   = "rbxassetid://95488023650173",
+	word_2   = "rbxassetid://102920484565439",
+	word_3   = "rbxassetid://78172314776394",
+	cash_200 = "rbxassetid://73475281808267",
+	cash_300 = "rbxassetid://72562550267593",
+	cash_500 = "rbxassetid://121749597294959",
+	cash_1000 = "rbxassetid://105125784128656",
+	chair    = "rbxassetid://133477499555789",
+}
+
+local REWARD_PATTERNS = {
+	{ pattern = "+1 Reveal Letter", image = "letter_1" },
+	{ pattern = "+2 Reveal Letter", image = "letter_2" },
+	{ pattern = "+3 Reveal Letter", image = "letter_3" },
+	{ pattern = "+1 Reveal Word",   image = "word_1" },
+	{ pattern = "+2 Reveal Word",   image = "word_2" },
+	{ pattern = "+3 Reveal Word",   image = "word_3" },
+	{ pattern = "+$200",            image = "cash_200" },
+	{ pattern = "+$300",            image = "cash_300" },
+	{ pattern = "+$500",            image = "cash_500" },
+	{ pattern = "+$1000",           image = "cash_1000" },
+	{ pattern = "Random Chair",     image = "chair" },
+}
+
+local payload   = nil
+local activeCat = "playtime"
+local isOpen    = false
+local syncedAt = os.clock()
+local syncedPlaytime = 0
+local syncedDaily = 0
+
+local function requestSync()
+	if RewardRequestSync then
+		RewardRequestSync:FireServer()
+	end
+end
+
+local function setMsg(text)
+	local msg = root:FindFirstChild("MsgLbl")
+	if msg and msg:IsA("TextLabel") then
+		msg.Text = text
+		task.delay(3, function()
+			if msg then msg.Text = "" end
+		end)
+	end
+end
+
+local function clearRows()
+	for _, c in ipairs(rowsScroll:GetChildren()) do
+		if c:IsA("Frame") and c ~= rowTemplate then
+			c:Destroy()
+		end
+	end
+end
+
+local function styleClaim(btn, row, categoryId)
+	btn.AutoButtonColor = false
+	if row.claimed then
+		btn.Text = "CLAIMED"
+		btn.BackgroundColor3 = Color3.fromRGB(60, 220, 60)
+		btn.Active = false
+	elseif row.ready then
+		btn.Text = "CLAIM"
+		btn.BackgroundColor3 = Color3.fromRGB(60, 220, 60)
+		btn.Active = true
+	elseif categoryId == "social" then
+		btn.Text = "FOLLOW"
+		btn.BackgroundColor3 = Color3.fromRGB(70, 140, 255)
+		btn.Active = true
+	else
+		btn.Text = "NOT READY"
+		btn.BackgroundColor3 = Color3.fromRGB(140, 140, 140)
+		btn.Active = false
+	end
+end
+
+local function parseRewardImages(rewardsText)
+	local images = {}
+	local txt = tostring(rewardsText or "")
+	for _, p in ipairs(REWARD_PATTERNS) do
+		if txt:find(p.pattern) then
+			table.insert(images, p.image)
+		end
+	end
+	return images
+end
+
+local function renderRow(categoryId, idx, row)
+	local clone = rowTemplate:Clone()
+	clone.Visible = true
+	clone.Name = "Row_" .. tostring(row.id or idx)
+
+	local left = clone:FindFirstChild("LeftLbl")
+	if left and left:IsA("TextLabel") then
+		if categoryId == "playtime" then
+			-- Format >= 60 minutes in hours
+			local reqMin = tonumber(row.requiredMin) or tonumber(string.match(tostring(row.left or ""), "(%d+)"))
+			if reqMin then
+				left.Text = NumberFormat.formatPlaytimeRequirement(reqMin)
+			else
+				left.Text = row.left or ""
+			end
+		elseif categoryId == "daily" then
+			left.Text = "Day " .. tostring(idx)
+		elseif categoryId == "group" then
+			left.Text = "Group"
+		elseif categoryId == "vipdaily" then
+			left.Text = "VIP"
+		elseif categoryId == "robuxspent" then
+			left.Text = "R$" .. tostring(row.left or "")
+		elseif categoryId == "social" then
+			left.Text = row.left or ""
+		end
+	end
+
+	local container = clone:FindFirstChild("RewardsContainer")
+	local template = container and container:FindFirstChild("ImageTemplate")
+	if template and template:IsA("ImageLabel") then
+		local keys = parseRewardImages(row.rewards)
+		template.Visible = false
+		local iconSize = 44
+		local spacing = 12
+		local count = math.min(#keys, 3)
+		local totalW = count * iconSize + (count - 1) * spacing
+		local startX = (container.AbsoluteSize.X - totalW) / 2
+		for i = 1, count do
+			local key = keys[i]
+			local img = template:Clone()
+			img.Visible = true
+			img.Image = REWARD_IMAGES[key] or key
+			img.Size = UDim2.new(0, iconSize, 0, iconSize)
+			img.Position = UDim2.new(0, startX + (i - 1) * (iconSize + spacing), 0.5, -iconSize / 2)
+			img.Parent = container
+		end
+	end
+
+	local claim = clone:FindFirstChild("ClaimBtn")
+	if claim and claim:IsA("TextButton") then
+		styleClaim(claim, row, categoryId)
+		claim.MouseButton1Click:Connect(function()
+			if categoryId == "social" and not row.ready and not row.claimed then
+				setMsg("Follow " .. (row.devUsername or "the owner") .. " on Roblox to claim!")
+				return
+			end
+			if row.ready and not row.claimed and RewardClaim then
+				RewardClaim:FireServer(categoryId, row.id)
+			end
+		end)
+	end
+
+	clone.Parent = rowsScroll
+end
+
+local function renderRows()
+	clearRows()
+	local rows = payload and payload.categories and payload.categories[activeCat] or {}
+	for idx, row in ipairs(rows) do
+		renderRow(activeCat, idx, row)
+	end
+end
+
+-- Compute current playtime seconds
+local function livePlaytime()
+	return syncedPlaytime + (os.clock() - syncedAt)
+end
+
+-- Compute current daily countdown
+local function liveDaily()
+	return math.max(0, syncedDaily - (os.clock() - syncedAt))
+end
+
+local function refreshSubtitle()
+	if not payload then
+		subLbl.Text = "Waiting for server sync..."
+		return
+	end
+	if activeCat == "robuxspent" then
+		subLbl.Text = "Total Robux spent: R$" .. tostring(payload.robuxSpentTotal or 0)
+	elseif activeCat == "playtime" then
+		-- REQUIREMENT: Displays in hours if >= 60 minutes (e.g. "Played for 1 hr 15 min 20 sec")
+		subLbl.Text = "Played for " .. NumberFormat.formatPlaytimePlayed(livePlaytime())
+	elseif activeCat == "daily" then
+		local left = liveDaily()
+		if left > 0 then
+			subLbl.Text = "Next daily in " .. NumberFormat.formatTime(left)
+		else
+			subLbl.Text = "Daily reward ready!"
+		end
+	elseif activeCat == "social" then
+		subLbl.Text = "Follow the owners on Roblox to claim!"
+	elseif activeCat == "group" then
+		subLbl.Text = "Like the game + Join the group"
+	elseif activeCat == "vipdaily" then
+		subLbl.Text = "Become VIP to claim"
+	else
+		subLbl.Text = ""
+	end
+end
+
+local function render()
+	if not root then return end
+	titleLbl.Text = CAT_TITLE[activeCat] or "Rewards"
+	if not payload then
+		subLbl.Text = "Waiting for server sync..."
+		clearRows()
+		return
+	end
+	refreshSubtitle()
+	renderRows()
+end
+
+local function selectCategory(cat)
+	activeCat = cat
+	if isOpen then render() end
+end
+
+local function onOpen()
+	isOpen = true
+	root.Active = true
+	UIFX.popIn(root)
+	requestSync()
+	render()
+end
+
+local function onClose()
+	if not isOpen then return end
+	isOpen = false
+	root.Active = false
+	UIFX.popOut(root)
+end
+
+for btnName, cat in pairs(TAB_TO_CAT) do
+	local btn = leftTabs:FindFirstChild(btnName)
+	if btn and btn:IsA("TextButton") then
+		btn.MouseButton1Click:Connect(function()
+			selectCategory(cat)
+		end)
+	end
+end
+
+closeBtn.MouseButton1Click:Connect(onClose)
+
+if RewardSync then
+	RewardSync.OnClientEvent:Connect(function(newPayload)
+		if type(newPayload) ~= "table" then return end
+		payload = newPayload
+		syncedAt = os.clock()
+		syncedPlaytime = tonumber(newPayload.totalPlaytime) or 0
+		syncedDaily = tonumber(newPayload.dailyCountdown) or 0
+		if isOpen then render() end
+	end)
+end
+
+RunService.Heartbeat:Connect(function()
+	if isOpen and (activeCat == "playtime" or activeCat == "daily") then
+		refreshSubtitle()
+	end
+end)
+
+if NotifyPlayer then
+	NotifyPlayer.OnClientEvent:Connect(function(info)
+		if type(info) == "table" and info.message then
+			setMsg(info.message)
+		end
+	end)
+end
+
+-- FIXED: Expose complete RewardsAPI including .close() for toggler support!
+local RewardsAPI = {}
+function RewardsAPI.open()
+	onOpen()
+end
+function RewardsAPI.close()
+	onClose()
+end
+function RewardsAPI.isAvailable()
+	return root ~= nil
+end
+function RewardsAPI.isOpen()
+	return isOpen
+end
+_G.RewardsAPI = RewardsAPI
+
+requestSync()
+print("[RewardsController] Ready - Playtime hours formatting & close API active")

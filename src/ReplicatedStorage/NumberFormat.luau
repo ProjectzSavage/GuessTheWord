@@ -1,10 +1,21 @@
 --!strict
--- NumberFormat Module
--- Handles number formatting, abbreviations (k, M, B), currency formatting, and playtime/countdown formatting.
+--[[
+	NumberFormat.luau (ModuleScript)
+	----------------------------------------------------------------------------
+	Place in: ReplicatedStorage.NumberFormat
+
+	PURPOSE
+	Provides number formatting helpers:
+	- addCommas(n) / commas(n): adds thousands separators ("1,000", "1,234,567")
+	- compact(n): compact notation ("10k", "1.5M", "2B")
+	- currency(n, compact): formatted with "$" prefix ("$1,250", "$15.2k")
+	- formatPlaytimeRequirement(mins): "15m", "1 hr", "1 hr 30 min", "2 hrs", "24 hrs"
+	- formatPlaytimePlayed(seconds): "45 sec", "12 min 30 sec", "1 hr 15 min 20 sec"
+	- formatTime(seconds): "00:00:00" or "00:00"
+]]
 
 local NumberFormat = {}
 
--- Formats a number with comma separators (e.g. 1000 -> "1,000", 1234567 -> "1,234,567")
 function NumberFormat.commas(n: number | string): string
 	local num = math.floor(tonumber(n) or 0)
 	local s = tostring(num)
@@ -23,7 +34,6 @@ function NumberFormat.commas(n: number | string): string
 	return sign .. s
 end
 
--- Compact number format (e.g. 950 -> "950", 15200 -> "15.2k", 2500000 -> "2.5M")
 function NumberFormat.compact(n: number | string): string
 	local num = math.floor(tonumber(n) or 0)
 	local sign = num < 0 and "-" or ""
@@ -49,7 +59,6 @@ function NumberFormat.compact(n: number | string): string
 	end
 end
 
--- Formats a number as currency (e.g. "$1,250" or "$15.2k")
 function NumberFormat.currency(n: number | string, useCompact: boolean?): string
 	if useCompact then
 		return "$" .. NumberFormat.compact(n)
@@ -58,7 +67,6 @@ function NumberFormat.currency(n: number | string, useCompact: boolean?): string
 	end
 end
 
--- Formats playtime requirement in minutes (e.g. 15 -> "15m", 60 -> "1 hr", 90 -> "1 hr 30 min", 120 -> "2 hrs")
 function NumberFormat.formatPlaytimeRequirement(mins: number | string): string
 	local totalMins = math.floor(tonumber(mins) or 0)
 	if totalMins < 60 then
@@ -75,8 +83,6 @@ function NumberFormat.formatPlaytimeRequirement(mins: number | string): string
 	end
 end
 
--- Formats played duration in seconds into readable text
--- e.g. 45 -> "45 sec", 750 -> "12 min 30 sec", 3665 -> "1 hr 1 min 5 sec"
 function NumberFormat.formatPlaytimePlayed(seconds: number | string): string
 	local sec = math.max(0, math.floor(tonumber(seconds) or 0))
 	local h = math.floor(sec / 3600)
@@ -97,7 +103,6 @@ function NumberFormat.formatPlaytimePlayed(seconds: number | string): string
 	end
 end
 
--- Standard digital timer format HH:MM:SS or MM:SS
 function NumberFormat.formatTime(seconds: number | string): string
 	local sec = math.max(0, math.floor(tonumber(seconds) or 0))
 	local h = math.floor(sec / 3600)

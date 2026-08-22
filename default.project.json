@@ -4,47 +4,21 @@
     "$className": "DataModel",
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
-      "NumberFormat": {
-        "$path": "src/ReplicatedStorage/NumberFormat.luau"
-      }
+      "$path": "src/ReplicatedStorage"
     },
     "ServerScriptService": {
       "$className": "ServerScriptService",
-      "DailyQuestService": {
-        "$path": "src/ServerScriptService/DailyQuestService.luau"
-      },
-      "RewardsService": {
-        "$path": "src/ServerScriptService/RewardsService.luau"
-      },
-      "RobuxShopService": {
-        "$path": "src/ServerScriptService/RobuxShopService.luau"
-      }
+      "$path": "src/ServerScriptService"
+    },
+    "ServerStorage": {
+      "$className": "ServerStorage",
+      "$path": "src/ServerStorage"
     },
     "StarterPlayer": {
       "$className": "StarterPlayer",
       "StarterPlayerScripts": {
         "$className": "StarterPlayerScripts",
-        "QuestController": {
-          "$path": "src/StarterPlayerScripts/QuestController.luau"
-        },
-        "RewardsController": {
-          "$path": "src/StarterPlayerScripts/RewardsController.luau"
-        },
-        "ShopController": {
-          "$path": "src/StarterPlayerScripts/ShopController.luau"
-        },
-        "StatsHudController": {
-          "$path": "src/StarterPlayerScripts/StatsHudController.luau"
-        },
-        "UIWindowsController": {
-          "$path": "src/StarterPlayerScripts/UIWindowsController.luau"
-        },
-        "RewardsBadgeController": {
-          "$path": "src/StarterPlayerScripts/RewardsBadgeController.luau"
-        },
-        "StatsShopQuickAccess": {
-          "$path": "src/StarterPlayerScripts/StatsShopQuickAccess.luau"
-        }
+        "$path": "src/StarterPlayerScripts"
       }
     }
   }
