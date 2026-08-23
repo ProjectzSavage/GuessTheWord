@@ -9,16 +9,9 @@
 	(MarketplaceService:PromptProductPurchase or PromptGamePassPurchase).
 	Each item frame's NAME maps to a dev product or gamepass id in PRODUCT_IDS.
 
-	REQUIRED UI:
-		ShopF  (Frame, Visible=false)
-		├── CloseBtn  (TextButton)
-		├── TitleLbl  (TextLabel)
-		└── Scroll  (ScrollingFrame)
-		    ├── Cash5000   -> item frame with a BuyBtn
-		    ├── Cash (Frame, category) -> Cash1000, Cash2500, Cash300
-		    ├── Wins (Frame, category) -> Wins10, Wins25, Wins50, Wins100
-		    ├── GP   (Frame, category) -> DoubleCash, DoubleStreak, DoubleWins, VIPPack
-		    └── Exclusive Chairs (Frame, category) -> HackerChair, SpacialMist, PinkVortex
+	MUTUAL EXCLUSIVITY:
+	When opening Shop, it automatically closes Rewards and Inventory so frames
+	never overlap.
 ]]
 
 local Players = game:GetService("Players")
@@ -63,7 +56,6 @@ local GAMEPASS_NAMES = {
 	PinkVortex = true,
 }
 
--- Merge IDs from ChairsConfig if defined
 if ChairsConfig.GamepassChairs then
 	for k, v in pairs(ChairsConfig.GamepassChairs) do
 		if v and v > 0 then
@@ -143,6 +135,14 @@ end
 
 function ShopAPI.open()
 	if not ShopF then return end
+	-- Automatically close Rewards and Inventory if open
+	if _G.RewardsAPI and _G.RewardsAPI.isOpen and _G.RewardsAPI.isOpen() and _G.RewardsAPI.close then
+		_G.RewardsAPI.close()
+	end
+	if _G.InventoryAPI and _G.InventoryAPI.isOpen and _G.InventoryAPI.isOpen() and _G.InventoryAPI.close then
+		_G.InventoryAPI.close()
+	end
+
 	ShopF.Visible = true
 	UIFX.popIn(ShopF)
 end
@@ -161,4 +161,4 @@ function ShopAPI.isOpen()
 end
 
 _G.ShopAPI = ShopAPI
-print("[ShopController] Ready - Robux exclusive chairs (HackerChair, SpacialMist, PinkVortex) supported")
+print("[ShopController] Ready - Robux exclusive chairs supported & auto-close synced")

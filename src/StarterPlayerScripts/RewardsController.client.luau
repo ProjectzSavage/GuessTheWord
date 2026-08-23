@@ -12,12 +12,9 @@
 	  * FOLLOW  (blue, enabled)    -- social: you must follow the owner on Roblox
 	  * NOT READY (grey, disabled) -- requirement not met / on cooldown
 
-	SETUP (hierarchy in docs/UI_HIERARCHY.md):
-	  RewardsF (in GameUI)
-	    ├── CloseBtn, MsgLbl, TitleLbl
-	    ├── LeftTabs: DailyBtn, GroupBtn, PlaytimeBtn, RobuxSpentBtn, SocialBtn, VipDailyBtn
-	    └── Content: CategoryTitle, CategorySubtitle, RowsScroll (RowTemplate)
-	RowTemplate: LeftLbl, RewardsContainer (ImageTemplate), ClaimBtn.
+	MUTUAL EXCLUSIVITY:
+	When opening Rewards, it automatically closes Shop and Inventory so frames
+	never overlap.
 ]]
 
 local Players = game:GetService("Players")
@@ -26,20 +23,20 @@ local RunService = game:GetService("RunService")
 
 local player  = Players.LocalPlayer
 local gui     = player:WaitForChild("PlayerGui")
-local gameGui = gui:WaitForChild("GameUI")
+local gameGui = gui:WaitForChild("GameUI", 10) or gui:FindFirstChildWhichIsA("ScreenGui")
 
 local UIFX = require(ReplicatedStorage:WaitForChild("UIFX"))
 local NumberFormat = require(ReplicatedStorage:WaitForChild("NumberFormat"))
 
-local root     = gameGui:WaitForChild("RewardsF")
-local closeBtn = root:WaitForChild("CloseBtn")
+local root     = gameGui and (gameGui:FindFirstChild("RewardsF", true) or gameGui:WaitForChild("RewardsF", 8))
+local closeBtn = root and (root:FindFirstChild("CloseBtn", true) :: GuiButton?)
 
-local leftTabs    = root:WaitForChild("LeftTabs")
-local content     = root:WaitForChild("Content")
-local titleLbl    = content:WaitForChild("CategoryTitle")
-local subLbl      = content:WaitForChild("CategorySubtitle")
-local rowsScroll  = content:WaitForChild("RowsScroll")
-local rowTemplate = rowsScroll:WaitForChild("RowTemplate")
+local leftTabs    = root and (root:FindFirstChild("LeftTabs", true) :: GuiObject?)
+local content     = root and (root:FindFirstChild("Content", true) :: GuiObject?)
+local titleLbl    = content and (content:FindFirstChild("CategoryTitle", true) :: TextLabel?)
+local subLbl      = content and (content:FindFirstChild("CategorySubtitle", true) :: TextLabel?)
+local rowsScroll  = content and (content:FindFirstChild("RowsScroll", true) :: ScrollingFrame?)
+local rowTemplate = rowsScroll and (rowsScroll:FindFirstChild("RowTemplate", true) :: GuiObject?)
 
 local Events             = ReplicatedStorage:WaitForChild("Events", 15)
 local RewardSync         = Events and (Events:FindFirstChild("RewardSync") or Events:WaitForChild("RewardSync", 10))
@@ -107,7 +104,7 @@ local function requestSync()
 end
 
 local function setMsg(text)
-	local msg = root:FindFirstChild("MsgLbl")
+	local msg = root and root:FindFirstChild("MsgLbl", true) :: TextLabel?
 	if msg and msg:IsA("TextLabel") then
 		msg.Text = text
 		task.delay(3, function()
@@ -117,6 +114,7 @@ local function setMsg(text)
 end
 
 local function clearRows()
+	if not rowsScroll then return end
 	for _, c in ipairs(rowsScroll:GetChildren()) do
 		if c:IsA("Frame") and c ~= rowTemplate then
 			c:Destroy()
@@ -157,14 +155,14 @@ local function parseRewardImages(rewardsText)
 end
 
 local function renderRow(categoryId, idx, row)
+	if not rowTemplate or not rowsScroll then return end
 	local clone = rowTemplate:Clone()
 	clone.Visible = true
 	clone.Name = "Row_" .. tostring(row.id or idx)
 
-	local left = clone:FindFirstChild("LeftLbl")
+	local left = clone:FindFirstChild("LeftLbl", true) :: TextLabel?
 	if left and left:IsA("TextLabel") then
 		if categoryId == "playtime" then
-			-- Format >= 60 minutes in hours
 			local reqMin = tonumber(row.requiredMin) or tonumber(string.match(tostring(row.left or ""), "(%d+)"))
 			if reqMin then
 				left.Text = NumberFormat.formatPlaytimeRequirement(reqMin)
@@ -184,9 +182,9 @@ local function renderRow(categoryId, idx, row)
 		end
 	end
 
-	local container = clone:FindFirstChild("RewardsContainer")
+	local container = clone:FindFirstChild("RewardsContainer", true) :: GuiObject?
 	local template = container and container:FindFirstChild("ImageTemplate")
-	if template and template:IsA("ImageLabel") then
+	if template and template:IsA("ImageLabel") and container then
 		local keys = parseRewardImages(row.rewards)
 		template.Visible = false
 		local iconSize = 44
@@ -205,7 +203,7 @@ local function renderRow(categoryId, idx, row)
 		end
 	end
 
-	local claim = clone:FindFirstChild("ClaimBtn")
+	local claim = clone:FindFirstChild("ClaimBtn", true) :: TextButton?
 	if claim and claim:IsA("TextButton") then
 		styleClaim(claim, row, categoryId)
 		claim.MouseButton1Click:Connect(function()
@@ -230,17 +228,16 @@ local function renderRows()
 	end
 end
 
--- Compute current playtime seconds
 local function livePlaytime()
 	return syncedPlaytime + (os.clock() - syncedAt)
 end
 
--- Compute current daily countdown
 local function liveDaily()
 	return math.max(0, syncedDaily - (os.clock() - syncedAt))
 end
 
 local function refreshSubtitle()
+	if not subLbl then return end
 	if not payload then
 		subLbl.Text = "Waiting for server sync..."
 		return
@@ -248,7 +245,6 @@ local function refreshSubtitle()
 	if activeCat == "robuxspent" then
 		subLbl.Text = "Total Robux spent: R$" .. tostring(payload.robuxSpentTotal or 0)
 	elseif activeCat == "playtime" then
-		-- REQUIREMENT: Displays in hours if >= 60 minutes (e.g. "Played for 1 hr 15 min 20 sec")
 		subLbl.Text = "Played for " .. NumberFormat.formatPlaytimePlayed(livePlaytime())
 	elseif activeCat == "daily" then
 		local left = liveDaily()
@@ -270,9 +266,11 @@ end
 
 local function render()
 	if not root then return end
-	titleLbl.Text = CAT_TITLE[activeCat] or "Rewards"
+	if titleLbl then
+		titleLbl.Text = CAT_TITLE[activeCat] or "Rewards"
+	end
 	if not payload then
-		subLbl.Text = "Waiting for server sync..."
+		if subLbl then subLbl.Text = "Waiting for server sync..." end
 		clearRows()
 		return
 	end
@@ -286,6 +284,15 @@ local function selectCategory(cat)
 end
 
 local function onOpen()
+	if not root then return end
+	-- Auto-close Shop and Inventory if open
+	if _G.ShopAPI and _G.ShopAPI.isOpen and _G.ShopAPI.isOpen() and _G.ShopAPI.close then
+		_G.ShopAPI.close()
+	end
+	if _G.InventoryAPI and _G.InventoryAPI.isOpen and _G.InventoryAPI.isOpen() and _G.InventoryAPI.close then
+		_G.InventoryAPI.close()
+	end
+
 	isOpen = true
 	root.Active = true
 	UIFX.popIn(root)
@@ -294,22 +301,26 @@ local function onOpen()
 end
 
 local function onClose()
-	if not isOpen then return end
+	if not root or not isOpen then return end
 	isOpen = false
 	root.Active = false
 	UIFX.popOut(root)
 end
 
-for btnName, cat in pairs(TAB_TO_CAT) do
-	local btn = leftTabs:FindFirstChild(btnName)
-	if btn and btn:IsA("TextButton") then
-		btn.MouseButton1Click:Connect(function()
-			selectCategory(cat)
-		end)
+if leftTabs then
+	for btnName, cat in pairs(TAB_TO_CAT) do
+		local btn = leftTabs:FindFirstChild(btnName, true) :: GuiButton?
+		if btn and btn:IsA("GuiButton") then
+			btn.MouseButton1Click:Connect(function()
+				selectCategory(cat)
+			end)
+		end
 	end
 end
 
-closeBtn.MouseButton1Click:Connect(onClose)
+if closeBtn then
+	closeBtn.MouseButton1Click:Connect(onClose)
+end
 
 if RewardSync then
 	RewardSync.OnClientEvent:Connect(function(newPayload)
@@ -336,7 +347,6 @@ if NotifyPlayer then
 	end)
 end
 
--- FIXED: Expose complete RewardsAPI including .close() for toggler support!
 local RewardsAPI = {}
 function RewardsAPI.open()
 	onOpen()
@@ -348,9 +358,9 @@ function RewardsAPI.isAvailable()
 	return root ~= nil
 end
 function RewardsAPI.isOpen()
-	return isOpen
+	return root ~= nil and isOpen and root.Visible
 end
 _G.RewardsAPI = RewardsAPI
 
 requestSync()
-print("[RewardsController] Ready - Playtime hours formatting & close API active")
+print("[RewardsController] Ready - Playtime hours formatting & mutual close active")

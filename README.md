@@ -1,52 +1,56 @@
 # GuessTheWord
 
-A fast-paced, 1v1 word guessing game in Roblox. Two players take turns picking letters and guessing words, with chairs, rewards, daily quests, gamepasses, and special offers.
+A fast-paced, 1v1 word guessing game in Roblox. Two players take turns picking letters and guessing words, with chairs, rewards, daily quests, exclusive gamepass chairs, notifications, dynamic effects, and special offers.
 
 ---
 
 ## 🛠️ Summary of Features & Fixes
 
-### 1. Daily Quests (`GameUI.DailyQuestsF`)
-- **Fix for Error**: `[Quest] DailyQuestsF not found in PlayerGui. - Client - QuestController:42`
-- **Active Quests Available**: Fixed `QuestService.server.luau` payload generator and `QuestController.client.luau` row rendering so active quests immediately show upon joining before the 7h timer resets.
-- Connects quest rows, live cycle countdown timer, and claim actions via `QuestClaim`.
+### 1. Centered Friend Online Popup (`FriendOnlinePopupController.client.luau`)
+- **Centered on Screen**: Centered cleanly at `(0.5, 0.5)` on screen.
+- **Upward Animation**:
+  - **Intro**: Starts below center and slides **UP** into view with smooth spring easing.
+  - **Outro / Dismiss**: Slides **UP** towards the top of the screen (`-0.3`) as it fades out.
+- Features friend avatar thumbnail with online indicator dot, `+$50 CASH` reward, **INVITE** button (`SocialService:PromptGameInvite`), and auto-closing countdown bar.
 
-### 2. Money Formatting & Gain Animations
-- **Money Formatting**: Added `NumberFormat` module in `ReplicatedStorage` to format cash with commas (`$1,250`) and compact notation (`$15.2k`, `$1M`).
-- **Animated Money Gain** (in `StatsPanel.client.luau`):
-  - **Smooth Number Counter (Lerp)**: Cash label counts up smoothly over 0.4s when cash increases.
-  - **Punch / Bounce Pop**: `UIScale` scales up to 1.28x with spring/elastic easing and bounces back to 1.0x.
-  - **Color Glow**: Text color pulses with a bright gold / green glow (`Color3.fromRGB(255, 230, 80)`).
-  - **Floating Gain Indicator**: Spawns a floating `+$Amount` popup above the cash label that floats upwards and fades out.
+### 2. Auto-Closing Mutual Exclusivity (Shop, Rewards, Inventory)
+- Opening **Shop** automatically closes the **Rewards** and **Inventory** windows, exactly matching the toggle button behavior.
+- Opening any panel always closes all other active panels so frames never overlap on top or behind each other.
 
-### 3. Playtime Rewards in Hours (>= 60 Minutes)
-- In both `RewardsService.server.luau` and `RewardsController.client.luau`:
-  - Requirements of 60+ minutes display in hours (e.g. `60m` $\rightarrow$ `"1 hr"`, `90m` $\rightarrow$ `"1 hr 30 min"`, `300m` $\rightarrow$ `"5 hrs"`, `1440m` $\rightarrow$ `"24 hrs"`).
-  - The playtime category subtitle (`"You played for ..."`) dynamically formats durations $\ge$ 60 minutes into `"Played for X hr Y min Z sec"`.
+### 3. Continuous Icon Sway & Upward Animated UIGradient (`DynamicEffectsController.client.luau`)
+- **Continuous Left/Right Rotation (Sway)**:
+  - Add tag `"RotateWiggle"`, `"IconSway"`, `"Sway"`, or attribute `RotateWiggle = true` to any GuiObject.
+  - Automatically rotates the icon left and right continuously in a smooth sine wave.
+  - Optional attributes: `SwaySpeed` (default 2.5), `SwayAngle` (default 8 degrees).
+- **Animated UIGradient (Slow Upward Motion)**:
+  - Add tag `"AnimatedGradient"`, `"GradientScroll"`, or attribute `AnimatedGradient = true` to any `UIGradient` (e.g. on VIP, PinkVortex, buttons).
+  - Slowly animates `UIGradient.Offset` moving upward continuously, bringing gradient cards to life with a shimmering effect.
+  - Optional attributes: `GradientSpeed` (default 0.6), `GradientDirection` (`"Up"`, `"Down"`, `"Diagonal"`).
 
-### 4. StatsPanel Up/Down Motion on GUI Open/Close
-- When any GUI window opens (Rewards, Shop, Inventory), `StatsPanel` smoothly tweens **UP** (out of the way / off-screen).
-- When all GUI windows are closed, `StatsPanel` smoothly tweens **BACK DOWN** to its original base position.
+### 4. Daily Quests (`GameUI.DailyQuestsF`)
+- **Display Limit**: Strictly displays **2 active quests** per cycle.
+- **State-Memory Collapse**:
+  - When opening a GUI (Shop, Rewards, Inventory), `DailyQuestsF` slides closed to avoid screen clutter.
+  - When closing the GUI, `DailyQuestsF` restores/slides back open **only if** the user had not manually collapsed it. If already collapsed by the user, it stays collapsed.
 
-### 5. Increased Camera FOV & Background Blur
-- **Camera FOV**: Smoothly increases `workspace.CurrentCamera.FieldOfView` to `82` when opening any GUI, and restores it to `70` when closed.
-- **Lighting Blur**: Uses a `BlurEffect` in `Lighting` (`GuiWindowBlur`) that tweens size to `18` when any GUI is open and fades back to `0` when closed.
+### 5. Robux Exclusive Gamepass Chairs
+- Added support for the 3 exclusive Robux chairs: **`HackerChair`**, **`SpacialMist`**, and **`PinkVortex`**.
+- Integrated into `ChairsConfig.luau`, `ChairService.server.luau`, and `ShopController.client.luau`.
+- In `ShopF.Scroll`, duplicate the `VIPPack` frame and rename the duplicated frames to `HackerChair`, `SpacialMist`, and `PinkVortex` to prompt their purchases.
 
-### 6. Mutual Exclusivity for All 3 Windows (Shop, Rewards, Inventory)
-- Only 1 window is visible at any given moment across `ShopF`, `RewardsF`, and `ChairInvPanel`.
-- Opening a window immediately hides/closes the previous window so frames never overlap on top or behind each other.
+### 6. Floating & Rotating 3D Display Chairs
+- In `InventoryController.client.luau`:
+  - 3D chairs in ViewportFrame previews float **UP and DOWN** with a gentle sine-wave bobbing effect while **ROTATING**.
+  - In-world display chairs (`Workspace.DisplayChairs`) also smoothly float and spin.
 
-### 7. Fixed Rewards Toggler Button
-- Added the missing `RewardsAPI.close` implementation in `RewardsController.client.luau`.
-- Clicking `Buttons.Features.Rewards` when Rewards is closed opens it; clicking it again when Rewards is open closes it cleanly.
-
-### 8. Friend Online Popup (`FriendOnlinePopupController.client.luau`)
-- Positioned compactly directly **UNDER the StatsPanel** in top-left.
-- Includes friend avatar thumbnail with online status indicator, `+$50 CASH` reward text, **INVITE** button (`SocialService:PromptGameInvite`), and auto-closing countdown bar.
-
-### 9. Offers UI & Gamepass Cycler (`OffersController.client.luau`)
-- **`CycleGpBtn`**: Automatically cycles through all gamepasses (VIP, 2x Streak, 2x Cash, 2x Wins) every 3.8s with smooth text/icon fade and scale pulse. Clicking prompts the gamepass purchase.
-- **`StarterPackBtn`**: Opens the `StarterPopup` displaying the 3 reward cards (`+1 Reveal Letter`, `Random Chair`, `+$500 CASH`) and prompts the Starter Pack purchase upon clicking `BuyBtn`.
+### 7. Event Notification System (`NotificationController.client.luau`)
+- Drives `NotificationGUI.Holder` using `NotificationTemplate`.
+- Plays animated popups for game events:
+  - Purchases (successful buys, insufficient funds)
+  - Match victories (`GameOver`)
+  - Cash gains (`CashAwarded`)
+  - Quest completions & claim rewards
+  - Global `_G.Notify({ title = "...", message = "...", kind = "success", duration = 3.5 })`
 
 ---
 
@@ -82,10 +86,12 @@ A fast-paced, 1v1 word guessing game in Roblox. Two players take turns picking l
     └── StarterPlayerScripts/
         ├── ButtonsController.client.luau
         ├── CameraController.client.luau
+        ├── DynamicEffectsController.client.luau
         ├── FriendOnlinePopupController.client.luau
         ├── HoverController.client.luau
         ├── InputHandler.client.luau
         ├── InventoryController.client.luau
+        ├── NotificationController.client.luau
         ├── OffersController.client.luau
         ├── Preloader.client.luau
         ├── QuestController.client.luau

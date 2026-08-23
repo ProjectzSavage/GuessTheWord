@@ -294,6 +294,14 @@ render(owned0, equipped0)
 
 function InventoryAPI.open()
 	if not Panel then return end
+	-- Auto-close Shop and Rewards if open
+	if _G.ShopAPI and _G.ShopAPI.isOpen and _G.ShopAPI.isOpen() and _G.ShopAPI.close then
+		_G.ShopAPI.close()
+	end
+	if _G.RewardsAPI and _G.RewardsAPI.isOpen and _G.RewardsAPI.isOpen() and _G.RewardsAPI.close then
+		_G.RewardsAPI.close()
+	end
+
 	Panel.Visible = true
 	UIFX.popIn(Panel)
 	local owned, equipped = readFromFolder()
