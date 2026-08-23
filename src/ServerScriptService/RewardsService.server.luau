@@ -416,4 +416,4 @@ _G.RewardsAddRobuxSpent = function(player, amount)
 	syncPlayer(player)
 end
 
-print("[RewardsService] Ready - Playtime hours formatting active")
+

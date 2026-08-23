@@ -96,7 +96,7 @@ end
 
 preload(all)
 
-print("[Preloader] Queued", #all, "assets to preload.")
+
 
 -- Preload all clue image IDs the server sends at join (so clue images are
 -- already cached when a round starts).

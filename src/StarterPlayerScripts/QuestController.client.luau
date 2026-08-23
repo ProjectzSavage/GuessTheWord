@@ -245,4 +245,4 @@ if QuestRequestSync then
 end
 
 setPanelOpen(true, true)
-print("[QuestController] Ready - 2 Quests max & State-Memory toggle active")
+

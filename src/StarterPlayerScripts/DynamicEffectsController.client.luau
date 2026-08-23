@@ -4,8 +4,8 @@
 	Run this as a **LocalScript** in StarterPlayerScripts.
 
 	PURPOSE
-	Provides automatic live visual effects for UI elements via CollectionService Tags
-	or Attributes:
+	Provides automatic continuous live visual effects for UI elements via
+	CollectionService Tags or Attributes:
 
 	1. CONTINUOUS ICON ROTATION / SWAY (Left & Right):
 	   * Add Tag: "RotateWiggle", "IconSway", "Sway", or "Wiggle"
@@ -14,11 +14,11 @@
 	     - `SwayAngle` (number, default: 8 degrees)
 	     - `SwaySpeed` (number, default: 2.5)
 
-	2. ANIMATED UIGRADIENT (Slow upward scrolling shimmer):
+	2. CONTINUOUS ANIMATED UIGRADIENT (Smooth continuous movement like Sway, no snap/reset):
 	   * Add Tag to UIGradient: "AnimatedGradient", "GradientScroll", "LiveGradient"
-	   * OR Add Attribute to UIGradient: `AnimatedGradient = true` or `Scroll = true`
+	   * OR Add Attribute to UIGradient: `AnimatedGradient = true` or `LiveGradient = true`
 	   * Optional Attributes on UIGradient:
-	     - `GradientSpeed` (number, default: 0.6)
+	     - `GradientSpeed` (number, default: 1.2)
 	     - `GradientDirection` (string: "Up", "Down", "Diagonal", default: "Up")
 ]]
 
@@ -29,9 +29,8 @@ local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- Registry of tracked instances
 local swayObjects: { [GuiObject]: { speed: number, maxAngle: number, phase: number, baseRot: number } } = {}
-local gradientObjects: { [UIGradient]: { speed: number, direction: string } } = {}
+local gradientObjects: { [UIGradient]: { speed: number, direction: string, phase: number } } = {}
 
 -- ============================================================================
 -- 1. ICON SWAY / ROTATE (Left & Right continuously)
@@ -69,18 +68,20 @@ local function unregisterSway(guiObj: Instance)
 end
 
 -- ============================================================================
--- 2. ANIMATED UIGRADIENT (Moving slowly UP)
+-- 2. CONTINUOUS ANIMATED UIGRADIENT (Smooth continuous flow without resetting)
 -- ============================================================================
 local function registerGradient(grad: Instance)
 	if not grad:IsA("UIGradient") then return end
 	if gradientObjects[grad] then return end
 
-	local speed = tonumber(grad:GetAttribute("GradientSpeed")) or 0.6
+	local speed = tonumber(grad:GetAttribute("GradientSpeed")) or 1.2
 	local direction = tostring(grad:GetAttribute("GradientDirection") or "Up")
+	local phase = tonumber(grad:GetAttribute("GradientPhase")) or (math.random() * math.pi * 2)
 
 	gradientObjects[grad] = {
 		speed = speed,
 		direction = direction,
+		phase = phase,
 	}
 
 	grad.AncestryChanged:Connect(function(_, parent)
@@ -117,7 +118,6 @@ for _, tag in ipairs(GRADIENT_TAGS) do
 	CollectionService:GetInstanceRemovedSignal(tag):Connect(unregisterGradient)
 end
 
--- Inspect existing descendants in PlayerGui for attributes
 local function inspectElement(inst: Instance)
 	if inst:IsA("GuiObject") then
 		if inst:GetAttribute("RotateWiggle") == true
@@ -130,6 +130,7 @@ local function inspectElement(inst: Instance)
 	if inst:IsA("UIGradient") then
 		if inst:GetAttribute("AnimatedGradient") == true
 			or inst:GetAttribute("Scroll") == true
+			or inst:GetAttribute("LiveGradient") == true
 			or inst:GetAttribute("GradientScroll") == true then
 			registerGradient(inst)
 		end
@@ -148,7 +149,7 @@ playerGui.DescendantAdded:Connect(inspectElement)
 RunService.Heartbeat:Connect(function()
 	local now = os.clock()
 
-	-- 1. Rotate Sway Icons Left & Right
+	-- 1. Rotate Sway Icons Left & Right Continuously
 	for obj, info in pairs(swayObjects) do
 		if obj and obj.Parent then
 			local angleOffset = math.sin(now * info.speed + info.phase) * info.maxAngle
@@ -158,20 +159,19 @@ RunService.Heartbeat:Connect(function()
 		end
 	end
 
-	-- 2. Animate UIGradients slowly UP
+	-- 2. Animate UIGradients Continuously (Sine-wave smooth oscillation, no sudden resets)
 	for grad, info in pairs(gradientObjects) do
 		if grad and grad.Parent then
-			-- Continuously scrolls offset upward from 1.0 down to -1.0
-			local t = (now * info.speed) % 2
-			local yOffset = 1 - t -- moves upward from 1 down to -1
+			-- Smooth continuous oscillation back and forth across [-0.75, 0.75]
+			local offsetValue = math.sin(now * info.speed + info.phase) * 0.75
 
 			if info.direction == "Diagonal" then
-				grad.Offset = Vector2.new(-yOffset, yOffset)
-			elseif info.direction == "Down" then
-				grad.Offset = Vector2.new(0, t - 1)
+				grad.Offset = Vector2.new(-offsetValue, offsetValue)
+			elseif info.direction == "Horizontal" then
+				grad.Offset = Vector2.new(offsetValue, 0)
 			else
-				-- Default: Moves UP
-				grad.Offset = Vector2.new(0, yOffset)
+				-- Default: Moves Up & Down continuously
+				grad.Offset = Vector2.new(0, -offsetValue)
 			end
 		else
 			gradientObjects[grad] = nil
@@ -179,12 +179,9 @@ RunService.Heartbeat:Connect(function()
 	end
 end)
 
--- Global helper API for scripts to dynamically register instances
 _G.DynamicEffects = {
 	sway = registerSway,
 	unsway = unregisterSway,
 	animateGradient = registerGradient,
 	unanimateGradient = unregisterGradient,
 }
-
-print("[DynamicEffectsController] Ready - Icon Sway & Animated UIGradient active")

@@ -350,4 +350,4 @@ if winPlus then
 	end)
 end
 
-print("[StatsPanel] Ready - Money formatting, gain animations & slide transitions active")
+

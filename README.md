@@ -6,51 +6,42 @@ A fast-paced, 1v1 word guessing game in Roblox. Two players take turns picking l
 
 ## 🛠️ Summary of Features & Fixes
 
-### 1. Centered Friend Online Popup (`FriendOnlinePopupController.client.luau`)
-- **Centered on Screen**: Centered cleanly at `(0.5, 0.5)` on screen.
-- **Upward Animation**:
-  - **Intro**: Starts below center and slides **UP** into view with smooth spring easing.
-  - **Outro / Dismiss**: Slides **UP** towards the top of the screen (`-0.3`) as it fades out.
-- Features friend avatar thumbnail with online indicator dot, `+$50 CASH` reward, **INVITE** button (`SocialService:PromptGameInvite`), and auto-closing countdown bar.
+### 1. Friend Online Popup (`FriendOnlinePopupController.client.luau`)
+- **Layout**:
+  - `AnchorPoint = 0.5, 0.5`
+  - `Position = {0.5, 0}, {0.242, 0}`
+  - `Size = {0.238, 0}, {0.183, 0}`
+  - `AvatarImage.ScaleType = Fit`
+- Smooth pop-in and dismiss scale animation at position without upward screen-slide.
 
-### 2. Auto-Closing Mutual Exclusivity (Shop, Rewards, Inventory)
-- Opening **Shop** automatically closes the **Rewards** and **Inventory** windows, exactly matching the toggle button behavior.
-- Opening any panel always closes all other active panels so frames never overlap on top or behind each other.
+### 2. Notifications with Upward Animation (`NotificationController.client.luau`)
+- Drives `NotificationGUI.Holder` with smooth **UPWARD** intro & dismissal animations.
+- Automatically handles game event alerts (victories, cash gains, purchases, quest completions).
 
-### 3. Continuous Icon Sway & Upward Animated UIGradient (`DynamicEffectsController.client.luau`)
+### 3. Mutual Exclusivity: Opening Shop Automatically Closes Rewards
+- In `ShopController.client.luau`, `RewardsController.client.luau`, and `InventoryController.client.luau`:
+  - Opening **Shop** automatically calls `_G.RewardsAPI.close()` and `_G.InventoryAPI.close()`.
+  - Guaranteed single-active window behavior across all frames.
+
+### 4. Continuous Icon Sway & Live UIGradient (`DynamicEffectsController.client.luau`)
 - **Continuous Left/Right Rotation (Sway)**:
-  - Add tag `"RotateWiggle"`, `"IconSway"`, `"Sway"`, or attribute `RotateWiggle = true` to any GuiObject.
-  - Automatically rotates the icon left and right continuously in a smooth sine wave.
-  - Optional attributes: `SwaySpeed` (default 2.5), `SwayAngle` (default 8 degrees).
-- **Animated UIGradient (Slow Upward Motion)**:
-  - Add tag `"AnimatedGradient"`, `"GradientScroll"`, or attribute `AnimatedGradient = true` to any `UIGradient` (e.g. on VIP, PinkVortex, buttons).
-  - Slowly animates `UIGradient.Offset` moving upward continuously, bringing gradient cards to life with a shimmering effect.
-  - Optional attributes: `GradientSpeed` (default 0.6), `GradientDirection` (`"Up"`, `"Down"`, `"Diagonal"`).
+  - Add tag `"RotateWiggle"`, `"IconSway"`, `"Sway"`, or attribute `RotateWiggle = true` to any GuiObject to rotate left and right continuously in a smooth sine wave.
+- **Continuous Animated UIGradient (No Snap/Reset)**:
+  - Add tag `"AnimatedGradient"`, `"GradientScroll"`, or `"LiveGradient"`, or attribute `AnimatedGradient = true` to any `UIGradient`.
+  - Smoothly oscillates the gradient `Offset` back and forth continuously without sudden jumps or resets.
 
-### 4. Daily Quests (`GameUI.DailyQuestsF`)
-- **Display Limit**: Strictly displays **2 active quests** per cycle.
-- **State-Memory Collapse**:
-  - When opening a GUI (Shop, Rewards, Inventory), `DailyQuestsF` slides closed to avoid screen clutter.
-  - When closing the GUI, `DailyQuestsF` restores/slides back open **only if** the user had not manually collapsed it. If already collapsed by the user, it stays collapsed.
+### 5. Daily Quests (Strictly 2 Active Quests + State-Memory)
+- **2 Quests Max**: Configured `QuestService.server.luau` and `QuestController.client.luau` to only display 2 active quests.
+- **State-Memory**:
+  - When opening a GUI, `DailyQuestsF` slides closed.
+  - When closing all GUIs, `DailyQuestsF` restores **only if** the user had not manually collapsed it.
 
-### 5. Robux Exclusive Gamepass Chairs
+### 6. Robux Exclusive Gamepass Chairs
 - Added support for the 3 exclusive Robux chairs: **`HackerChair`**, **`SpacialMist`**, and **`PinkVortex`**.
-- Integrated into `ChairsConfig.luau`, `ChairService.server.luau`, and `ShopController.client.luau`.
 - In `ShopF.Scroll`, duplicate the `VIPPack` frame and rename the duplicated frames to `HackerChair`, `SpacialMist`, and `PinkVortex` to prompt their purchases.
 
-### 6. Floating & Rotating 3D Display Chairs
-- In `InventoryController.client.luau`:
-  - 3D chairs in ViewportFrame previews float **UP and DOWN** with a gentle sine-wave bobbing effect while **ROTATING**.
-  - In-world display chairs (`Workspace.DisplayChairs`) also smoothly float and spin.
-
-### 7. Event Notification System (`NotificationController.client.luau`)
-- Drives `NotificationGUI.Holder` using `NotificationTemplate`.
-- Plays animated popups for game events:
-  - Purchases (successful buys, insufficient funds)
-  - Match victories (`GameOver`)
-  - Cash gains (`CashAwarded`)
-  - Quest completions & claim rewards
-  - Global `_G.Notify({ title = "...", message = "...", kind = "success", duration = 3.5 })`
+### 7. Floating & Rotating 3D Display Chairs
+- In `InventoryController.client.luau`, 3D chair models float **UP and DOWN** with a gentle sine-wave bobbing effect while **ROTATING**.
 
 ---
 

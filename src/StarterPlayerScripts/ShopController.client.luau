@@ -161,4 +161,4 @@ function ShopAPI.isOpen()
 end
 
 _G.ShopAPI = ShopAPI
-print("[ShopController] Ready - Robux exclusive chairs supported & auto-close synced")
+

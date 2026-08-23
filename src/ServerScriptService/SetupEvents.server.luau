@@ -63,4 +63,4 @@ for _, eventName in EVENT_NAMES do
 	end
 end
 
-print("[SetupEvents] All", #EVENT_NAMES, "RemoteEvents are ready in ReplicatedStorage.Events.")
+

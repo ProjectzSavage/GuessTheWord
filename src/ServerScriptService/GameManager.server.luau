@@ -1219,8 +1219,6 @@ if next(tableStates) == nil then
 		"Create Workspace.GameArea.Table1 containing a Table and 2 Seats.")
 else
 	for name, ts in tableStates do
-		print("[GameManager] Watching", name, "with",
-			#ts.seats, "seats.")
 		-- Fast-path: try the Occupant signal (may not fire for every sit).
 		-- The reconciliation poll loop above is the reliable source of truth.
 		for seatIndex, seat in ts.seats do

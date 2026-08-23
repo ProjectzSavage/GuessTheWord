@@ -322,4 +322,4 @@ function InventoryAPI.isOpen()
 end
 
 _G.InventoryAPI = InventoryAPI
-print("[InventoryController] Ready - 3D Chairs floating up & down + rotating active")
+

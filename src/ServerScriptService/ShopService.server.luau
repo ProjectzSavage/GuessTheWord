@@ -104,4 +104,4 @@ MarketplaceService.ProcessReceipt = function(receiptInfo)
 	return Enum.ProductPurchaseDecision.PurchaseGranted
 end
 
-print("[ShopService] Ready")
+

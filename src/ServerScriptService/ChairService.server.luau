@@ -356,4 +356,4 @@ _G.ChairsGrant = function(player, chairName)
 	return true
 end
 
-print("[ChairService] Ready - Exclusive Gamepass chairs configured")
+

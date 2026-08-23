@@ -363,4 +363,4 @@ end
 _G.RewardsAPI = RewardsAPI
 
 requestSync()
-print("[RewardsController] Ready - Playtime hours formatting & mutual close active")
+

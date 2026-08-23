@@ -92,4 +92,4 @@ if ShopBtn then
 	end)
 end
 
-print("[ButtonsController] Ready - 3 Windows mutual exclusion & togglers active")
+

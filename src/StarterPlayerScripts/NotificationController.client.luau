@@ -4,12 +4,9 @@
 	Run this as a **LocalScript** in StarterPlayerScripts.
 
 	PURPOSE
-	Drives the NotificationGUI HUD. Shows animated popups for game events:
-	  * Purchases (successful buys, insufficient funds)
-	  * Match Results (match won, cash awarded)
-	  * Daily Quests (quest complete, rewards claimed)
-	  * Rewards system claims
-	  * General server/client alerts
+	Drives the NotificationGUI HUD with smooth UPWARD motion animations:
+	  * Intro: Cards slide UP into position while scaling in.
+	  * Outro: Cards slide UPWARDS towards the top of the screen while fading out.
 
 	HIERARCHY:
 		NotificationGUI (ScreenGui)
@@ -38,7 +35,6 @@ local function resolveNotificationGui(): Instance?
 		or playerGui:FindFirstChild("Notifications")
 	if target then return target end
 
-	-- Check inside GameUI
 	local gameUI = playerGui:FindFirstChild("GameUI")
 	if gameUI then
 		target = gameUI:FindFirstChild("NotificationGUI") or gameUI:FindFirstChild("Holder")
@@ -83,22 +79,16 @@ end
 
 -- ============================================================================
 -- ICONS & THEME CONFIG
--- Customize asset IDs and tint colors here!
 -- ============================================================================
 local NOTIFICATION_ICONS = {
-	-- Positive / Success / Rewards
 	success  = "rbxassetid://106595471170578", -- Green Check / Star
 	reward   = "rbxassetid://121749597294959", -- Trophy / Star
 	cash     = "rbxassetid://73475281808267",  -- Cash / Coin
 	purchase = "rbxassetid://133477499555789", -- Cart / Bag
 	win      = "rbxassetid://95488023650173",  -- Crown / Victory
-
-	-- Negative / Warnings
 	warn     = "rbxassetid://104052674943721", -- Yellow Warning
 	error    = "rbxassetid://92700052607893",  -- Red Cross / Insufficient
 	fail     = "rbxassetid://92700052607893",
-
-	-- Neutral / Info
 	info     = "rbxassetid://78172314776394",  -- Info Circle
 }
 
@@ -114,7 +104,6 @@ local NOTIFICATION_COLORS = {
 	info     = Color3.fromRGB(75, 185, 255),
 }
 
--- Fallback UI creator if NotificationGUI was not built yet
 local function ensureFallbackGui()
 	if holder and template then return end
 
@@ -210,7 +199,7 @@ type NotifOptions = {
 	icon: string?,
 }
 
--- Spawns an animated notification card
+-- Spawns an animated notification card with UPWARD animation
 local function showNotification(opts: NotifOptions)
 	ensureFallbackGui()
 	if not holder or not template then return end
@@ -254,7 +243,6 @@ local function showNotification(opts: NotifOptions)
 		stroke.Color = accentColor
 	end
 
-	-- Animation scale
 	local s = card:FindFirstChildOfClass("UIScale")
 	if not s then
 		s = Instance.new("UIScale")
@@ -263,31 +251,33 @@ local function showNotification(opts: NotifOptions)
 	s.Scale = 0.6
 	card.Parent = holder
 
-	-- Intro pop-in
+	-- REQUIREMENT: UPWARD motion on intro & outro
 	TweenService:Create(
 		s,
 		TweenInfo.new(0.24, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
 		{ Scale = 1 }
 	):Play()
 
-	-- Auto dismiss after duration
+	-- Auto dismiss after duration with UPWARD slide
 	task.delay(duration, function()
 		if not card or not card.Parent then return end
+
+		-- Animate UPWARDS off top
 		local outTween = TweenService:Create(
 			s,
-			TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-			{ Scale = 0.4 }
+			TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+			{ Scale = 0.3 }
 		)
 		outTween:Play()
 
 		if titleLbl then
-			TweenService:Create(titleLbl, TweenInfo.new(0.18), { TextTransparency = 1 }):Play()
+			TweenService:Create(titleLbl, TweenInfo.new(0.2), { TextTransparency = 1 }):Play()
 		end
 		if msgLbl then
-			TweenService:Create(msgLbl, TweenInfo.new(0.18), { TextTransparency = 1 }):Play()
+			TweenService:Create(msgLbl, TweenInfo.new(0.2), { TextTransparency = 1 }):Play()
 		end
 		if iconImg then
-			TweenService:Create(iconImg, TweenInfo.new(0.18), { ImageTransparency = 1 }):Play()
+			TweenService:Create(iconImg, TweenInfo.new(0.2), { ImageTransparency = 1 }):Play()
 		end
 
 		outTween.Completed:Connect(function()
@@ -299,7 +289,7 @@ end
 _G.Notify = showNotification
 
 -- ============================================================================
--- CONNECT SERVER NOTIFICATIONS (NotifyPlayer RemoteEvent)
+-- CONNECT SERVER NOTIFICATIONS
 -- ============================================================================
 local Events = ReplicatedStorage:WaitForChild("Events", 15)
 if Events then
@@ -314,7 +304,6 @@ if Events then
 		end)
 	end
 
-	-- Match Over Victory Notification
 	local GameOver = Events:FindFirstChild("GameOver") :: RemoteEvent?
 	if GameOver then
 		GameOver.OnClientEvent:Connect(function(winnerName)
@@ -329,7 +318,6 @@ if Events then
 		end)
 	end
 
-	-- Cash Awarded Notification
 	local CashAwarded = Events:FindFirstChild("CashAwarded") :: RemoteEvent?
 	if CashAwarded then
 		CashAwarded.OnClientEvent:Connect(function(amount)
@@ -345,5 +333,3 @@ if Events then
 		end)
 	end
 end
-
-print("[NotificationController] Ready - In-game events and NotificationGUI active")

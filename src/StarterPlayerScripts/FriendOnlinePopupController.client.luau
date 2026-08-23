@@ -4,16 +4,15 @@
 	Run this as a **LocalScript** in StarterPlayerScripts.
 
 	PURPOSE
-	Detects when friends come online and presents an animated popup in the CENTER
-	of the screen.
+	Detects when friends come online and presents an animated popup at:
+	  * Position:    {0.5, 0}, {0.242, 0}
+	  * Size:        {0.238, 0}, {0.183, 0}
+	  * AnchorPoint: 0.5, 0.5
+	  * Avatar ScaleType: Fit
+
 	ANIMATION:
-	  * Intro: Slides UP from bottom towards the center (0.5, 0.5) with a smooth pop.
-	  * Outro: Slides UP towards the top of the screen (-0.3) and fades out.
-	FEATURES:
-	  * Friend's avatar headshot thumbnail with green online dot.
-	  * INVITE button (SocialService:PromptGameInvite).
-	  * Reward text (+$50 CASH).
-	  * Auto-closing animated countdown bar.
+	  * Smooth pop-in scale & fade at position {0.5, 0}, {0.242, 0}.
+	  * Auto-closing countdown bar with smooth dismiss.
 ]]
 
 local Players = game:GetService("Players")
@@ -44,12 +43,12 @@ local PER_FRIEND_COOLDOWN = 600
 local MAX_POPUPS_PER_SESSION = 8
 local MAX_QUEUE_SIZE = 6
 
--- Center of screen positions with UPWARD motion
-local CENTER_POS = UDim2.new(0.5, 0, 0.5, 0)
-local START_BELOW_POS = UDim2.new(0.5, 0, 0.72, 0) -- starts below, slides UP to center
-local EXIT_ABOVE_POS = UDim2.new(0.5, 0, -0.3, 0)   -- exits UP off the top
+-- Exact requested layout specifications
+local POPUP_ANCHOR = Vector2.new(0.5, 0.5)
+local POPUP_POS = UDim2.new(0.5, 0, 0.242, 0)
+local POPUP_SIZE = UDim2.new(0.238, 0, 0.183, 0)
 
-local popup, titleLbl, closeBtn, avatarImg, rewardLbl, inviteBtn, countdownFill
+local popup, titleLbl, closeBtn, avatarImg, rewardLbl, inviteBtn, countdownFill, popupScale
 local countdownConn: RBXScriptConnection? = nil
 
 local knownOnline = {}
@@ -82,9 +81,9 @@ local function createGui()
 
 	popup = Instance.new("Frame")
 	popup.Name = POPUP_NAME
-	popup.AnchorPoint = Vector2.new(0.5, 0.5)
-	popup.Position = START_BELOW_POS
-	popup.Size = UDim2.new(0.32, 0, 0.16, 0) -- sleek centered card
+	popup.AnchorPoint = POPUP_ANCHOR
+	popup.Position = POPUP_POS
+	popup.Size = POPUP_SIZE
 	popup.BackgroundColor3 = Color3.fromRGB(24, 28, 42)
 	popup.BackgroundTransparency = 0.1
 	popup.Visible = false
@@ -92,6 +91,10 @@ local function createGui()
 	popup.Parent = parentGui
 	makeCornerScale(popup, 0.12)
 	makeStroke(popup, Color3.fromRGB(75, 230, 110), 2)
+
+	popupScale = Instance.new("UIScale")
+	popupScale.Scale = 1
+	popupScale.Parent = popup
 
 	-- Header Title
 	titleLbl = Instance.new("TextLabel")
@@ -113,7 +116,7 @@ local function createGui()
 	closeBtn.Name = "PopupCloseBtn"
 	closeBtn.AnchorPoint = Vector2.new(1, 0)
 	closeBtn.Position = UDim2.new(0.96, 0, 0.08, 0)
-	closeBtn.Size = UDim2.new(0.09, 0, 0.22, 0)
+	closeBtn.Size = UDim2.new(0.1, 0, 0.22, 0)
 	closeBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
 	closeBtn.Text = "X"
 	closeBtn.Font = Enum.Font.GothamBlack
@@ -123,12 +126,13 @@ local function createGui()
 	closeBtn.Parent = popup
 	makeCornerScale(closeBtn, 0.25)
 
-	-- Avatar Image
+	-- Avatar Image (ScaleType = Fit)
 	avatarImg = Instance.new("ImageLabel")
 	avatarImg.Name = "AvatarImage"
 	avatarImg.BackgroundColor3 = Color3.fromRGB(15, 17, 27)
 	avatarImg.Position = UDim2.new(0.04, 0, 0.34, 0)
-	avatarImg.Size = UDim2.new(0.2, 0, 0.52, 0)
+	avatarImg.Size = UDim2.new(0.22, 0, 0.52, 0)
+	avatarImg.ScaleType = Enum.ScaleType.Fit -- REQUIREMENT: Fit not stretch
 	avatarImg.Image = "rbxassetid://0"
 	avatarImg.ZIndex = 81
 	avatarImg.Parent = popup
@@ -149,7 +153,7 @@ local function createGui()
 	rewardLbl = Instance.new("TextLabel")
 	rewardLbl.Name = "RewardText"
 	rewardLbl.BackgroundTransparency = 1
-	rewardLbl.Position = UDim2.new(0.28, 0, 0.36, 0)
+	rewardLbl.Position = UDim2.new(0.3, 0, 0.36, 0)
 	rewardLbl.Size = UDim2.new(0.38, 0, 0.24, 0)
 	rewardLbl.Font = Enum.Font.GothamBold
 	rewardLbl.TextScaled = true
@@ -199,6 +203,7 @@ local function setAvatar(userId: number)
 	end)
 	if avatarImg then
 		avatarImg.Image = (ok and thumb) or "rbxassetid://0"
+		avatarImg.ScaleType = Enum.ScaleType.Fit
 	end
 end
 
@@ -208,17 +213,16 @@ local function hidePopup()
 		countdownConn = nil
 	end
 
-	if popup and popup.Visible then
-		-- ANIMATION: Slides UP towards the top of the screen when dismissing
+	if popup and popup.Visible and popupScale then
 		local tw = TweenService:Create(
-			popup,
-			TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
-			{ Position = EXIT_ABOVE_POS }
+			popupScale,
+			TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+			{ Scale = 0.75 }
 		)
 		tw:Play()
 		tw.Completed:Connect(function()
 			popup.Visible = false
-			popup.Position = START_BELOW_POS
+			popupScale.Scale = 1
 		end)
 	end
 end
@@ -236,26 +240,18 @@ local function showPopup(friendName: string, friendUserId: number)
 	end
 	setAvatar(friendUserId)
 
-	-- ANIMATION: Starts below center, slides UP to center (0.5, 0.5)
-	popup.Position = START_BELOW_POS
+	popup.Position = POPUP_POS
 	popup.Visible = true
 
-	local s = popup:FindFirstChildOfClass("UIScale")
-	if not s then
-		s = Instance.new("UIScale")
-		s.Parent = popup
+	if not popupScale then
+		popupScale = Instance.new("UIScale")
+		popupScale.Parent = popup
 	end
-	s.Scale = 0.85
+	popupScale.Scale = 0.75
 
 	TweenService:Create(
-		popup,
-		TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-		{ Position = CENTER_POS }
-	):Play()
-
-	TweenService:Create(
-		s,
-		TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+		popupScale,
+		TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
 		{ Scale = 1 }
 	):Play()
 
@@ -368,5 +364,3 @@ task.spawn(function()
 		task.wait(POLL_INTERVAL)
 	end
 end)
-
-print("[FriendOnlinePopupController] Ready - Centered with Upward animation")
