@@ -45,6 +45,8 @@ local EVENT_NAMES = {
 	"ChairSync",       -- Server -> Client : owned chairs + equipped chair
 	"QuestSync",       -- Server -> Client : quests payload (progress + claimed)
 	"QuestClaim",      -- Client -> Server : claim a completed quest
+	"QuickPlayRequest", -- Client -> Server : quick play mode ("Bot" / "Player")
+	"QuickPlayResult",  -- Server -> Client : (mode, success, note) after quick play
 }
 
 -- Idempotent: if the folder already exists, reuse it (don't wipe manual setup).

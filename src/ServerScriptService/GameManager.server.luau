@@ -966,6 +966,223 @@ LeaveSeat.OnServerEvent:Connect(function(player)
 end)
 
 -------------------------------------------------------------------------------
+-- QUICK PLAY
+-- "Bot"    : teleport the player to a table with NO other real player and
+--            let the client open the difficulty selector.
+-- "Player" : teleport the player to a table where a real player is ALREADY
+--            waiting (the match auto-starts once the seat reconciles).
+--            Falls back to an empty table (they wait there) if nobody waits.
+-- The seat reconciliation poll loop (below) picks up the move within a tick:
+-- the old table releases the player, the new table assigns them (and starts
+-- the match when two real players end up seated together).
+-------------------------------------------------------------------------------
+local QuickPlayRequest = Events:WaitForChild("QuickPlayRequest")
+local QuickPlayResult = Events:WaitForChild("QuickPlayResult")
+
+-- Is this seat physically + logically free?
+local function quickSeatIsFree(tableState, seatIndex)
+	local seat = tableState.seats[seatIndex]
+	return not playerOnSeat(seat) and tableState.occupants[seatIndex] == nil
+end
+
+-- Where can `player` sit in `tableState`? Returns a seatIndex or nil.
+-- allowWaitingPlayer = true  (Player mode): the opposite seat may hold a
+-- waiting real player - that's the point.
+-- allowWaitingPlayer = false (Bot mode): the opposite seat must be empty or
+-- hold a leftover "BOT" (the bot flow despawns stale bots on its own).
+-- NOTE: the player's OWN current occupancy is ignored (other == player is
+-- treated as "nobody"), so their own table is never "blocked" by themselves.
+local function quickFindSeat(tableState, player, allowWaitingPlayer)
+	if tableState.matchActive then
+		return nil
+	end
+	for seatIndex = 1, #tableState.seats do
+		if quickSeatIsFree(tableState, seatIndex) then
+			local other = tableState.occupants[opponentSeat(seatIndex)]
+			if other == player then
+				other = nil
+			end
+			if other == nil then
+				return seatIndex
+			elseif other == "BOT" and not allowWaitingPlayer then
+				return seatIndex -- stale bot; PlayVsBotRequest cleans it up
+			elseif other ~= "BOT" and allowWaitingPlayer then
+				return seatIndex -- a real player is waiting here
+			end
+		end
+	end
+	return nil
+end
+
+-- Candidate tables for a quick play, shuffled, the player's OWN table first
+-- (bot mode can then avoid teleporting when they're already alone at it).
+local function quickCandidates(player)
+	local current = nil
+	for _, tableState in tableStates do
+		if seatOfPlayer(tableState, player) or seatedSeatOf(tableState, player) then
+			current = tableState
+			break
+		end
+	end
+	local shuffled = {}
+	for _, tableState in tableStates do
+		if not tableState.matchActive and tableState ~= current then
+			table.insert(shuffled, tableState)
+		end
+	end
+	for i = #shuffled, 2, -1 do -- Fisher-Yates
+		local j = math.random(1, i)
+		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+	end
+	local out = {}
+	if current then
+		table.insert(out, current)
+	end
+	for _, tableState in shuffled do
+		table.insert(out, tableState)
+	end
+	return out
+end
+
+local function quickTeleport(player, seat)
+	local char = player.Character
+	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+	if not char or not humanoid then
+		return false
+	end
+	char:PivotTo(seat.CFrame * CFrame.new(0, 0.6, 0))
+	task.wait(0.1)
+	humanoid.Sit = true
+	return true
+end
+
+local function playerInActiveMatch(player)
+	for _, tableState in tableStates do
+		if tableState.matchActive and playerInMatch(tableState, player) then
+			return true
+		end
+	end
+	return false
+end
+
+QuickPlayRequest.OnServerEvent:Connect(function(player, mode)
+	if not player or (mode ~= "Bot" and mode ~= "Player") then
+		return
+	end
+
+	local chosenTable, chosenSeat
+
+	-- 0) Already alone at a usable table? Stay put (no pointless teleport):
+	--    Bot mode wants an empty table, Player mode wants a waiting player.
+	local ownTable, ownSeat
+	for _, tableState in tableStates do
+		local s = seatOfPlayer(tableState, player) or seatedSeatOf(tableState, player)
+		if s and not tableState.matchActive then
+			ownTable, ownSeat = tableState, s
+			break
+		end
+	end
+	local ownOther = ownTable and ownTable.occupants[opponentSeat(ownSeat)]
+	if ownTable and (
+		(mode == "Bot" and (ownOther == nil or ownOther == "BOT"))
+		or (mode == "Player" and ownOther ~= nil and ownOther ~= "BOT")
+	) then
+		chosenTable, chosenSeat = ownTable, ownSeat
+	end
+
+	-- 1) Player mode: a table with a real player already waiting.
+	if not chosenTable and mode == "Player" then
+		for _, cand in quickCandidates(player) do
+			local seatIndex = quickFindSeat(cand, player, true)
+			if seatIndex then
+				local other = cand.occupants[opponentSeat(seatIndex)]
+				if other ~= nil and other ~= "BOT" and other ~= player then
+					chosenTable, chosenSeat = cand, seatIndex
+					break
+				end
+			end
+		end
+	end
+
+	-- 2) Bot mode (or Player mode fallback): a truly empty table. (If they're
+	--    already alone at their own table, Player mode just stays put.)
+	if not chosenTable and mode == "Player" and ownTable and ownOther == nil then
+		chosenTable, chosenSeat = ownTable, ownSeat
+	end
+	if not chosenTable then
+		for _, cand in quickCandidates(player) do
+			local seatIndex = quickFindSeat(cand, player, false)
+			if seatIndex then
+				local other = cand.occupants[opponentSeat(seatIndex)]
+				if other == nil or other == player then
+					chosenTable, chosenSeat = cand, seatIndex
+					break
+				end
+			end
+		end
+	end
+
+	-- 3) Last resort: anywhere without a real player opposite (stale bot ok).
+	if not chosenTable then
+		for _, cand in quickCandidates(player) do
+			local seatIndex = quickFindSeat(cand, player, false)
+			if seatIndex then
+				chosenTable, chosenSeat = cand, seatIndex
+				break
+			end
+		end
+	end
+
+	if not chosenTable or not chosenSeat then
+		QuickPlayResult:FireClient(player, mode, false, "No free table right now - try again")
+		return
+	end
+
+	-- A match may have started on their old table between the click and now;
+	-- never yank a player out of a live match.
+	if playerInActiveMatch(player) then
+		QuickPlayResult:FireClient(player, mode, false, "A match just started - stay seated")
+		return
+	end
+
+	local seated = quickTeleport(player, chosenTable.seats[chosenSeat])
+	if not seated then
+		QuickPlayResult:FireClient(player, mode, false, "You need a character to quick play")
+		return
+	end
+
+	-- Player mode + post-match cooldown: the auto-start on seat is skipped
+	-- while the cooldown runs, so re-trigger it right after it ends (both
+	-- players still seated) instead of leaving them sitting there.
+	if mode == "Player" and chosenTable.cooldownUntil > os.clock() then
+		task.delay(math.max(0, chosenTable.cooldownUntil - os.clock()) + 0.1, function()
+			local seatNow = seatOfPlayer(chosenTable, player)
+			if seatNow and not chosenTable.matchActive then
+				local other = chosenTable.occupants[opponentSeat(seatNow)]
+				if other ~= nil and other ~= "BOT" then
+					startMatch(chosenTable)
+				end
+			end
+		end)
+	end
+
+	if mode == "Player" then
+		local other = chosenTable.occupants[opponentSeat(chosenSeat)]
+		if other == nil or other == "BOT" or other == player then
+			-- Nobody was waiting after all: they're now just waiting in a table.
+			QuickPlayResult:FireClient(player, mode, true,
+				"No player was waiting - you're now waiting in a table for one")
+		else
+			-- Real player opposite: the seat reconciliation auto-starts the match.
+			QuickPlayResult:FireClient(player, mode, true, "")
+		end
+	else
+		-- Bot mode: tell the client to open the difficulty selector now.
+		QuickPlayResult:FireClient(player, mode, true, "")
+	end
+end)
+
+-------------------------------------------------------------------------------
 -- SUBMIT GUESS (server-authoritative validation)
 -------------------------------------------------------------------------------
 SubmitGuess.OnServerEvent:Connect(function(player, guess)

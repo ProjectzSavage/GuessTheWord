@@ -43,14 +43,20 @@ StarterGui
     │
     ├── InteractionFrame  (Frame)  lower area
     │   ├── PlayVsBotButton  (TextButton)   "Play vs Bot", Visible = false initially
-    │   └── DifficultySelector  (Frame, Visible=false)  shown when PlayVsBot/Rematch is clicked
-    │         ├── TitleLbl  (TextLabel)   "Choose Difficulty"
-    │         ├── Difficulties  (Frame)   (the difficulty buttons live here)
-    │         │     ├── EasyBtn   (TextButton)  "Easy — Max $100"
-    │         │     ├── MediumBtn (TextButton)  "Medium — Max $350"
-    │         │     └── HardBtn   (TextButton)  "Hard — Max $750"
-    │         ├── BackBtn   (TextButton)  "Back" (optional, returns to PlayVsBot)
-    │         └── CloseBtn  (TextButton)  "Leave Chair" (cancels + leaves seat)
+    │   ├── QuickPlay  (TextButton)   "Quick Play" (dup of PlayVsBotButton), Visible = false initially
+    │   ├── DifficultySelector  (Frame, Visible=false)  shown when PlayVsBot/Rematch is clicked
+    │   │     ├── TitleLbl  (TextLabel)   "Choose Difficulty"
+    │   │     ├── Difficulties  (Frame)   (the difficulty buttons live here)
+    │   │     │     ├── EasyBtn   (TextButton)  "Easy — Max $100"
+    │   │     │     ├── MediumBtn (TextButton)  "Medium — Max $350"
+    │   │     │     └── HardBtn   (TextButton)  "Hard — Max $750"
+    │   │     ├── BackBtn   (TextButton)  "Back" (optional, returns to PlayVsBot)
+    │   │     └── CloseBtn  (TextButton)  "Leave Chair" (cancels + leaves seat)
+    │   └── QuickPlaySelector  (Frame, Visible=false)  shown when QuickPlay is clicked
+    │         ├── Mode  (Frame)   (the two mode buttons live here)
+    │         │     ├── Bot  (TextButton)   "Bot" — tp to an EMPTY table, opens DifficultySelector
+    │         │     └── Player  (TextButton) "Player" — tp to a table with a player already waiting
+    │         └── CloseBtn  (TextButton)  (optional; just closes the selector, you stay seated)
     │
     ├── StatsPanel  (Frame)         top-left; shows Cash & Wins HUD
     │   ├── UIListLayout            Vertical, Padding 4

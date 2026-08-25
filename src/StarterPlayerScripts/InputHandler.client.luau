@@ -67,6 +67,8 @@ local PowerupUse = Events:WaitForChild("PowerupUse")
 local PowerupGrant = Events:WaitForChild("PowerupGrant")
 local PurchasePowerup = Events:WaitForChild("PurchasePowerup")
 local LeaveSeat = Events:WaitForChild("LeaveSeat")
+local QuickPlayRequest = Events:WaitForChild("QuickPlayRequest")
+local QuickPlayResult = Events:WaitForChild("QuickPlayResult")
 
 -- UI references (fail loudly if the hierarchy is wrong - easy to debug).
 local GameUI = PlayerGui:WaitForChild("GameUI")
@@ -99,6 +101,29 @@ local DifficultyMedium = DifficultySelector and DifficultySelector:FindFirstChil
 local DifficultyHard = DifficultySelector and DifficultySelector:FindFirstChild("HardBtn", true)
 local DifficultyClose = DifficultySelector and DifficultySelector:FindFirstChild("CloseBtn", true)
 local DifficultyBack = DifficultySelector and DifficultySelector:FindFirstChild("BackBtn", true)
+-- Quick play: a duplicate of PlayVsBotButton + a duplicate of the
+-- DifficultySelector (QuickPlaySelector) with a "Mode" frame holding the two
+-- mode buttons (Bot / Player).
+local QuickPlayButton = InteractionFrame:FindFirstChild("QuickPlay")
+local QuickPlaySelector = InteractionFrame:FindFirstChild("QuickPlaySelector")
+local QuickModeFrame = QuickPlaySelector and QuickPlaySelector:FindFirstChild("Mode", true)
+
+local function findQuickBtn(nameList)
+	local root = QuickModeFrame or QuickPlaySelector
+	if not root then
+		return nil
+	end
+	for _, name in nameList do
+		local btn = root:FindFirstChild(name, true)
+		if btn and btn:IsA("GuiButton") then
+			return btn
+		end
+	end
+	return nil
+end
+local QuickBotBtn = findQuickBtn({ "Bot", "BotBtn", "BotButton" })
+local QuickPlayerBtn = findQuickBtn({ "Player", "PlayerBtn", "PlayerButton" })
+local QuickCloseBtn = QuickPlaySelector and QuickPlaySelector:FindFirstChild("CloseBtn", true)
 -- Countdown frame (big 3-2-1-GO!) - built into the hierarchy by you.
 local CountdownFrame = GameUI:FindFirstChild("CountdownFrame")
 local CountdownLabel = CountdownFrame and CountdownFrame:FindFirstChild("CountdownLabel")
@@ -272,11 +297,13 @@ local function setWaitingUI(waiting)
 		setCinematic(0)
 		showFrame(InteractionFrame)
 		showFrame(PlayVsBotButton)
+		showFrame(QuickPlayButton)
 		hideFrame(PuzzleArea)
 		slideTopBarOut()
 	else
 		hideFrame(InteractionFrame)
 		hideFrame(PlayVsBotButton)
+		hideFrame(QuickPlayButton)
 	end
 end
 
@@ -1491,6 +1518,8 @@ end)
 PlayVsBotButton.Activated:Connect(function()
 	SFX.play("click")
 	hideFrame(PlayVsBotButton)
+	hideFrame(QuickPlaySelector) -- never show both selectors at once
+	hideFrame(QuickPlayButton)
 	task.delay(0.1, function()
 		if DifficultySelector then
 			DifficultySelector.Visible = true
@@ -1543,3 +1572,91 @@ if DifficultyClose then
 		LeaveSeat:FireServer()
 	end)
 end
+
+-------------------------------------------------------------------------------
+-- QUICK PLAY
+-- QuickPlay (dup of PlayVsBotButton) -> QuickPlaySelector (dup of the
+-- DifficultySelector) -> Mode frame with two buttons:
+--   * Bot    : the server teleports us to an empty table, then we open the
+--              difficulty selector (same as clicking Play vs Bot).
+--   * Player : the server teleports us to a table where a real player is
+--              already waiting; the match auto-starts on seat.
+-------------------------------------------------------------------------------
+local function openQuickPlaySelector()
+	if QuickPlaySelector then
+		QuickPlaySelector.Visible = true
+		UIFX.popIn(QuickPlaySelector)
+	end
+end
+
+-- Back to the waiting buttons (no seat leave - we just dismiss the picker).
+local function closeQuickPlaySelector()
+	if QuickPlaySelector then
+		QuickPlaySelector.Visible = false
+	end
+	showFrame(QuickPlayButton)
+	showFrame(PlayVsBotButton)
+end
+
+if QuickPlayButton then
+	QuickPlayButton.Activated:Connect(function()
+		SFX.play("click")
+		hideFrame(QuickPlayButton)
+		hideFrame(DifficultySelector) -- never show both selectors at once
+		task.delay(0.1, openQuickPlaySelector)
+	end)
+end
+
+if QuickBotBtn then
+	QuickBotBtn.Activated:Connect(function()
+		if QuickPlaySelector then
+			QuickPlaySelector.Visible = false
+		end
+		QuickPlayRequest:FireServer("Bot")
+	end)
+end
+
+if QuickPlayerBtn then
+	QuickPlayerBtn.Activated:Connect(function()
+		if QuickPlaySelector then
+			QuickPlaySelector.Visible = false
+		end
+		QuickPlayRequest:FireServer("Player")
+	end)
+end
+
+if QuickCloseBtn then
+	QuickCloseBtn.Activated:Connect(function()
+		closeQuickPlaySelector()
+	end)
+end
+
+QuickPlayResult.OnClientEvent:Connect(function(mode, success, note)
+	if not success then
+		if _G.Notify then
+			_G.Notify({ title = "Quick Play", message = note or "Something went wrong", kind = "warn" })
+		end
+		closeQuickPlaySelector()
+		return
+	end
+
+	if mode == "Bot" then
+		-- The server just seated us at an empty table: open the difficulty
+		-- selector right away (same as clicking Play vs Bot). Slight delay so
+		-- the teleport + the waiting-state UI settle first.
+		task.delay(0.5, function()
+			showFrame(InteractionFrame)
+			if DifficultySelector then
+				DifficultySelector.Visible = true
+				UIFX.popIn(DifficultySelector)
+			else
+				PlayVsBotRequest:FireServer("Easy")
+			end
+		end)
+	elseif mode == "Player" then
+		if note and note ~= "" and _G.Notify then
+			_G.Notify({ title = "Quick Play", message = note, kind = "info" })
+		end
+		-- Nothing else to do: the match auto-starts once the seat reconciles.
+	end
+end)
