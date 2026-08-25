@@ -34,6 +34,16 @@ local PRODUCT_IDS = {
 	Wins50    = 0,
 	Wins100   = 0,
 
+	-- Reveal Words (dev products - grant RevealWord uses)
+	RevealW1  = 0, -- +1 Reveal Word
+	RevealW3  = 0, -- +3 Reveal Words
+	RevealW5  = 0, -- +5 Reveal Words
+
+	-- Reveal Letters (dev products - grant RevealLetter uses)
+	RevealL1  = 0, -- +1 Reveal Letter
+	RevealL3  = 0, -- +3 Reveal Letters
+	RevealL5  = 0, -- +5 Reveal Letters
+
 	-- Gamepasses
 	DoubleCash   = 0,
 	DoubleStreak = 0,

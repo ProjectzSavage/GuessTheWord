@@ -124,6 +124,23 @@ end
 local QuickBotBtn = findQuickBtn({ "Bot", "BotBtn", "BotButton" })
 local QuickPlayerBtn = findQuickBtn({ "Player", "PlayerBtn", "PlayerButton" })
 local QuickCloseBtn = QuickPlaySelector and QuickPlaySelector:FindFirstChild("CloseBtn", true)
+
+-- QuickPlay is available at ALL TIMES — even right after joining, before
+-- sitting at any table (that's the point: play immediately). It's only hidden
+-- during a match and while a selector is open.
+local function setQuickPlayVisible(v)
+	if not QuickPlayButton then
+		return
+	end
+	local selectorOpen = (QuickPlaySelector and QuickPlaySelector.Visible)
+		or (DifficultySelector and DifficultySelector.Visible)
+	if v and not selectorOpen and not QuickPlayButton.Visible then
+		QuickPlayButton.Visible = true
+		UIFX.popIn(QuickPlayButton)
+	elseif not v and QuickPlayButton.Visible then
+		UIFX.popOut(QuickPlayButton)
+	end
+end
 -- Countdown frame (big 3-2-1-GO!) - built into the hierarchy by you.
 local CountdownFrame = GameUI:FindFirstChild("CountdownFrame")
 local CountdownLabel = CountdownFrame and CountdownFrame:FindFirstChild("CountdownLabel")
@@ -297,13 +314,33 @@ local function setWaitingUI(waiting)
 		setCinematic(0)
 		showFrame(InteractionFrame)
 		showFrame(PlayVsBotButton)
-		showFrame(QuickPlayButton)
+		setQuickPlayVisible(true)
 		hideFrame(PuzzleArea)
 		slideTopBarOut()
 	else
+		-- "Not waiting" means a match is starting/running — hide the whole
+		-- frame. (Standing back up to the lobby is handled by enterLobby(),
+		-- which keeps QuickPlay available.)
 		hideFrame(InteractionFrame)
 		hideFrame(PlayVsBotButton)
-		hideFrame(QuickPlayButton)
+	end
+end
+
+-- Lobby state (not in a match): the interaction frame is up with QuickPlay
+-- immediately available — no need to walk to a table and sit first. PlayVsBot
+-- only makes sense when actually seated and waiting, so it stays hidden here.
+local function enterLobby()
+	if not InteractionFrame.Visible then
+		showFrame(InteractionFrame)
+	else
+		local s = InteractionFrame:FindFirstChildOfClass("UIScale")
+		if s then
+			s.Scale = 1
+		end
+	end
+	setQuickPlayVisible(true)
+	if PlayVsBotButton and PlayVsBotButton.Visible then
+		PlayVsBotButton.Visible = false
 	end
 end
 
@@ -362,7 +399,11 @@ local flyingLetters = {}     -- in-flight flying clones (for cleanup)
 -- handler) but DEFINED later in the file.
 local lockJump, getHumanoid, onLeftSeat, setupCharacterJump
 
-setWaitingUI(false) -- start hidden until the server says otherwise
+-- Spawn state: lobby. QuickPlay is available immediately when you join (no
+-- need to walk to a table and sit first); PlayVsBot stays hidden until
+-- actually seated.
+hideCountdown()
+enterLobby()
 
 -- The PuzzleArea behaves like an OPEN WINDOW for the environment FX: the
 -- moment it pops in (after the money roll, when the round UI appears) the
@@ -1028,9 +1069,10 @@ function onLeftSeat()
 		end
 		return
 	end
-	-- Not in a match: hide the bot toggle and the pause overlay (outro).
-	setWaitingUI(false)
+	-- Not in a match: back to the lobby - pause overlay out, QuickPlay
+	-- immediately available again.
 	hidePauseScreen()
+	enterLobby()
 end
 
 function setupCharacterJump(char)
@@ -1059,6 +1101,7 @@ end
 if RematchButton then
 	RematchButton.Activated:Connect(function()
 		hidePauseScreen()
+		setQuickPlayVisible(false)
 		if DifficultySelector then
 			-- The selector lives inside InteractionFrame, so show that too.
 			showFrame(InteractionFrame)
@@ -1074,6 +1117,7 @@ end
 Countdown.OnClientEvent:Connect(function(n)
 	hidePauseScreen()
 	hideFrame(PuzzleArea)
+	setQuickPlayVisible(false) -- a match is starting
 	slideTopBarOut()
 	showCountdown(tostring(n))
 	-- Player can still jump out of the chair during the countdown; the jump is
@@ -1497,6 +1541,7 @@ GameOver.OnClientEvent:Connect(function(winnerName, youWon, isDraw, isBotMatch)
 	roundActive = false
 	matchInProgress = false -- allow the player to jump out again
 	lockJump(false)
+	setQuickPlayVisible(false) -- match just ended; re-shown via enterLobby/waiting
 	showCelebration(youWon, isDraw, isBotMatch)
 	if isDraw then
 		TimerLabel.Text = "DRAW"
@@ -1519,7 +1564,7 @@ PlayVsBotButton.Activated:Connect(function()
 	SFX.play("click")
 	hideFrame(PlayVsBotButton)
 	hideFrame(QuickPlaySelector) -- never show both selectors at once
-	hideFrame(QuickPlayButton)
+	setQuickPlayVisible(false)
 	task.delay(0.1, function()
 		if DifficultySelector then
 			DifficultySelector.Visible = true
@@ -1535,6 +1580,7 @@ local function startBotWithDifficulty(diff)
 	if DifficultySelector then
 		DifficultySelector.Visible = false
 	end
+	setQuickPlayVisible(false)
 	PlayVsBotRequest:FireServer(diff)
 end
 
@@ -1560,15 +1606,16 @@ if DifficultyBack then
 			DifficultySelector.Visible = false
 		end
 		showFrame(PlayVsBotButton)
+		setQuickPlayVisible(true) -- still seated and waiting
 	end)
 end
--- Close button: leave the chair and cancel (game never started).
+-- Close button: leave the chair and cancel (game never started). Standing up
+-- fires onLeftSeat, which drops us into the lobby state (QuickPlay available).
 if DifficultyClose then
 	DifficultyClose.Activated:Connect(function()
 		if DifficultySelector then
 			DifficultySelector.Visible = false
 		end
-		setWaitingUI(false)
 		LeaveSeat:FireServer()
 	end)
 end
@@ -1594,14 +1641,14 @@ local function closeQuickPlaySelector()
 	if QuickPlaySelector then
 		QuickPlaySelector.Visible = false
 	end
-	showFrame(QuickPlayButton)
+	setQuickPlayVisible(true)
 	showFrame(PlayVsBotButton)
 end
 
 if QuickPlayButton then
 	QuickPlayButton.Activated:Connect(function()
 		SFX.play("click")
-		hideFrame(QuickPlayButton)
+		setQuickPlayVisible(false)
 		hideFrame(DifficultySelector) -- never show both selectors at once
 		task.delay(0.1, openQuickPlaySelector)
 	end)

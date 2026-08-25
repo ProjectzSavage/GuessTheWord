@@ -13,10 +13,13 @@
 	1. Create dev products in Creator Hub (Robux -> Developer Products) for each
 	   shop item.
 	2. Fill DEV_PRODUCTS below: productId (from Creator Hub) -> reward.
-	   Available reward types:
-	     { type = "cash", amount = 5000 }
-	     { type = "wins", amount = 10 }
-	     { type = "perk", perk = "DoubleCash" }   -- sets a BoolValue on the player
+   Available reward types:
+     { type = "cash", amount = 5000 }
+     { type = "wins", amount = 10 }
+     { type = "perk", perk = "DoubleCash" }   -- sets a BoolValue on the player
+     { type = "powerup", use = "Word", amount = 3 }
+       -- use = "Word"   -> +amount RevealWordUses
+       -- use = "Letter" -> +amount RevealLetterUses
 	3. Enable HTTP/... (dev products need nothing special, just the ProductIds).
 
 	NOTE
@@ -36,6 +39,16 @@ local DEV_PRODUCTS = {
 	--[123456790] = { type = "cash", amount = 1000 },
 	--[123456791] = { type = "wins", amount = 10 },
 	--[123456792] = { type = "perk", perk = "DoubleCash" },
+
+	-- Reveal Words / Reveal Letters (shop frames RevealWords / RevealLetters,
+	-- items RevealW1/RevealW3/RevealW5 and RevealL1/RevealL3/RevealL5).
+	-- use = "Word" grants RevealWordUses, use = "Letter" grants RevealLetterUses.
+	--[123456793] = { type = "powerup", use = "Word",   amount = 1 }, -- RevealW1
+	--[123456794] = { type = "powerup", use = "Word",   amount = 3 }, -- RevealW3
+	--[123456795] = { type = "powerup", use = "Word",   amount = 5 }, -- RevealW5
+	--[123456796] = { type = "powerup", use = "Letter", amount = 1 }, -- RevealL1
+	--[123456797] = { type = "powerup", use = "Letter", amount = 3 }, -- RevealL3
+	--[123456798] = { type = "powerup", use = "Letter", amount = 5 }, -- RevealL5
 }
 
 -- Track processed receipts (avoid double-granting across resets in this session).
@@ -54,6 +67,25 @@ local function grantReward(player, reward)
 		if wins and wins:IsA("IntValue") then
 			wins.Value = wins.Value + reward.amount
 		end
+	elseif reward.type == "powerup" then
+		-- Grant powerup uses (Reveal Word / Reveal Letter). The values live in
+		-- the hidden "Stats" folder (created by GameManager on join); make
+		-- sure they exist so a purchase can never be lost.
+		local stats = player:FindFirstChild("Stats")
+		if not stats then
+			stats = Instance.new("Folder")
+			stats.Name = "Stats"
+			stats.Parent = player
+		end
+		local useName = (reward.use == "Letter" and "RevealLetterUses") or "RevealWordUses"
+		local val = stats:FindFirstChild(useName)
+		if not val then
+			val = Instance.new("IntValue")
+			val.Name = useName
+			val.Value = 0
+			val.Parent = stats
+		end
+		val.Value = val.Value + (reward.amount or 1)
 	elseif reward.type == "perk" then
 		-- Store a BoolValue on the player so other systems can read it
 		-- (e.g. rewards VIP/group checks, double-cash multipliers).

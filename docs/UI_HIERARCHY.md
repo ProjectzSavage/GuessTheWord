@@ -125,6 +125,16 @@ ShopF  (Frame, Visible=false)
     │         ├── Wins25  (Frame) [item]
     │         └── Wins50  (Frame) [item]
     ├── Wins100  (Frame) [item]  (outside the Wins category)
+    ├── RevealWords  (Frame, category)  (dup of the Wins frame)
+    │     └── UIListLayout
+    │         ├── RevealW1  (Frame) [item]  -- +1 Reveal Word use
+    │         ├── RevealW3  (Frame) [item]  -- +3 Reveal Word uses
+    │         └── RevealW5  (Frame) [item]  -- +5 Reveal Word uses
+    └── RevealLetters  (Frame, category)  (dup of the Wins frame)
+          └── UIListLayout
+              ├── RevealL1  (Frame) [item]  -- +1 Reveal Letter use
+              ├── RevealL3  (Frame) [item]  -- +3 Reveal Letter uses
+              └── RevealL5  (Frame) [item]  -- +5 Reveal Letter uses
     ├── GP  (Frame, category)
     │     └── UIListLayout
     │         ├── DoubleCash   (Frame) [item]
