@@ -308,25 +308,10 @@ if ls then
 	end
 end
 
--------------------------------------------------------------------------------
--- EVENTS (Game match sliding)
--------------------------------------------------------------------------------
-local Events = ReplicatedStorage:WaitForChild("Events", 15)
-if Events then
-	local CashAwarded = Events:FindFirstChild("CashAwarded")
-	if CashAwarded then
-		CashAwarded.OnClientEvent:Connect(function()
-			setStatsPanelUp(true)
-		end)
-	end
-
-	local GameOver = Events:FindFirstChild("GameOver")
-	if GameOver then
-		GameOver.OnClientEvent:Connect(function()
-			setStatsPanelUp(false)
-		end)
-	end
-end
+-- NOTE: the panel slide is driven ONLY by window open/close (UIFX calls
+-- _G.SetStatsPanelUp). It used to also slide on CashAwarded / GameOver, which
+-- made it jump "at the wrong time" (e.g. just sitting in a chair fired the
+-- waiting-state UI and slid it up without any game starting).
 
 -------------------------------------------------------------------------------
 -- "+" BUTTONS (Shop / Rewards access)

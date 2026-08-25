@@ -135,6 +135,7 @@ end
 
 function ShopAPI.open()
 	if not ShopF then return end
+	if ShopF.Visible then return end -- already open (idempotent — no double FX)
 	-- Automatically close Rewards and Inventory if open
 	if _G.RewardsAPI and _G.RewardsAPI.isOpen and _G.RewardsAPI.isOpen() and _G.RewardsAPI.close then
 		_G.RewardsAPI.close()
@@ -143,13 +144,14 @@ function ShopAPI.open()
 		_G.InventoryAPI.close()
 	end
 
-	ShopF.Visible = true
-	UIFX.popIn(ShopF)
+	UIFX.openWindow(ShopF)
 end
 
 function ShopAPI.close()
-	if not ShopF then return end
-	UIFX.popOut(ShopF)
+	-- Guard: a stray close on an already-closed window is a no-op (the old
+	-- code fired popOut unconditionally, which skewed the FX state).
+	if not ShopF or not ShopF.Visible then return end
+	UIFX.closeWindow(ShopF)
 end
 
 function ShopAPI.isAvailable()

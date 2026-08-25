@@ -294,6 +294,7 @@ render(owned0, equipped0)
 
 function InventoryAPI.open()
 	if not Panel then return end
+	if Panel.Visible then return end -- already open (idempotent — no double FX)
 	-- Auto-close Shop and Rewards if open
 	if _G.ShopAPI and _G.ShopAPI.isOpen and _G.ShopAPI.isOpen() and _G.ShopAPI.close then
 		_G.ShopAPI.close()
@@ -302,15 +303,15 @@ function InventoryAPI.open()
 		_G.RewardsAPI.close()
 	end
 
-	Panel.Visible = true
-	UIFX.popIn(Panel)
+	UIFX.openWindow(Panel)
 	local owned, equipped = readFromFolder()
 	render(owned, equipped)
 end
 
 function InventoryAPI.close()
-	if not Panel then return end
-	UIFX.popOut(Panel)
+	-- Guard: a stray close on an already-closed window is a no-op.
+	if not Panel or not Panel.Visible then return end
+	UIFX.closeWindow(Panel)
 end
 
 function InventoryAPI.isAvailable()

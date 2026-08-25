@@ -139,9 +139,13 @@ with `AnchorPoint = {0.5, 0}`. The in-script slide animation already uses Scale.
 higher `Position` (e.g. `{0.5, 0},{0.42, 0}` with `AnchorPoint {0.5, 0.5}`) so it
 sits a touch above center.
 
-**Cinematic effects** — when the countdown or puzzle is on screen, the script
-automatically blurs the background (a `BlurEffect` in `Lighting`) and smoothly
-raises the camera FOV, easing back when they close.
+**Cinematic effects** — when the countdown or puzzle is on screen, the match
+automatically blurs the background and smoothly raises the camera FOV, easing
+back when it ends. ALL environment FX (blur, FOV, StatsPanel slide, quest
+collapse) are owned by ONE module: `ReplicatedStorage.UIFX` (a single derived
+state machine fed by the match cinematic + open windows). Do not add your own
+`BlurEffect` or camera FOV tweens elsewhere — that is exactly what used to
+leave the screen stuck blurred/zoomed.
 - Put your own heart textures and clue image asset IDs where the docs say.
 
 The `ScrambledBank` tiles, the `AnswerBox` slots, and the above-head `HeartHUD`

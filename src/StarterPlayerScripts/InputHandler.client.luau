@@ -41,7 +41,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
-local Lighting = game:GetService("Lighting")
 local Camera = workspace.CurrentCamera
 
 local player = Players.LocalPlayer
@@ -135,7 +134,10 @@ local function showFrame(gui)
 end
 
 local function hideFrame(gui)
-	if gui and gui:IsA("GuiObject") then
+	-- Skip frames that aren't actually visible: a blind popOut on every
+	-- state change used to churn the old FX counter (and could flash a
+	-- frame's scale while it was already hidden).
+	if gui and gui:IsA("GuiObject") and gui.Visible then
 		UIFX.popOut(gui)
 	end
 end
@@ -180,49 +182,14 @@ end
 
 -------------------------------------------------------------------------------
 -- CINEMATIC EFFECT (background blur + FOV)
--- When the PuzzleArea / CountdownFrame is active, blur the background and
--- smoothly raise the camera FOV. When they close, ease it all back.
+-- When the match is active, blur the background and smoothly raise the camera
+-- FOV. Delegated to UIFX so the match cinematic and the window FX share ONE
+-- derived state machine. (Two systems tweening the same camera/blur
+-- independently was part of why the screen could get stuck blurred + zoomed:
+-- whichever tween finished last won, and the result depended on timing.)
 -------------------------------------------------------------------------------
-local baseFOV = Camera and Camera.FieldOfView or 70
-local blurEffect = Lighting:FindFirstChildOfClass("BlurEffect")
-if not blurEffect then
-	blurEffect = Instance.new("BlurEffect")
-	blurEffect.Size = 0
-	blurEffect.Parent = Lighting
-end
-
--- Cinematic intensity: 0 = off, 1 = countdown, 2 = round in-play. Always
--- re-tweens (no guard) so the FOV visibly ramps up at each stage and eases back
--- to normal when it goes off.
-local cinematicLevel = 0
-
-local CINEMATIC_PRESETS = {
-	[0] = { blur = 0,   fov = 0 },          -- normal
-	[1] = { blur = 6,   fov = 3 },          -- countdown
-	[2] = { blur = 12,  fov = 9 },          -- round in-play
-}
-
 local function setCinematic(level)
-	level = level or 0
-	cinematicLevel = level
-	local p = CINEMATIC_PRESETS[level] or CINEMATIC_PRESETS[0]
-	local targetBlur = p.blur
-	local targetFOV = math.min(baseFOV + p.fov, 90)
-
-	if blurEffect then
-		TweenService:Create(
-			blurEffect,
-			TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{ Size = targetBlur }
-		):Play()
-	end
-	if Camera then
-		TweenService:Create(
-			Camera,
-			TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{ FieldOfView = targetFOV }
-		):Play()
-	end
+	UIFX.setCinematic(level)
 end
 
 -------------------------------------------------------------------------------
@@ -1453,25 +1420,15 @@ local function showCelebration(youWon, isDraw, isBotMatch)
 
 	if youWon and not isDraw then
 		-- WIN: rainbow text, confetti, screen shake (while confetti falls), FOV.
+		-- The FOV punch goes through the shared FX state (a temporary boost),
+		-- so it merges with any window/match cinematic and always comes back.
 		rainbowText(CelebrationText, 2.5)
 		spawnConfetti(70)
 		shakeCamera(2.6, 2.4) -- aggressive win shake, lasts while confetti falls
-		if Camera then
-			TweenService:Create(
-				Camera,
-				TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-				{ FieldOfView = math.min(baseFOV + 14, 90) }
-			):Play()
-			task.delay(1.2, function()
-				if Camera then
-					TweenService:Create(
-						Camera,
-						TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
-						{ FieldOfView = baseFOV }
-					):Play()
-				end
-			end)
-		end
+		UIFX.setFovBoost(14)
+		task.delay(1.2, function()
+			UIFX.setFovBoost(0)
+		end)
 	elseif isDraw then
 		shakeCamera(0.5, 0.4)
 	else

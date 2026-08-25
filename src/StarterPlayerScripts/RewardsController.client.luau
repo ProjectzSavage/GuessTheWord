@@ -285,6 +285,7 @@ end
 
 local function onOpen()
 	if not root then return end
+	if isOpen or root.Visible then return end -- already open (idempotent)
 	-- Auto-close Shop and Inventory if open
 	if _G.ShopAPI and _G.ShopAPI.isOpen and _G.ShopAPI.isOpen() and _G.ShopAPI.close then
 		_G.ShopAPI.close()
@@ -295,7 +296,7 @@ local function onOpen()
 
 	isOpen = true
 	root.Active = true
-	UIFX.popIn(root)
+	UIFX.openWindow(root)
 	requestSync()
 	render()
 end
@@ -304,7 +305,7 @@ local function onClose()
 	if not root or not isOpen then return end
 	isOpen = false
 	root.Active = false
-	UIFX.popOut(root)
+	UIFX.closeWindow(root)
 end
 
 if leftTabs then
