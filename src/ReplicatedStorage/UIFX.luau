@@ -74,7 +74,6 @@ if not blurEffect or not blurEffect:IsA("BlurEffect") then
 	blurEffect.Enabled = false
 	blurEffect.Parent = Lighting
 end
-blurEffect :: BlurEffect
 
 -- Defensively reset the effect on load: a previously stuck state (Size > 0 /
 -- Enabled = true) could have been saved straight into the place from Studio.
@@ -299,6 +298,23 @@ function UIFX.closeWindow(gui)
 		watchWindow(gui)
 	end
 	return UIFX.popOut(gui)
+end
+
+-- Register `gui` as an FX window WITHOUT animating it (for GUIs that are
+-- shown/hidden by other code, like the match's PuzzleArea). From then on the
+-- environment FX — StatsPanel slide up, DailyQuestsF collapse, blur/FOV merge
+-- — follows its visibility with EXACTLY the same reaction as opening the
+-- Shop, and eases back when it hides.
+function UIFX.registerWindow(gui)
+	if not gui or not gui:IsA("GuiObject") then
+		return
+	end
+	if not windows[gui] then
+		windows[gui] = true
+		watchWindow(gui)
+		syncWindowCount()
+		refresh()
+	end
 end
 
 -- Match-flow cinematic level (0 = idle, 1 = countdown, 2 = round in-play).

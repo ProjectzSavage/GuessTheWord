@@ -337,6 +337,14 @@ local lockJump, getHumanoid, onLeftSeat, setupCharacterJump
 
 setWaitingUI(false) -- start hidden until the server says otherwise
 
+-- The PuzzleArea behaves like an OPEN WINDOW for the environment FX: the
+-- moment it pops in (after the money roll, when the round UI appears) the
+-- StatsPanel slides up and the DailyQuestsF collapses — exactly the same
+-- reaction as opening the Shop — and everything eases back when the puzzle
+-- hides (correct answer / game over).
+UIFX.registerWindow(PuzzleArea)
+hideFrame(PuzzleArea) -- never start from a lingering puzzle (Studio default)
+
 local function clearFlying()
 	for _, f in flyingLetters do
 		if f and f.Parent then

@@ -24,16 +24,16 @@ local PlayerGui = player:WaitForChild("PlayerGui")
 
 -- Locate the StatsPanel: prefer the "Currency" ScreenGui, else "GameUI".
 local function findPanelGui()
-	for _, name in ipairs({ "Currency", "GameUI" }) do
+	for _, name in ipairs({ "Currency"}) do
 		local gui = PlayerGui:FindFirstChild(name)
 		if gui then
-			local panel = gui:FindFirstChild("StatsPanel")
+			local panel = gui:WaitForChild("StatsPanel")
 			if panel then
 				return gui, panel
 			end
 		end
 	end
-	return PlayerGui:FindFirstChild("Currency") or PlayerGui:FindFirstChild("GameUI")
+	return PlayerGui:WaitForChild("Currency")
 end
 
 local panelGui = findPanelGui()
