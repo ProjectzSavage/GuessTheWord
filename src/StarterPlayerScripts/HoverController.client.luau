@@ -84,3 +84,25 @@ if PlayVsBotButton and PlayVsBotButton:IsA("GuiButton") then
 	HoverFX.applyTo(PlayVsBotButton, { scale = 1.15, duration = 0.18 })
 	applyHoverSound(PlayVsBotButton)
 end
+
+-------------------------------------------------------------------------------
+-- QUICK PLAY BUTTON + QUICK PLAY SELECTOR
+-- QuickPlay gets the same pop + hover sound as PlayVsBotButton, and EVERY
+-- button inside QuickPlaySelector (Mode: Bot / Player, Close, ...) gets it
+-- too - so any extra mode buttons you add later are covered automatically.
+-------------------------------------------------------------------------------
+local QuickPlayButton = InteractionFrame:FindFirstChild("QuickPlay")
+if QuickPlayButton and QuickPlayButton:IsA("GuiButton") then
+	HoverFX.applyTo(QuickPlayButton, { scale = 1.15, duration = 0.18 })
+	applyHoverSound(QuickPlayButton)
+end
+
+local QuickPlaySelector = InteractionFrame:FindFirstChild("QuickPlaySelector")
+if QuickPlaySelector then
+	for _, btn in QuickPlaySelector:GetDescendants() do
+		if btn:IsA("GuiButton") then
+			HoverFX.applyTo(btn, { scale = 1.15, duration = 0.18 })
+			applyHoverSound(btn)
+		end
+	end
+end

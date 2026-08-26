@@ -41,7 +41,7 @@ local RewardRequestSync = ensureEvent("RewardRequestSync")
 -- CONFIG
 -------------------------------------------------------------------------------
 local GROUP_ID = 3597354
-local VIP_GAMEPASS_ID = 0
+local VIP_GAMEPASS_ID = 1960374374
 local SOCIAL_OWNERS = {
 	{ username = "TheCoolBaconHairIsMe", userId = 3107183806 },
 	{ username = "YurisMatrix",          userId = 3721585498 },

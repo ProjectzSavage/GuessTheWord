@@ -35,20 +35,32 @@ local MarketplaceService = game:GetService("MarketplaceService")
 -------------------------------------------------------------------------------
 local DEV_PRODUCTS = {
 	-- [PRODUCT_ID] = reward
-	--[123456789] = { type = "cash", amount = 5000 },
-	--[123456790] = { type = "cash", amount = 1000 },
-	--[123456791] = { type = "wins", amount = 10 },
-	--[123456792] = { type = "perk", perk = "DoubleCash" },
+
+	-- Cash
+	[3709926017] = { type = "cash", amount = 5000 }, -- Cash5000
+	[3709926097] = { type = "cash", amount = 2500 }, -- Cash2500
+	[3709926131] = { type = "cash", amount = 1000 }, -- Cash1000
+	[3709926166] = { type = "cash", amount = 300 },  -- Cash300
+
+	-- Wins
+	[3709926266] = { type = "wins", amount = 100 }, -- Wins100
+	[3709926317] = { type = "wins", amount = 50 },  -- Wins50
+	[3709926374] = { type = "wins", amount = 25 },  -- Wins25
+	[3709926411] = { type = "wins", amount = 10 },  -- Wins10
 
 	-- Reveal Words / Reveal Letters (shop frames RevealWords / RevealLetters,
 	-- items RevealW1/RevealW3/RevealW5 and RevealL1/RevealL3/RevealL5).
 	-- use = "Word" grants RevealWordUses, use = "Letter" grants RevealLetterUses.
-	--[123456793] = { type = "powerup", use = "Word",   amount = 1 }, -- RevealW1
-	--[123456794] = { type = "powerup", use = "Word",   amount = 3 }, -- RevealW3
-	--[123456795] = { type = "powerup", use = "Word",   amount = 5 }, -- RevealW5
-	--[123456796] = { type = "powerup", use = "Letter", amount = 1 }, -- RevealL1
-	--[123456797] = { type = "powerup", use = "Letter", amount = 3 }, -- RevealL3
-	--[123456798] = { type = "powerup", use = "Letter", amount = 5 }, -- RevealL5
+	[3709926691] = { type = "powerup", use = "Word",   amount = 1 }, -- RevealW1
+	[3709926626] = { type = "powerup", use = "Word",   amount = 3 }, -- RevealW3
+	[3709926546] = { type = "powerup", use = "Word",   amount = 5 }, -- RevealW5
+	[3709926777] = { type = "powerup", use = "Letter", amount = 1 }, -- RevealL1
+	[3709926836] = { type = "powerup", use = "Letter", amount = 3 }, -- RevealL3
+	[3709927106] = { type = "powerup", use = "Letter", amount = 5 }, -- RevealL5
+
+	-- NOTE: VIP / 2x Streak / 2x Cash / 2x Wins / the exclusive chairs are
+	-- GAMEPASSES (see ShopController.PRODUCT_IDS, ChairsConfig.GamepassChairs
+	-- and OffersController) - they never hit ProcessReceipt, so no entry here.
 }
 
 -- Track processed receipts (avoid double-granting across resets in this session).

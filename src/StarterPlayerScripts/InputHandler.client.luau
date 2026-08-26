@@ -313,7 +313,14 @@ local function setWaitingUI(waiting)
 	if waiting then
 		setCinematic(0)
 		showFrame(InteractionFrame)
-		showFrame(PlayVsBotButton)
+		-- Don't pop the waiting buttons in while a selector is open: a late
+		-- OpponentState event (e.g. right after a QuickPlay teleport) used to
+		-- bring PlayVsBot + QuickPlay back on top of the difficulty selector.
+		local selectorOpen = (QuickPlaySelector and QuickPlaySelector.Visible)
+			or (DifficultySelector and DifficultySelector.Visible)
+		if not selectorOpen then
+			showFrame(PlayVsBotButton)
+		end
 		setQuickPlayVisible(true)
 		hideFrame(PuzzleArea)
 		slideTopBarOut()
@@ -1642,14 +1649,25 @@ local function closeQuickPlaySelector()
 		QuickPlaySelector.Visible = false
 	end
 	setQuickPlayVisible(true)
-	showFrame(PlayVsBotButton)
+	-- PlayVsBotButton only makes sense when actually seated and waiting: in
+	-- the lobby (not seated) it stays hidden so it doesn't pop back up on
+	-- top of QuickPlay right after we dismiss the selector.
+	local h = getHumanoid()
+	if h and h.Seated then
+		showFrame(PlayVsBotButton)
+	else
+		if PlayVsBotButton and PlayVsBotButton.Visible then
+			PlayVsBotButton.Visible = false
+		end
+	end
 end
 
 if QuickPlayButton then
 	QuickPlayButton.Activated:Connect(function()
 		SFX.play("click")
-		setQuickPlayVisible(false)
+		hideFrame(PlayVsBotButton)
 		hideFrame(DifficultySelector) -- never show both selectors at once
+		setQuickPlayVisible(false)
 		task.delay(0.1, openQuickPlaySelector)
 	end)
 end
@@ -1692,7 +1710,20 @@ QuickPlayResult.OnClientEvent:Connect(function(mode, success, note)
 		-- selector right away (same as clicking Play vs Bot). Slight delay so
 		-- the teleport + the waiting-state UI settle first.
 		task.delay(0.5, function()
-			showFrame(InteractionFrame)
+			local h = getHumanoid()
+			if not (h and h.Seated) then
+				return -- stood up during the teleport; lobby UI is already up
+			end
+			if not InteractionFrame.Visible then
+				showFrame(InteractionFrame)
+			end
+			-- Hide the lobby/waiting buttons so ONLY the difficulty selector
+			-- is visible (the waiting-state event that fired when we got
+			-- seated pops PlayVsBot + QuickPlay back in, so hide them again).
+			setQuickPlayVisible(false)
+			if PlayVsBotButton and PlayVsBotButton.Visible then
+				PlayVsBotButton.Visible = false
+			end
 			if DifficultySelector then
 				DifficultySelector.Visible = true
 				UIFX.popIn(DifficultySelector)

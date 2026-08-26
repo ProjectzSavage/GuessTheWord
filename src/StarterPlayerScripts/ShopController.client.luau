@@ -25,32 +25,33 @@ local ChairsConfig = require(ReplicatedStorage:WaitForChild("ChairsConfig"))
 
 local PRODUCT_IDS = {
 	-- Dev Products
-	Cash5000  = 0,
-	Cash1000  = 0,
-	Cash2500  = 0,
-	Cash300   = 0,
-	Wins10    = 0,
-	Wins25    = 0,
-	Wins50    = 0,
-	Wins100   = 0,
+	Cash5000  = 3709926017,
+	Cash1000  = 3709926131,
+	Cash2500  = 3709926097,
+	Cash300   = 3709926166,
+	Wins10    = 3709926411,
+	Wins25    = 3709926374,
+	Wins50    = 3709926317,
+	Wins100   = 3709926266,
 
 	-- Reveal Words (dev products - grant RevealWord uses)
-	RevealW1  = 0, -- +1 Reveal Word
-	RevealW3  = 0, -- +3 Reveal Words
-	RevealW5  = 0, -- +5 Reveal Words
+	RevealW1  = 3709926691, -- +1 Reveal Word
+	RevealW3  = 3709926626, -- +3 Reveal Words
+	RevealW5  = 3709926546, -- +5 Reveal Words
 
 	-- Reveal Letters (dev products - grant RevealLetter uses)
-	RevealL1  = 0, -- +1 Reveal Letter
-	RevealL3  = 0, -- +3 Reveal Letters
-	RevealL5  = 0, -- +5 Reveal Letters
+	RevealL1  = 3709926777, -- +1 Reveal Letter
+	RevealL3  = 3709926836, -- +3 Reveal Letters
+	RevealL5  = 3709927106, -- +5 Reveal Letters
 
 	-- Gamepasses
-	DoubleCash   = 0,
-	DoubleStreak = 0,
-	DoubleWins   = 0,
-	VIPPack      = 0,
+	DoubleCash   = 1958940384,
+	DoubleStreak = 1958292387,
+	DoubleWins   = 1960056393,
+	VIPPack      = 1960374374,
 
-	-- Robux Exclusive Chairs (Gamepasses)
+	-- Robux Exclusive Chairs (Gamepasses) - auto-filled from
+	-- ChairsConfig.GamepassChairs below (kept at 0 here).
 	HackerChair  = 0,
 	SpacialMist  = 0,
 	PinkVortex   = 0,

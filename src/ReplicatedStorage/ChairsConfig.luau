@@ -33,10 +33,10 @@ return {
 		PinkVortex   = "Gamepass",
 	},
 
-	-- Gamepass IDs for exclusive chairs (fill with your Gamepass IDs from Creator Hub)
+	-- Gamepass IDs for exclusive chairs (from Creator Hub)
 	GamepassChairs = {
-		HackerChair  = 0,
-		SpacialMist  = 0,
-		PinkVortex   = 0,
+		HackerChair  = 1951965706,
+		SpacialMist  = 1952367447,
+		PinkVortex   = 1954710922,
 	},
 }

@@ -107,10 +107,10 @@ local STARTER_PACK_PRODUCT_ID = 1839769267 -- DevProduct / GamePass id
 local STARTER_PACK_PRICE = "3"
 
 local GAMEPASS_OFFERS = {
-	{ id = 1839628382, name = "VIP",       priceText = "189", icon = "rbxassetid://76065691872422" },
-	{ id = 1840844336, name = "2x Streak", priceText = "45",  icon = "rbxassetid://98967636309470" },
-	{ id = 1841496309, name = "2x Cash",   priceText = "49",  icon = "rbxassetid://84241673549927" },
-	{ id = 1841592323, name = "2x Wins",   priceText = "59",  icon = "rbxassetid://138458249983109" },
+	{ id = 1960374374, name = "VIP",       priceText = "189", icon = "rbxassetid://76065691872422" },
+	{ id = 1958292387, name = "2x Streak", priceText = "45",  icon = "rbxassetid://98967636309470" },
+	{ id = 1958940384, name = "2x Cash",   priceText = "49",  icon = "rbxassetid://84241673549927" },
+	{ id = 1960056393, name = "2x Wins",   priceText = "59",  icon = "rbxassetid://138458249983109" },
 }
 
 local STARTER_REWARDS = {
