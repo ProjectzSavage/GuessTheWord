@@ -104,6 +104,7 @@ local lastApplied = {
 	fov = (cam0 and cam0.FieldOfView) or BASE_FOV_DEFAULT,
 	panelUp = false,
 	questsHidden = false,
+	quickShifted = false,
 }
 
 local function getCamera()
@@ -206,6 +207,13 @@ local function applyTargets(t)
 		_G.SetQuestsHiddenByGui(t.questsHidden)
 		lastApplied.questsHidden = t.questsHidden
 	end
+
+	-- QuickPlay button slides down while a window is open, back up on close
+	-- (windows only — NOT the match cinematic).
+	if lastApplied.quickShifted ~= t.quickShifted and _G.SetQuickPlayShiftedByGui then
+		_G.SetQuickPlayShiftedByGui(t.quickShifted)
+		lastApplied.quickShifted = t.quickShifted
+	end
 end
 
 -- Recompute the FX targets from the current inputs and tween to them.
@@ -223,6 +231,7 @@ local function refresh()
 		fov = targetFov,
 		panelUp = winOn,
 		questsHidden = winOn,
+		quickShifted = winOn,
 	})
 end
 

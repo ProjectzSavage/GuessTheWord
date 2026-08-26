@@ -78,6 +78,16 @@ StarterGui
         └── RematchButton  (TextButton)  "Play vs Bot again" (fires a new bot match)
 ```
 
+**QuickPlay behavior (InputHandler):**
+* Available from spawn (lobby) — no need to sit first.
+* Slides **DOWN** out of the way while any GUI window (Shop / Rewards /
+  Inventory) is open, and slides **BACK** when it closes (same derived FX
+  state as the StatsPanel slide-up, owned by UIFX).
+* Hidden during a match and while a selector is open.
+* Closing the QuickPlaySelector only brings QuickPlay back — PlayVsBotButton
+  stays hidden (it comes back when you sit down, or via the difficulty
+  selector's Back button).
+
 > **`AnswerBox` is now a `Frame`, not a `TextBox`.** The guessed letters are shown
 > as letter IMAGES (from `ReplicatedStorage.LetterImages`). `InputHandler` clears
 > `AnswerBox` and rebuilds one slot per letter on every change. Leave it empty;
@@ -147,6 +157,12 @@ ShopF  (Frame, Visible=false)
 Every **item frame** (a frame containing a `BuyBtn`) maps by its NAME to a dev
 product id in `PRODUCT_IDS` (ShopController). Category frames (Cash/Wins/GP) are
 just containers and are ignored.
+
+**Auto prices:** each item's `PriceLbl` is filled automatically on load from
+the REAL price in Creator Hub (dev product or gamepass, per item name) — no
+hardcoded prices. Same for the in-match powerup `PriceLbl`s (real 1-use
+product price when the player has no uses left) and the OffersUi gamepass /
+starter-pack prices (fetched from their gamepass ids).
 
 **Grant:** `ShopService.ProcessReceipt` grants Cash / Wins / a perk (DoubleCash,
 DoubleStreak, DoubleWins, VIPPack → sets a `ShopPerks` BoolValue) and adds the

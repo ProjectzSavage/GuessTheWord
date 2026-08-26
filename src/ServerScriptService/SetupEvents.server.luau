@@ -33,7 +33,7 @@ local EVENT_NAMES = {
 	"CashAwarded",     -- Server -> Client : tell client which cash value won
 	"PowerupUse",      -- Client -> Server : use a powerup (Letter/Word)
 	"PowerupGrant",    -- Server -> Client : server reveals the letter/word
-	"PurchasePowerup", -- Client -> Server : buy a powerup with robux (placeholder)
+	"PurchasePowerup", -- Client -> Server : buy a powerup with robux (prompts the 1-use dev product)
 	"LeaveSeat",       -- Client -> Server : player leaves their chair (cancel)
 	"RewardSync",      -- Server -> Client : rewards payload (categories/rows)
 	"RewardClaim",     -- Client -> Server : claim a reward (category, id)

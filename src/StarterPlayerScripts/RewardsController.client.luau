@@ -31,10 +31,24 @@ local NumberFormat = require(ReplicatedStorage:WaitForChild("NumberFormat"))
 local root     = gameGui and (gameGui:FindFirstChild("RewardsF", true) or gameGui:WaitForChild("RewardsF", 8))
 local closeBtn = root and (root:FindFirstChild("CloseBtn", true) :: GuiButton?)
 
+-- Tolerant label lookup: try the documented name first, then common variants,
+-- so the "Total Robux spent" / category text works even if the label was
+-- renamed in Studio.
+local function findTextLabel(parent, names)
+	if not parent then return nil end
+	for _, name in ipairs(names) do
+		local found = parent:FindFirstChild(name, true)
+		if found and found:IsA("TextLabel") then
+			return found
+		end
+	end
+	return nil
+end
+
 local leftTabs    = root and (root:FindFirstChild("LeftTabs", true) :: GuiObject?)
 local content     = root and (root:FindFirstChild("Content", true) :: GuiObject?)
-local titleLbl    = content and (content:FindFirstChild("CategoryTitle", true) :: TextLabel?)
-local subLbl      = content and (content:FindFirstChild("CategorySubtitle", true) :: TextLabel?)
+local titleLbl    = findTextLabel(content, { "CategoryTitle", "Title", "TitleLbl" })
+local subLbl      = findTextLabel(content, { "CategorySubtitle", "Subtitle", "SubtitleLbl", "SubLbl", "TotalSpentLbl" })
 local rowsScroll  = content and (content:FindFirstChild("RowsScroll", true) :: ScrollingFrame?)
 local rowTemplate = rowsScroll and (rowsScroll:FindFirstChild("RowTemplate", true) :: GuiObject?)
 
@@ -335,7 +349,9 @@ if RewardSync then
 end
 
 RunService.Heartbeat:Connect(function()
-	if isOpen and (activeCat == "playtime" or activeCat == "daily") then
+	-- robuxspent is included so the "Total Robux spent" line always reflects
+	-- the latest synced payload while the tab is open.
+	if isOpen and (activeCat == "playtime" or activeCat == "daily" or activeCat == "robuxspent") then
 		refreshSubtitle()
 	end
 end)

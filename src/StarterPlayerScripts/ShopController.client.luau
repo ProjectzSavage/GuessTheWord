@@ -127,6 +127,48 @@ local function wireBuyButtons()
 end
 wireBuyButtons()
 
+-------------------------------------------------------------------------------
+-- AUTO PRICES
+-- Every item frame's PriceLbl is filled from the REAL price in Creator Hub
+-- (dev product or gamepass, per item name). Nothing is hardcoded - if a fetch
+-- fails the label keeps whatever text you set in Studio.
+-------------------------------------------------------------------------------
+local function fetchPriceText(productId, isGamepass)
+	local ok, info = pcall(function()
+		if isGamepass then
+			return MarketplaceService:GetProductInfo(productId, Enum.InfoType.GamePass)
+		end
+		return MarketplaceService:GetProductInfo(productId)
+	end)
+	if ok and type(info) == "table" and info.Price then
+		return "R$" .. tostring(math.floor(info.Price / 100))
+	end
+	return nil
+end
+
+local function applyItemPrices()
+	if not ShopF then return end
+	for _, frame in ShopF:GetDescendants() do
+		if frame:IsA("Frame") then
+			local hasBuy = frame:FindFirstChild("BuyBtn") ~= nil or frame:FindFirstChild("PurchaseBtn") ~= nil
+			local priceLbl = frame:FindFirstChild("PriceLbl")
+			if hasBuy and priceLbl and priceLbl:IsA("TextLabel") then
+				local productId = PRODUCT_IDS[frame.Name]
+				if productId and productId > 0 then
+					local isGamepass = GAMEPASS_NAMES[frame.Name] == true
+					task.spawn(function()
+						local text = fetchPriceText(productId, isGamepass)
+						if text and frame.Parent then
+							priceLbl.Text = text
+						end
+					end)
+				end
+			end
+		end
+	end
+end
+applyItemPrices()
+
 if ShopF then
 	ShopF.DescendantAdded:Connect(function(item)
 		if item:IsA("GuiButton") and (item.Name == "BuyBtn" or item.Name == "PurchaseBtn") then

@@ -29,6 +29,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ServerStorage = game:GetService("ServerStorage")
+local MarketplaceService = game:GetService("MarketplaceService")
 
 local Dictionary = require(ServerStorage.Modules.Dictionary)
 local HeartHUDManager = require(ServerStorage.Modules.HeartHUDManager)
@@ -1226,10 +1227,9 @@ local function spendUse(player, name)
 	return false
 end
 
--- Reveal one random correct letter, or the full word.
--- For now the powerup always works (free) so it can be tested. When a use is
--- available it is spent; otherwise it still reveals (placeholder - later it
--- will cost robux or require reward-granted uses).
+-- Reveal the next correct letter, or the full word. A use is REQUIRED: if the
+-- player has none left we tell the client (success=false) and it shows the
+-- buy prompt (see PowerupGrant handler in InputHandler).
 PowerupUse.OnServerEvent:Connect(function(player, powerupType)
 	if typeof(powerupType) ~= "string" then
 		return
@@ -1241,7 +1241,10 @@ PowerupUse.OnServerEvent:Connect(function(player, powerupType)
 			local word = tableState.currentWord
 
 			if powerupType == "Letter" then
-				spendUse(player, "RevealLetterUses") -- spend if available
+				if not spendUse(player, "RevealLetterUses") then
+					PowerupGrant:FireClient(player, "Letter", false) -- client shows buy prompt
+					return
+				end
 				-- Reveal the next unrevealed letter IN ORDER (left to right), so
 				-- "ball" reveals b, then a, then l, then l.
 				local i
@@ -1258,7 +1261,10 @@ PowerupUse.OnServerEvent:Connect(function(player, powerupType)
 				local letter = string.sub(word, i, i)
 				PowerupGrant:FireClient(player, "Letter", true, letter, i)
 			elseif powerupType == "Word" then
-				spendUse(player, "RevealWordUses")
+				if not spendUse(player, "RevealWordUses") then
+					PowerupGrant:FireClient(player, "Word", false) -- client shows buy prompt
+					return
+				end
 				PowerupGrant:FireClient(player, "Word", true, nil, nil, word)
 			end
 			return
@@ -1266,24 +1272,29 @@ PowerupUse.OnServerEvent:Connect(function(player, powerupType)
 	end
 end)
 
--- Buy a powerup with robux (placeholder - replace with real MarketplaceService
--- / dev-product purchase. For now it grants 1 use so the flow can be tested).
+-- Buy a powerup with robux: prompts the REAL 1-use dev product. The grant
+-- happens in ShopService's ProcessReceipt when the player confirms (the
+-- in-match PriceLbl refreshes automatically via the Stats value change).
+local POWERUP_PRODUCT_IDS = {
+	Letter = 3709926777, -- RevealL1
+	Word   = 3709926691, -- RevealW1
+}
 PurchasePowerup.OnServerEvent:Connect(function(player, powerupType)
 	if typeof(powerupType) ~= "string" then
 		return
 	end
-	local stats = player:FindFirstChild("Stats")
-	if not stats then
+	local productId = POWERUP_PRODUCT_IDS[powerupType]
+	if not productId or productId == 0 then
 		return
 	end
-	local useName = powerupType == "Word" and "RevealWordUses" or "RevealLetterUses"
-	local val = stats:FindFirstChild(useName)
-	if val then
-		val.Value = val.Value + 1
-	end
-	-- TODO: hook up real robux purchase (MarketplaceService:PromptProductPurchase)
-	-- using a dev product per powerup. Fire an acknowledgement:
-	PowerupGrant:FireClient(player, powerupType, nil, nil, true)
+	task.spawn(function()
+		local ok, err = pcall(function()
+			MarketplaceService:PromptProductPurchase(player, productId)
+		end)
+		if not ok then
+			warn("[GameManager] Powerup purchase failed:", err)
+		end
+	end)
 end)
 
 -------------------------------------------------------------------------------

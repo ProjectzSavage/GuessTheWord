@@ -66,6 +66,21 @@ local DEV_PRODUCTS = {
 -- Track processed receipts (avoid double-granting across resets in this session).
 local processedReceipts = {}
 
+-- Gamepass purchases (VIP / 2x Streak / 2x Cash / 2x Wins / exclusive chairs /
+-- starter pack) never hit ProcessReceipt, so count them toward the total
+-- robux-spent tracker HERE - otherwise the "Total Robux spent" in the Rewards
+-- UI only moved on dev-product purchases.
+MarketplaceService.GamePassPurchaseProcessed:Connect(function(player, gamePassId)
+	local ok, info = pcall(function()
+		return MarketplaceService:GetProductInfo(gamePassId, Enum.InfoType.GamePass)
+	end)
+	if ok and type(info) == "table" and info.Price then
+		if _G.RewardsAddRobuxSpent then
+			_G.RewardsAddRobuxSpent(player, math.floor(info.Price / 100))
+		end
+	end
+end)
+
 local function grantReward(player, reward)
 	if reward.type == "cash" then
 		local ls = player:FindFirstChild("leaderstats")

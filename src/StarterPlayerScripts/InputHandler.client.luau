@@ -41,6 +41,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local MarketplaceService = game:GetService("MarketplaceService")
 local Camera = workspace.CurrentCamera
 
 local player = Players.LocalPlayer
@@ -126,20 +127,74 @@ local QuickPlayerBtn = findQuickBtn({ "Player", "PlayerBtn", "PlayerButton" })
 local QuickCloseBtn = QuickPlaySelector and QuickPlaySelector:FindFirstChild("CloseBtn", true)
 
 -- QuickPlay is available at ALL TIMES — even right after joining, before
--- sitting at any table (that's the point: play immediately). It's only hidden
--- during a match and while a selector is open.
+-- sitting at any table (that's the point: play immediately). It's hidden
+-- during a match, while a selector is open, and while a GUI window (Shop /
+-- Rewards / Inventory) is open — when a window opens the button SLIDES DOWN
+-- out of the way, and slides back up when the window closes.
+local quickStateVisible = false -- match/lobby state (see setQuickPlayVisible)
+local quickGuiShifted = false   -- a GUI window is open (see _G.SetQuickPlayShiftedByGui)
+local quickGen = 0              -- invalidates pending slide-out tweens
+local quickRestingPos = QuickPlayButton and QuickPlayButton.Position or nil
+local QUICK_SLIDE_OFFSET = UDim2.new(0, 0, 0.45, 0) -- screen fraction to slide down
+
+local function applyQuickPlayState()
+	if not QuickPlayButton then
+		return
+	end
+	local want = quickStateVisible and not quickGuiShifted
+	if QuickPlayButton.Visible == want then
+		return
+	end
+	quickGen += 1
+	local gen = quickGen
+	if want then
+		QuickPlayButton.Visible = true
+		if quickRestingPos then
+			QuickPlayButton.Position = quickRestingPos + QUICK_SLIDE_OFFSET
+			TweenService:Create(
+				QuickPlayButton,
+				TweenInfo.new(0.26, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+				{ Position = quickRestingPos }
+			):Play()
+		end
+	else
+		if quickRestingPos then
+			local t = TweenService:Create(
+				QuickPlayButton,
+				TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.In),
+				{ Position = quickRestingPos + QUICK_SLIDE_OFFSET }
+			)
+			t:Play()
+			t.Completed:Connect(function()
+				if gen == quickGen then
+					QuickPlayButton.Visible = false
+					QuickPlayButton.Position = quickRestingPos
+				end
+			end)
+		else
+			QuickPlayButton.Visible = false
+		end
+	end
+end
+
 local function setQuickPlayVisible(v)
 	if not QuickPlayButton then
 		return
 	end
 	local selectorOpen = (QuickPlaySelector and QuickPlaySelector.Visible)
 		or (DifficultySelector and DifficultySelector.Visible)
-	if v and not selectorOpen and not QuickPlayButton.Visible then
-		QuickPlayButton.Visible = true
-		UIFX.popIn(QuickPlayButton)
-	elseif not v and QuickPlayButton.Visible then
-		UIFX.popOut(QuickPlayButton)
+	local want = v and not selectorOpen
+	if want ~= quickStateVisible then
+		quickStateVisible = want
+		applyQuickPlayState()
 	end
+end
+
+-- Called by UIFX on every window open/close transition: the button slides
+-- down while a GUI window (Shop / Rewards / Inventory) is open, and back.
+_G.SetQuickPlayShiftedByGui = function(shifted)
+	quickGuiShifted = shifted and true or false
+	applyQuickPlayState()
 end
 -- Countdown frame (big 3-2-1-GO!) - built into the hierarchy by you.
 local CountdownFrame = GameUI:FindFirstChild("CountdownFrame")
@@ -858,6 +913,16 @@ local pendingBuyType = nil
 
 local function promptBuy(powerupType)
 	if not BuyPrompt then
+		-- No BuyPrompt built in the hierarchy: at least tell the player what
+		-- to do instead of eating the click silently.
+		if _G.Notify then
+			_G.Notify({
+				title = "No uses left",
+				message = "Buy " .. (powerupType == "Word" and "Reveal Words" or "Reveal Letters")
+					.. " in the Shop to use this powerup!",
+				kind = "warn",
+			})
+		end
 		return
 	end
 	pendingBuyType = powerupType
@@ -906,6 +971,22 @@ end
 watchUses("RevealLetterUses")
 watchUses("RevealWordUses")
 updatePowerupPrices()
+
+-- The R$ fallback on the price labels comes from the REAL 1-use dev products
+-- (RevealL1 / RevealW1), fetched on load so it always matches Creator Hub.
+local POWERUP_PRODUCT_IDS = { Letter = 3709926777, Word = 3709926691 }
+task.spawn(function()
+	for _, typeName in ipairs({ "Letter", "Word" }) do
+		local id = POWERUP_PRODUCT_IDS[typeName]
+		local ok, info = pcall(function()
+			return MarketplaceService:GetProductInfo(id)
+		end)
+		if ok and type(info) == "table" and info.Price then
+			POWERUP_PRICE[typeName] = math.floor(info.Price / 100)
+		end
+	end
+	updatePowerupPrices()
+end)
 
 -- Handle server responses for powerups.
 PowerupGrant.OnClientEvent:Connect(function(powerupType, success, letter, index, word)
@@ -1649,16 +1730,11 @@ local function closeQuickPlaySelector()
 		QuickPlaySelector.Visible = false
 	end
 	setQuickPlayVisible(true)
-	-- PlayVsBotButton only makes sense when actually seated and waiting: in
-	-- the lobby (not seated) it stays hidden so it doesn't pop back up on
-	-- top of QuickPlay right after we dismiss the selector.
-	local h = getHumanoid()
-	if h and h.Seated then
-		showFrame(PlayVsBotButton)
-	else
-		if PlayVsBotButton and PlayVsBotButton.Visible then
-			PlayVsBotButton.Visible = false
-		end
+	-- PlayVsBotButton stays hidden: closing the QuickPlay selector ONLY brings
+	-- QuickPlay back. (PlayVsBot comes back on its own when you sit down -
+	-- the waiting state - or via the difficulty selector's Back button.)
+	if PlayVsBotButton and PlayVsBotButton.Visible then
+		PlayVsBotButton.Visible = false
 	end
 end
 

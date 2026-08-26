@@ -103,8 +103,8 @@ end
 -- ============================================================================
 -- CONFIGURATION
 -- ============================================================================
-local STARTER_PACK_PRODUCT_ID = 1839769267 -- DevProduct / GamePass id
-local STARTER_PACK_PRICE = "3"
+local STARTER_PACK_GAMEPASS_ID = 1958400378 -- GamePass id (Creator Hub)
+local STARTER_PACK_PRICE = "3" -- placeholder, replaced by the real price on load
 
 local GAMEPASS_OFFERS = {
 	{ id = 1960374374, name = "VIP",       priceText = "189", icon = "rbxassetid://76065691872422" },
@@ -154,9 +154,17 @@ local buyPrice = buyBtn and (findObject(buyBtn, { "BuyPrice", "PriceLbl" }) :: T
 -- SETUP & POPULATE LABELS
 -- ============================================================================
 if starterNameLbl then starterNameLbl.Text = "Starter Pack" end
-if starterPriceLbl then starterPriceLbl.Text = STARTER_PACK_PRICE end
 if popupTitle then popupTitle.Text = "STARTER PACK!" end
-if buyPrice then buyPrice.Text = "R$ " .. STARTER_PACK_PRICE end
+
+-- Set the starter pack price in BOTH spots (the button + the popup BuyBtn).
+-- Starts with the placeholder, then the real Creator Hub price replaces it
+-- automatically (see the AUTO PRICES section at the bottom of this script).
+local function setStarterPrice(priceNumber)
+	local text = tostring(priceNumber)
+	if starterPriceLbl then starterPriceLbl.Text = text end
+	if buyPrice then buyPrice.Text = "R$ " .. text end
+end
+setStarterPrice(STARTER_PACK_PRICE)
 
 local rewardCards = { rewardCard1, rewardCard2, rewardCard3 }
 for i, card in ipairs(rewardCards) do
@@ -210,9 +218,15 @@ end
 
 if buyBtn then
 	buyBtn.Activated:Connect(function()
-		if STARTER_PACK_PRODUCT_ID > 0 then
+		if STARTER_PACK_GAMEPASS_ID > 0 then
+			local ok, owns = pcall(function()
+				return MarketplaceService:UserOwnsGamePassAsync(player.UserId, STARTER_PACK_GAMEPASS_ID)
+			end)
+			if ok and owns then
+				return -- already owned (the rewards were granted on purchase)
+			end
 			pcall(function()
-				MarketplaceService:PromptProductPurchase(player, STARTER_PACK_PRODUCT_ID)
+				MarketplaceService:PromptGamePassPurchase(player, STARTER_PACK_GAMEPASS_ID)
 			end)
 		end
 	end)
@@ -309,5 +323,34 @@ if starterBtn or cycleGpBtn then
 		end
 	end)
 end
+
+-- ============================================================================
+-- AUTO PRICES
+-- Every price text is fetched from the real product/gamepass ids in Creator
+-- Hub on load - nothing is hardcoded. If a fetch fails (e.g. offline), the
+-- placeholder values stay on screen.
+-- ============================================================================
+task.spawn(function()
+	local offersChanged = false
+	for _, gp in ipairs(GAMEPASS_OFFERS) do
+		local ok, info = pcall(function()
+			return MarketplaceService:GetProductInfo(gp.id, Enum.InfoType.GamePass)
+		end)
+		if ok and type(info) == "table" and info.Price then
+			gp.priceText = tostring(math.floor(info.Price / 100))
+			offersChanged = true
+		end
+	end
+	if offersChanged then
+		renderCurrentGp()
+	end
+
+	local ok, spInfo = pcall(function()
+		return MarketplaceService:GetProductInfo(STARTER_PACK_GAMEPASS_ID, Enum.InfoType.GamePass)
+	end)
+	if ok and type(spInfo) == "table" and spInfo.Price then
+		setStarterPrice(math.floor(spInfo.Price / 100))
+	end
+end)
 
 
