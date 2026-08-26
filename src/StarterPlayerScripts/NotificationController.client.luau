@@ -318,18 +318,8 @@ if Events then
 		end)
 	end
 
-	local CashAwarded = Events:FindFirstChild("CashAwarded") :: RemoteEvent?
-	if CashAwarded then
-		CashAwarded.OnClientEvent:Connect(function(amount)
-			local amt = tonumber(amount) or 0
-			if amt > 0 then
-				showNotification({
-					title = "Cash Awarded!",
-					message = string.format("+$%d Cash added to your balance", amt),
-					kind = "cash",
-					duration = 3.5,
-				})
-			end
-		end)
-	end
+	-- NOTE: CashAwarded is deliberately NOT notified. It fires right after the
+	-- money ROLL at match start - it only reveals the prize the WINNER will
+	-- collect at match end. The cash actually landing in the balance is shown
+	-- by the StatsPanel gain animation (and the "Victory!" notify on a win).
 end

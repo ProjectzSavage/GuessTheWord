@@ -136,9 +136,9 @@ wireBuyButtons()
 local function fetchPriceText(productId, isGamepass)
 	local ok, info = pcall(function()
 		if isGamepass then
-			return MarketplaceService:GetProductInfo(productId, Enum.InfoType.GamePass)
+			return MarketplaceService:GetProductInfoAsync(productId, Enum.InfoType.GamePass)
 		end
-		return MarketplaceService:GetProductInfo(productId)
+		return MarketplaceService:GetProductInfoAsync(productId)
 	end)
 	if ok and type(info) == "table" and info.Price then
 		return "R$" .. tostring(math.floor(info.Price / 100))

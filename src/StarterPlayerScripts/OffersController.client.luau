@@ -334,7 +334,7 @@ task.spawn(function()
 	local offersChanged = false
 	for _, gp in ipairs(GAMEPASS_OFFERS) do
 		local ok, info = pcall(function()
-			return MarketplaceService:GetProductInfo(gp.id, Enum.InfoType.GamePass)
+			return MarketplaceService:GetProductInfoAsync(gp.id, Enum.InfoType.GamePass)
 		end)
 		if ok and type(info) == "table" and info.Price then
 			gp.priceText = tostring(math.floor(info.Price / 100))
@@ -346,7 +346,7 @@ task.spawn(function()
 	end
 
 	local ok, spInfo = pcall(function()
-		return MarketplaceService:GetProductInfo(STARTER_PACK_GAMEPASS_ID, Enum.InfoType.GamePass)
+		return MarketplaceService:GetProductInfoAsync(STARTER_PACK_GAMEPASS_ID, Enum.InfoType.GamePass)
 	end)
 	if ok and type(spInfo) == "table" and spInfo.Price then
 		setStarterPrice(math.floor(spInfo.Price / 100))

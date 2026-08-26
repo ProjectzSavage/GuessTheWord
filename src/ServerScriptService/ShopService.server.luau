@@ -72,7 +72,7 @@ local processedReceipts = {}
 -- UI only moved on dev-product purchases.
 MarketplaceService.GamePassPurchaseProcessed:Connect(function(player, gamePassId)
 	local ok, info = pcall(function()
-		return MarketplaceService:GetProductInfo(gamePassId, Enum.InfoType.GamePass)
+		return MarketplaceService:GetProductInfoAsync(gamePassId, Enum.InfoType.GamePass)
 	end)
 	if ok and type(info) == "table" and info.Price then
 		if _G.RewardsAddRobuxSpent then

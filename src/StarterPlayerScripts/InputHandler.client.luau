@@ -133,6 +133,7 @@ local QuickCloseBtn = QuickPlaySelector and QuickPlaySelector:FindFirstChild("Cl
 -- out of the way, and slides back up when the window closes.
 local quickStateVisible = false -- match/lobby state (see setQuickPlayVisible)
 local quickGuiShifted = false   -- a GUI window is open (see _G.SetQuickPlayShiftedByGui)
+local quickMatchStarting = false -- a QuickPlay Bot/Player match is in progress
 local quickGen = 0              -- invalidates pending slide-out tweens
 local quickRestingPos = QuickPlayButton and QuickPlayButton.Position or nil
 local QUICK_SLIDE_OFFSET = UDim2.new(0, 0, 0.45, 0) -- screen fraction to slide down
@@ -141,7 +142,10 @@ local function applyQuickPlayState()
 	if not QuickPlayButton then
 		return
 	end
-	local want = quickStateVisible and not quickGuiShifted
+	-- quickMatchStarting: right after a QuickPlay Bot/Player pick, the seat
+	-- event (OpponentState) tries to pop the waiting buttons back in - keep
+	-- them down so they simply never reappear until the flow decides to.
+	local want = quickStateVisible and not quickGuiShifted and not quickMatchStarting
 	if QuickPlayButton.Visible == want then
 		return
 	end
@@ -368,12 +372,13 @@ local function setWaitingUI(waiting)
 	if waiting then
 		setCinematic(0)
 		showFrame(InteractionFrame)
-		-- Don't pop the waiting buttons in while a selector is open: a late
-		-- OpponentState event (e.g. right after a QuickPlay teleport) used to
-		-- bring PlayVsBot + QuickPlay back on top of the difficulty selector.
+		-- Don't pop the waiting buttons in while a selector is open or a
+		-- QuickPlay match is starting: a late OpponentState event (e.g. right
+		-- after a QuickPlay teleport) used to bring PlayVsBot + QuickPlay back
+		-- on top of the difficulty selector / in the middle of the flow.
 		local selectorOpen = (QuickPlaySelector and QuickPlaySelector.Visible)
 			or (DifficultySelector and DifficultySelector.Visible)
-		if not selectorOpen then
+		if not selectorOpen and not quickMatchStarting then
 			showFrame(PlayVsBotButton)
 		end
 		setQuickPlayVisible(true)
@@ -913,16 +918,9 @@ local pendingBuyType = nil
 
 local function promptBuy(powerupType)
 	if not BuyPrompt then
-		-- No BuyPrompt built in the hierarchy: at least tell the player what
-		-- to do instead of eating the click silently.
-		if _G.Notify then
-			_G.Notify({
-				title = "No uses left",
-				message = "Buy " .. (powerupType == "Word" and "Reveal Words" or "Reveal Letters")
-					.. " in the Shop to use this powerup!",
-				kind = "warn",
-			})
-		end
+		-- No BuyPrompt built in the hierarchy: no "no uses left" dialog -
+		-- go straight to the real Robux purchase prompt.
+		PurchasePowerup:FireServer(powerupType)
 		return
 	end
 	pendingBuyType = powerupType
@@ -979,7 +977,7 @@ task.spawn(function()
 	for _, typeName in ipairs({ "Letter", "Word" }) do
 		local id = POWERUP_PRODUCT_IDS[typeName]
 		local ok, info = pcall(function()
-			return MarketplaceService:GetProductInfo(id)
+			return MarketplaceService:GetProductInfoAsync(id)
 		end)
 		if ok and type(info) == "table" and info.Price then
 			POWERUP_PRICE[typeName] = math.floor(info.Price / 100)
@@ -1748,21 +1746,34 @@ if QuickPlayButton then
 	end)
 end
 
+-- Both mode picks start a QuickPlay match: keep QuickPlay + PlayVsBot DOWN
+-- while the teleport/seat completes, so they never flash back on screen.
+-- (The seat event OpponentState would otherwise pop them in, and they'd get
+-- hidden again a moment later - the "come back then leave" flicker.)
+local function startQuickPlay(mode)
+	if QuickPlaySelector then
+		QuickPlaySelector.Visible = false
+	end
+	quickMatchStarting = true
+	applyQuickPlayState()
+	task.delay(4, function() -- safety net: the flag must never stick
+		if quickMatchStarting then
+			quickMatchStarting = false
+			applyQuickPlayState()
+		end
+	end)
+	QuickPlayRequest:FireServer(mode)
+end
+
 if QuickBotBtn then
 	QuickBotBtn.Activated:Connect(function()
-		if QuickPlaySelector then
-			QuickPlaySelector.Visible = false
-		end
-		QuickPlayRequest:FireServer("Bot")
+		startQuickPlay("Bot")
 	end)
 end
 
 if QuickPlayerBtn then
 	QuickPlayerBtn.Activated:Connect(function()
-		if QuickPlaySelector then
-			QuickPlaySelector.Visible = false
-		end
-		QuickPlayRequest:FireServer("Player")
+		startQuickPlay("Player")
 	end)
 end
 
@@ -1774,6 +1785,7 @@ end
 
 QuickPlayResult.OnClientEvent:Connect(function(mode, success, note)
 	if not success then
+		quickMatchStarting = false
 		if _G.Notify then
 			_G.Notify({ title = "Quick Play", message = note or "Something went wrong", kind = "warn" })
 		end
@@ -1786,6 +1798,7 @@ QuickPlayResult.OnClientEvent:Connect(function(mode, success, note)
 		-- selector right away (same as clicking Play vs Bot). Slight delay so
 		-- the teleport + the waiting-state UI settle first.
 		task.delay(0.5, function()
+			quickMatchStarting = false
 			local h = getHumanoid()
 			if not (h and h.Seated) then
 				return -- stood up during the teleport; lobby UI is already up
@@ -1808,6 +1821,10 @@ QuickPlayResult.OnClientEvent:Connect(function(mode, success, note)
 			end
 		end)
 	elseif mode == "Player" then
+		quickMatchStarting = false
+		-- Keep QuickPlay down until the match actually ends (no flash of the
+		-- waiting buttons while the seat reconciles / countdown runs).
+		setQuickPlayVisible(false)
 		if note and note ~= "" and _G.Notify then
 			_G.Notify({ title = "Quick Play", message = note, kind = "info" })
 		end
