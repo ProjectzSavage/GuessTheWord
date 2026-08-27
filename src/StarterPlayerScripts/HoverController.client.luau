@@ -26,6 +26,9 @@ local SFX = require(ReplicatedStorage:WaitForChild("SFX"))
 
 -- Play the hover sound when the mouse first enters an element.
 local function applyHoverSound(element)
+	-- Mark it so the global "any button" hover wiring (bottom of this
+	-- script) doesn't double-play a second hover sound on it.
+	element:SetAttribute("HoverSoundBound", true)
 	element.MouseEnter:Connect(function()
 		SFX.play("hover")
 	end)
@@ -106,3 +109,29 @@ if QuickPlaySelector then
 		end
 	end
 end
+
+-------------------------------------------------------------------------------
+-- EVERY BUTTON IN THE GAME (global)
+-- Any GuiButton in PlayerGui - built now or later (Shop items, Offers,
+-- popups, Inventory, ...) - plays the "buttonHover" sound when hovered.
+-- Elements that already got a hover sound above are skipped (no doubles).
+-------------------------------------------------------------------------------
+local function bindAnyButtonHover(btn)
+	if not btn:IsA("GuiButton") then
+		return
+	end
+	if btn:GetAttribute("HoverSoundBound") then
+		return
+	end
+	btn:SetAttribute("HoverSoundBound", true)
+	btn.MouseEnter:Connect(function()
+		SFX.play("buttonHover")
+	end)
+end
+
+for _, obj in ipairs(PlayerGui:GetDescendants()) do
+	bindAnyButtonHover(obj)
+end
+PlayerGui.DescendantAdded:Connect(function(obj)
+	bindAnyButtonHover(obj)
+end)

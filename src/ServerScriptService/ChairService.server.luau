@@ -318,8 +318,11 @@ local function applyChairToSeat(player, seat)
 	end
 
 	local spawned = template:Clone()
-	local refPart = baseModel and (baseModel.PrimaryPart or baseModel:FindFirstChildWhichIsA("BasePart")) or seat
-	spawned:PivotTo(refPart.CFrame)
+	-- EXACT placement: the spawned chair's Pivot replaces the base chair
+	-- model's (Chair1/Chair2) Pivot - identical position AND rotation.
+	-- (Using a part's CFrame used to offset and tilt the chair.)
+	local refCFrame = baseModel and baseModel:Pivot() or seat.CFrame
+	spawned:PivotTo(refCFrame)
 	for _, part in ipairs(spawned:GetDescendants()) do
 		if part:IsA("BasePart") then
 			part.Anchored = true

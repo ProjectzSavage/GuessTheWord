@@ -52,6 +52,8 @@
 local TweenService = game:GetService("TweenService")
 local Lighting = game:GetService("Lighting")
 
+local SFX = require(script.Parent:WaitForChild("SFX"))
+
 local BASE_FOV_DEFAULT = 70
 local WINDOW_FOV_DELTA = 12  -- 70 -> 82 while a window is open
 local WINDOW_BLUR = 18
@@ -287,6 +289,7 @@ function UIFX.openWindow(gui, opts)
 		return nil -- already open
 	end
 	gui.Visible = true
+	SFX.play("guiOpen") -- the "GUI opened" sound (Shop / Rewards / Inventory)
 	syncWindowCount()
 	refresh()
 	return UIFX.popIn(gui, opts)

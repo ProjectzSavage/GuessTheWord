@@ -137,6 +137,7 @@ local quickMatchStarting = false -- a QuickPlay Bot/Player match is in progress
 local quickGen = 0              -- invalidates pending slide-out tweens
 local quickRestingPos = QuickPlayButton and QuickPlayButton.Position or nil
 local QUICK_SLIDE_OFFSET = UDim2.new(0, 0, 0.45, 0) -- screen fraction to slide down
+local quickSeatHide = false -- seated: QuickPlay disappears instantly (no slide)
 
 local function applyQuickPlayState()
 	if not QuickPlayButton then
@@ -162,7 +163,13 @@ local function applyQuickPlayState()
 			):Play()
 		end
 	else
-		if quickRestingPos then
+		if quickSeatHide then
+			-- Seated: just disappear instantly (no slide animation).
+			QuickPlayButton.Visible = false
+			if quickRestingPos then
+				QuickPlayButton.Position = quickRestingPos
+			end
+		elseif quickRestingPos then
 			local t = TweenService:Create(
 				QuickPlayButton,
 				TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.In),
@@ -181,7 +188,9 @@ local function applyQuickPlayState()
 	end
 end
 
-local function setQuickPlayVisible(v)
+-- `instant` = hide right away without the slide-down (used when seated:
+-- the button should simply vanish, not animate).
+local function setQuickPlayVisible(v, instant)
 	if not QuickPlayButton then
 		return
 	end
@@ -190,6 +199,7 @@ local function setQuickPlayVisible(v)
 	local want = v and not selectorOpen
 	if want ~= quickStateVisible then
 		quickStateVisible = want
+		quickSeatHide = (not want) and (instant and true or false) or false
 		applyQuickPlayState()
 	end
 end
@@ -381,9 +391,9 @@ local function setWaitingUI(waiting)
 		if not selectorOpen and not quickMatchStarting then
 			showFrame(PlayVsBotButton)
 		end
-		-- Seated + waiting (PlayVsBot is up): QuickPlay stays DOWN. It comes
-		-- back in the lobby (stand up / leave the seat).
-		setQuickPlayVisible(false)
+		-- Seated + waiting (PlayVsBot is up): QuickPlay disappears INSTANTLY.
+		-- It comes back in the lobby (stand up / leave the seat).
+		setQuickPlayVisible(false, true)
 		hideFrame(PuzzleArea)
 		slideTopBarOut()
 	else

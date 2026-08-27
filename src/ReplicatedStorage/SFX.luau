@@ -47,6 +47,8 @@ SFX.Sounds = {
 
 	-- Commerce / feedback sounds
 	shopOpen     = "", -- the Shop UI opens (separate sound from uiPop)
+	guiOpen      = "", -- any GUI window opens (Shop / Rewards / Inventory)
+	buttonHover  = "", -- hovering over ANY button
 	robuxClick   = "", -- clicking ANY button that opens a Robux buy prompt
 	purchase     = "", -- a Robux purchase just completed (plays with the confetti)
 	notify       = "", -- a notification popup appears
@@ -73,12 +75,22 @@ end
 -- starts INSTANTLY (no first-play load delay) while still allowing overlap.
 local bases = {}
 
-local function baseFor(id)
+local badIds = {} -- id -> true (warn once per broken id)
+
+local function baseFor(id, name)
 	local base = bases[id]
 	if not base then
 		base = Instance.new("Sound")
 		base.Name = "SFXBase"
 		base.SoundId = id
+		-- Dead/invalid asset ids fail HERE - tell the user WHICH key to fix
+		-- (Roblox's own "Failed to load sound" log doesn't say the key name).
+		base.LoadFailed:Connect(function()
+			if not badIds[id] then
+				badIds[id] = true
+				warn("[SFX] Failed to load sound '" .. tostring(name) .. "' (" .. id .. "): the asset is dead or invalid - replace that id in the SFX.Sounds table.")
+			end
+		end)
 		base.Parent = SoundService
 		-- Keep the clip loaded by leaving it parented (Engine caches it).
 		bases[id] = base
@@ -95,7 +107,7 @@ function SFX.play(name, opts)
 		return
 	end
 
-	local base = baseFor(id)
+	local base = baseFor(id, name)
 	local s = base:Clone()
 	s.Parent = SoundService
 	s.Volume = opts.volume or 0.6
