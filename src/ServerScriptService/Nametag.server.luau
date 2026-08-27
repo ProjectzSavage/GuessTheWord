@@ -27,6 +27,32 @@
 ]]
 
 local PlayersService = game:GetService("Players")
+local ServerStorage = game:GetService("ServerStorage")
+local MarketplaceService = game:GetService("MarketplaceService")
+
+local PlayerPerks = require(ServerStorage.Modules.PlayerPerks)
+local VIP_PASS_ID = PlayerPerks.IDS.VIP
+local VIP_PREFIX = "[VIP] "
+
+-- VIP nametag state: Player -> { label = TextLabel, base = plain name }
+-- (Roblox system chat can't be modified by game code, so the [VIP] tag is
+-- shown on the overhead nametag instead - visible to everyone in the game.)
+local vipTags = {}
+
+local function applyVipTag(Player)
+	local t = vipTags[Player]
+	if t and t.label and t.label.Parent then
+		t.label.Text = VIP_PREFIX .. t.base
+	end
+end
+
+-- Live update: the tag flips on the moment VIP is bought (VIP can't be
+-- un-owned, so it never flips back off).
+MarketplaceService.GamePassPurchaseProcessed:Connect(function(Player, passId)
+	if passId == VIP_PASS_ID then
+		applyVipTag(Player)
+	end
+end)
 
 local NametagSettings = {
 	ShowsDisplayName = false,
@@ -109,14 +135,15 @@ local function LoadOverhead(Player, Character)
 		Tag.MaxDistance = 300
 	end
 
-	-- Player name.
-	local Text = Player.Name
+	-- Player name. The [VIP] prefix is added ASYNC below (the ownership check
+	-- yields, so we don't hold up the whole tag build on it).
+	local baseName = Player.Name
 	if NametagSettings.ShowsDisplayName then
-		Text = Player.DisplayName
+		baseName = Player.DisplayName
 	end
 	local nameLabel = findDesc(Tag, "PlayerName")
 	if nameLabel then
-		nameLabel.Text = Text
+		nameLabel.Text = baseName
 	else
 		nameLabel = Instance.new("TextLabel")
 		nameLabel.Name = "PlayerName"
@@ -124,11 +151,22 @@ local function LoadOverhead(Player, Character)
 		nameLabel.Position = UDim2.new(0, 0, 0, 0)
 		nameLabel.BackgroundTransparency = 1
 		nameLabel.Font = Enum.Font.GothamBold
-		nameLabel.Text = Text
+		nameLabel.Text = baseName
 		nameLabel.TextColor3 = Color3.new(1, 1, 1)
 		nameLabel.TextScaled = true
 		nameLabel.Parent = Tag
 	end
+
+	-- [VIP] tag for VIP gamepass owners (check on load + live on purchase).
+	vipTags[Player] = { label = nameLabel, base = baseName }
+	task.spawn(function()
+		local ok, isVip = pcall(function()
+			return PlayerPerks.owns(Player, "VIP")
+		end)
+		if ok and isVip then
+			applyVipTag(Player)
+		end
+	end)
 
 	-- Icons (Premium / Owner / Admin) - only if the template has an Icons frame.
 	local Icons = findDesc(Tag, "Icons")

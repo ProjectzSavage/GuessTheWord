@@ -6,6 +6,49 @@ and build the UI.
 
 ---
 
+## 🚀 ROJO (recommended — no more pasting)
+
+Rojo keeps `src/` and Studio in sync automatically: every script below is
+placed exactly where it should be (see the table at the bottom), and new files
+appear in Studio on their own.
+
+1. **Install the Rojo CLI** (pick one):
+   - `npm install -g @rojo-rbx/rojo`
+   - `brew install rojo`
+   - or download a zip from https://github.com/rojo-rbx/rojo/releases
+2. **Install the Rojo Studio plugin**: in Studio → *Plugins* tab → *Toolbox*
+   → search **"Rojo"** (by Erik/Roblox Dev Tools) → Install.
+3. **Connect** — the Rojo plugin in Studio asks for a **localhost address:
+   that's normal, leave it as `localhost:3487`** (the default). Then:
+   - Open a terminal **in this repo's folder** and run
+     `rojo serve default.project.json` — **keep that terminal running**.
+   - In Studio click the **Rojo** icon in the bottom bar → **Connect**
+     (host `localhost:3487`, the pre-filled value). The icon turns green /
+     says *Connected* and every script from `src/` appears in the Explorer
+     automatically.
+   - (Alternative without the CLI: in Studio *File → Open* → select
+     **`default.project.json`** from this repo → the Rojo dock appears →
+     click **Attach to Studio**.)
+4. That's it — edit files in `src/` and Studio updates live (re-sync icon).
+   Don't edit the synced scripts inside Studio; edit them in the repo.
+
+> If Connect says *failed / not found*, the `rojo serve` terminal isn't
+> running in the repo folder (or the server was closed). Start it, wait for
+> "Serving ..." in the terminal, then Connect again.
+
+> The project file (`default.project.json`) maps: `src/ReplicatedStorage` →
+> ReplicatedStorage, `src/ServerScriptService` → ServerScriptService,
+> `src/ServerStorage` → ServerStorage, `src/StarterPlayerScripts` →
+> StarterPlayerScripts. `.server.luau` → Script, `.client.luau` → LocalScript,
+> plain `.luau` → ModuleScript.
+
+> **Gamepasses / products:** the scripts read their prices & ownership from the
+> real Creator Hub ids already filled in — in Studio, enable
+> *Game Settings → Security → Enable Studio Access to API Services* to test
+> gamepass logic (VIP, chairs, starter pack) before publishing.
+
+---
+
 ## ⚡ QUICK SETUP CHECKLIST (what YOU must do in Studio)
 
 Everything below is something the scripts **do not** auto-create — you have to
@@ -57,10 +100,19 @@ build it once. The full details are further down.
    client). The client `RewardsController` renders whatever the server sends.
 12. **Chair system** — create `ReplicatedStorage.Chairs` (Folder) with the chair
     Models named like the `ChairsConfig` keys (Gamer, ProGamer, SuperFire,
-    Diamond, Toxic, Thunder, Icey, Steel, Broken, Wooden). Keep your display
-    chairs in `Workspace.DisplayChairs` (prompts are added automatically). Build
+    Diamond, Toxic, Thunder, Icey, Steel, Broken, Wooden, HackerChair,
+    SpacialMist, PinkVortex). Keep your display chairs in `Workspace.DisplayChairs`
+    (prompts are added automatically). Build
     the `InventoryF` UI (or let the controller auto-create it). Add
     `ChairService.server.luau` to `ServerScriptService > Scripts`.
+    - **VIP chair (you build it):** make a Model named exactly **`VIPChair`**
+      inside `ReplicatedStorage.Chairs` (it's the template used when a VIP
+      player sits and the one shown in the inventory preview). Optionally drop
+      a copy named `VIPChair` into `Workspace.DisplayChairs` too — it will get
+      a **"Get VIP"** prompt that opens the VIP gamepass purchase instead of a
+      cash price. VIP owners get it automatically (on join + on purchase);
+      the 3 Robux-exclusive chairs (HackerChair/SpacialMist/PinkVortex) are
+      NOT part of VIP anymore.
 
 ---
 
@@ -88,6 +140,7 @@ ServerScriptService
 | `src/ServerScriptService/RewardsService.server.luau`            | `ServerScriptService > Scripts` | Script   |
 | `src/ServerStorage/Modules/Dictionary.luau`                     | `ServerStorage > Modules`   | ModuleScript |
 | `src/ServerStorage/Modules/HeartHUDManager.luau`                | `ServerStorage > Modules`   | ModuleScript |
+| `src/ServerStorage/Modules/PlayerPerks.luau`                    | `ServerStorage > Modules`   | ModuleScript |
 | `src/ReplicatedStorage/LetterImages.luau`                      | `ReplicatedStorage`         | ModuleScript |
 | `src/ReplicatedStorage/HoverFX.luau`                          | `ReplicatedStorage`         | ModuleScript |
 | `src/ReplicatedStorage/UIFX.luau`                            | `ReplicatedStorage`         | ModuleScript |

@@ -33,6 +33,7 @@ local MarketplaceService = game:GetService("MarketplaceService")
 
 local Dictionary = require(ServerStorage.Modules.Dictionary)
 local HeartHUDManager = require(ServerStorage.Modules.HeartHUDManager)
+local PlayerPerks = require(ServerStorage.Modules.PlayerPerks)
 
 local Events = ReplicatedStorage:WaitForChild("Events")
 local PlayVsBotRequest = Events:WaitForChild("PlayVsBotRequest")
@@ -1389,15 +1390,16 @@ function awardMatchOutcome(tableState, winnerSeatIndex)
 			local cash = ls and ls:FindFirstChild("Cash")
 			local streak = playerStreak(occ)
 			if seatIndex == winnerSeatIndex then
-				-- Winner: +1 win, +1 streak, and collects the cash prize.
+				-- Winner: +win, +streak, and collects the cash prize.
+				-- Gamepass perks apply here (2x Wins, 2x Streak, VIP/2x Cash).
 				if wins then
-					wins.Value = wins.Value + 1
+					wins.Value = wins.Value + PlayerPerks.winsMult(occ)
 				end
 				if streak then
-					streak.Value = streak.Value + 1
+					streak.Value = streak.Value + PlayerPerks.streakMult(occ)
 				end
 				if cash then
-					cash.Value = cash.Value + prize
+					cash.Value = cash.Value + math.floor(prize * PlayerPerks.cashMult(occ))
 				end
 			else
 				-- Loser: reset streak (no cash).

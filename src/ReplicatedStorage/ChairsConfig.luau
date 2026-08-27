@@ -31,6 +31,9 @@ return {
 		HackerChair  = "Gamepass",
 		SpacialMist  = "Gamepass",
 		PinkVortex   = "Gamepass",
+
+		-- VIP Exclusive: granted only to VIP gamepass owners (not buyable)
+		VIPChair     = "VIP",
 	},
 
 	-- Gamepass IDs for exclusive chairs (from Creator Hub)
@@ -38,5 +41,12 @@ return {
 		HackerChair  = 1951965706,
 		SpacialMist  = 1952367447,
 		PinkVortex   = 1954710922,
+	},
+
+	-- Chairs granted to VIP gamepass owners (the VIP pass includes ONE
+	-- special VIP chair - ChairService grants it automatically on join and
+	-- the moment VIP is purchased).
+	VIPChairs = {
+		"VIPChair",
 	},
 }

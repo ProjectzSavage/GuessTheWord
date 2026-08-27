@@ -17,8 +17,10 @@ local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage = game:GetService("ServerStorage")
 
 local NumberFormat = require(ReplicatedStorage:WaitForChild("NumberFormat"))
+local PlayerPerks = require(ServerStorage.Modules.PlayerPerks)
 
 local Events = ReplicatedStorage:WaitForChild("Events")
 
@@ -106,7 +108,8 @@ local function addCash(player, amount)
 	local ls = player:FindFirstChild("leaderstats")
 	local cash = ls and ls:FindFirstChild("Cash")
 	if cash and cash:IsA("IntValue") and amount > 0 then
-		cash.Value = cash.Value + amount
+		-- Gamepass cash perks apply (VIP x1.5 / 2x Cash x2, stackable).
+		cash.Value = cash.Value + math.floor(amount * PlayerPerks.cashMult(player))
 	end
 end
 

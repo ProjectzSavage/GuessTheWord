@@ -10,6 +10,8 @@
 	              and adds the chair to the player's owned list.
 	  2. Gamepass Chairs - checks ownership of exclusive Robux chairs
 	              (HackerChair, SpacialMist, PinkVortex) and grants them automatically.
+	  2b. VIP Chair   - the special VIPChair is granted automatically to VIP
+	              gamepass owners (on join and on purchase, via PlayerPerks).
 	  3. Equip   - the client tells the server which owned chair to equip.
 	  4. Replace - when a player sits on a game seat (Seat1/Seat2 in a TableN
 	              folder), the chair model at that seat is replaced with the
@@ -19,11 +21,15 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
+local ServerStorage = game:GetService("ServerStorage")
 local MarketplaceService = game:GetService("MarketplaceService")
 
 local ChairsConfig = require(ReplicatedStorage:WaitForChild("ChairsConfig"))
+local PlayerPerks = require(ServerStorage.Modules.PlayerPerks)
 local CHAIR_NAMES = ChairsConfig.Chairs
 local GAMEPASS_CHAIRS = ChairsConfig.GamepassChairs or {}
+local VIP_CHAIRS = ChairsConfig.VIPChairs or {}
+local VIP_PASS_ID = PlayerPerks.IDS.VIP
 
 local Events = ReplicatedStorage:WaitForChild("Events")
 local BuyChair = Events:WaitForChild("BuyChair")
@@ -119,6 +125,31 @@ local function notify(player, title, message, kind)
 	})
 end
 
+-- VIP includes the special VIP chair: grant every VIPChairs entry at once.
+-- `assumeVip` is true when we KNOW the player just bought VIP (the purchase
+-- itself is the proof - avoids a stale perks-cache race right after buying).
+local function grantVipChairs(player, state, assumeVip)
+	if VIP_PASS_ID <= 0 or #VIP_CHAIRS == 0 then
+		return
+	end
+	local isVip = assumeVip and true or false
+	if not isVip then
+		local ok, owns = pcall(function()
+			return PlayerPerks.owns(player, "VIP")
+		end)
+		isVip = ok and owns or false
+	end
+	if not isVip then
+		return
+	end
+	for _, chairName in ipairs(VIP_CHAIRS) do
+		if CHAIR_NAMES[chairName] and not state.owned[chairName] then
+			state.owned[chairName] = true
+			notify(player, "VIP Perks", "You unlocked the exclusive " .. chairName .. " chair!", "success")
+		end
+	end
+end
+
 -------------------------------------------------------------------------------
 -- BUY (via display chairs)
 -------------------------------------------------------------------------------
@@ -127,6 +158,20 @@ local function processBuy(player, chairName)
 	local price = CHAIR_NAMES[chairName]
 	if not price then
 		notify(player, "Shop", "Unknown chair.", "warn")
+		return
+	end
+	if type(price) == "string" and price == "VIP" then
+		-- VIP exclusive chair: no cash purchase - prompt the VIP gamepass.
+		local state = ensureState(player)
+		if state.owned[chairName] then
+			notify(player, "Already Owned", "You already own " .. chairName .. "!", "info")
+			return
+		end
+		if VIP_PASS_ID > 0 then
+			MarketplaceService:PromptGamePassPurchase(player, VIP_PASS_ID)
+		else
+			notify(player, "VIP Exclusive", chairName .. " is a VIP exclusive chair!", "info")
+		end
 		return
 	end
 	if type(price) == "string" and price == "Gamepass" then
@@ -162,10 +207,11 @@ local function setupDisplayChairs()
 			local chairName = display.Name
 			local promptPart = display.PrimaryPart or display:FindFirstChildWhichIsA("BasePart")
 			if promptPart then
-				local prompt = promptPart:FindFirstChild("BuyPrompt") or Instance.new("ProximityPrompt")
-				prompt.Name = "BuyPrompt"
-				prompt.ObjectText = "Buy " .. chairName
-				prompt.ActionText = "Buy"
+			local prompt = promptPart:FindFirstChild("BuyPrompt") or Instance.new("ProximityPrompt")
+			prompt.Name = "BuyPrompt"
+			local isVipChair = type(CHAIR_NAMES[chairName]) == "string" and CHAIR_NAMES[chairName] == "VIP"
+			prompt.ObjectText = isVipChair and "Get the VIP " .. chairName .. " chair" or ("Buy " .. chairName)
+			prompt.ActionText = isVipChair and "Get VIP" or "Buy"
 				prompt.RequiresLineOfSight = false
 				prompt.MaxActivationDistance = 20
 				prompt.Exclusivity = Enum.ProximityPromptExclusivity.OnePerButton
@@ -312,6 +358,7 @@ Players.PlayerAdded:Connect(function(player)
 	task.delay(1, function()
 		if player.Parent then
 			checkGamepassChairs(player, state)
+			grantVipChairs(player, state) -- VIP pass includes the special VIP chair
 			syncClient(player)
 		end
 	end)
@@ -324,6 +371,11 @@ end)
 MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, passId, wasPurchased)
 	if not wasPurchased or not player then return end
 	local state = ensureState(player)
+	if passId == VIP_PASS_ID then
+		grantVipChairs(player, state, true)
+		syncClient(player)
+		return
+	end
 	for chairName, id in pairs(GAMEPASS_CHAIRS) do
 		if id == passId then
 			state.owned[chairName] = true
