@@ -281,6 +281,14 @@ end
 local function findSeatChairModel(seat)
 	local p = seat.Parent
 	if not p then return nil end
+	-- Prefer the chair matching this seat's index (Seat1 -> Chair1, Seat2 -> Chair2).
+	local seatIndex = string.match(seat.Name, "%d+")
+	if seatIndex then
+		local exact = p:FindFirstChild("Chair" .. seatIndex)
+		if exact and exact:IsA("Model") then
+			return exact
+		end
+	end
 	for _, c in ipairs(p:GetChildren()) do
 		if c:IsA("Model") and c ~= seat and string.find(string.lower(c.Name), "chair") then
 			return c

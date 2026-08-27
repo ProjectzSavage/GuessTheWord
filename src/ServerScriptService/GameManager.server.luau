@@ -34,6 +34,7 @@ local MarketplaceService = game:GetService("MarketplaceService")
 local Dictionary = require(ServerStorage.Modules.Dictionary)
 local HeartHUDManager = require(ServerStorage.Modules.HeartHUDManager)
 local PlayerPerks = require(ServerStorage.Modules.PlayerPerks)
+local CashRerollFX = require(ServerStorage.Modules.CashRerollFX)
 
 local Events = ReplicatedStorage:WaitForChild("Events")
 local PlayVsBotRequest = Events:WaitForChild("PlayVsBotRequest")
@@ -756,6 +757,15 @@ local function runCashReroll(tableState)
 	end
 
 	tableState.cashPrize = reward -- the winner collects this at match end
+
+	-- The world roll animation runs on the SERVER (CashRerollFX) so that
+	-- EVERY player in the game can see it - not just the two seated at the
+	-- table. The seated players still get the CashReroll event for the
+	-- CLIENT-side sound effects.
+	local anchor = tableState.folder:FindFirstChild("CashAnchor")
+	if anchor and anchor:IsA("BasePart") then
+		CashRerollFX.roll(anchor, reward, rewardList)
+	end
 
 	-- Fire the animation to each seated real player.
 	for _, occ in tableState.occupants do

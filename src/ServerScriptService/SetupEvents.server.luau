@@ -49,6 +49,7 @@ local EVENT_NAMES = {
 	"QuickPlayResult",  -- Server -> Client : (mode, success, note) after quick play
 	"PurchaseSuccess",  -- Server -> Client : Robux purchase completed (confetti + sound)
 	"RequestChairSync", -- Client -> Server : ask for a fresh chair sync
+	"StealRequest",     -- Client -> Server : thief clicks a steal button (victimUserId)
 }
 
 -- Idempotent: if the folder already exists, reuse it (don't wipe manual setup).

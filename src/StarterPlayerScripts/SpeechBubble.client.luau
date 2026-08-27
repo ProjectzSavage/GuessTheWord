@@ -4,13 +4,15 @@
 	Run this as a **LocalScript** in StarterPlayerScripts.
 
 	PURPOSE
-	During a match, an animated COMIC SPEECH BUBBLE floats over YOUR
-	character's head at the table. It shows the round at a glance:
+	During a match, a comic speech bubble floats above YOUR character's head
+	at the table, showing WHAT YOU ARE TYPING IN REAL TIME:
+	  * the letters you've placed in the answer box so far
 	  * your hearts (red = remaining, grey = lost)
-	  * the word progress (one slot per letter; revealed letters fill in)
 	  * the round timer
-	...so you can stay focused on the table and keep interacting without
-	staring at the on-screen puzzle.
+
+	Because the bubble is in the 3D world above your head, YOUR OPPONENT (and
+	anyone else who can see the table) watches your guess build up live -
+	without either of you having to break focus on your own puzzle.
 
 	No Studio setup needed - the bubble is built automatically. It pops in
 	with a bounce, bobs gently up and down, and pops out when the match ends.
@@ -22,12 +24,14 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
+local PlayerGui = player:WaitForChild("PlayerGui")
 local Events = ReplicatedStorage:WaitForChild("Events")
+
+local LetterImages = require(ReplicatedStorage:WaitForChild("LetterImages"))
 
 local RoundStart = Events:WaitForChild("RoundStart")
 local HeartUpdate = Events:WaitForChild("HeartUpdate")
 local TimerUpdate = Events:WaitForChild("TimerUpdate")
-local PowerupGrant = Events:WaitForChild("PowerupGrant")
 local GameOver = Events:WaitForChild("GameOver")
 
 local MAX_HEARTS = 3
@@ -36,38 +40,51 @@ local billboard = nil
 local bubbleScale = nil -- UIScale child (BillboardGui has no Scale property)
 local bubbleFrame = nil
 local heartLabels = {}
-local slotLabels = {}
+local typedLabel = nil
 local timerLabel = nil
 local bobConn = nil
-local bobBase = Vector3.new(0, 3.4, 0)
+local typedConn = nil
+local bobBase = Vector3.new(0, 3.6, 0)
 local shown = false
 local t0 = os.clock()
 
 -------------------------------------------------------------------------------
--- BUILD
+-- TYPING READER (decodes the AnswerBox slot images into letters)
 -------------------------------------------------------------------------------
-local function makeSlot()
-	local frame = Instance.new("Frame")
-	frame.Size = UDim2.new(1 / 13, 0, 1, 0)
-	frame.BackgroundColor3 = Color3.fromRGB(240, 240, 245)
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0.2, 0)
-	corner.Parent = frame
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(40, 40, 50)
-	stroke.Thickness = 1.5
-	stroke.Parent = frame
-	local lbl = Instance.new("TextLabel")
-	lbl.Size = UDim2.fromScale(1, 1)
-	lbl.BackgroundTransparency = 1
-	lbl.Font = Enum.Font.GothamBlack
-	lbl.TextScaled = true
-	lbl.TextColor3 = Color3.fromRGB(120, 120, 135)
-	lbl.Text = "_"
-	lbl.Parent = frame
-	return frame, lbl
+local letterByImage = {}
+for i = 1, 26 do
+	local l = string.char(96 + i)
+	local img = LetterImages[l]
+	if type(img) == "string" and img ~= "" then
+		letterByImage[img] = l
+	end
 end
 
+local gameGui = PlayerGui:FindFirstChild("GameUI")
+	or PlayerGui:FindFirstChild("GameGui")
+	or PlayerGui:FindFirstChildWhichIsA("ScreenGui")
+local puzzleArea = gameGui and gameGui:FindFirstChild("PuzzleArea", true)
+local answerBox = puzzleArea and puzzleArea:FindFirstChild("AnswerBox", true)
+
+local function readTypedLetters()
+	if not answerBox then
+		return ""
+	end
+	local out = {}
+	for i = 1, 13 do
+		local slot = answerBox:FindFirstChild("Slot" .. i)
+		if not slot then
+			break
+		end
+		local ch = letterByImage[slot.Image] or "_"
+		table.insert(out, ch)
+	end
+	return table.concat(out, " ")
+end
+
+-------------------------------------------------------------------------------
+-- BUILD
+-------------------------------------------------------------------------------
 local function buildBillboard(character)
 	local head = character:FindFirstChild("Head")
 	if not head then
@@ -76,10 +93,10 @@ local function buildBillboard(character)
 
 	billboard = Instance.new("BillboardGui")
 	billboard.Name = "SpeechBubble"
-	billboard.Size = UDim2.fromScale(0.24, 0.16)
+	billboard.Size = UDim2.fromScale(0.26, 0.18)
 	billboard.StudsOffset = bobBase
 	billboard.AlwaysOnTop = true
-	billboard.MaxDistance = 200
+	billboard.MaxDistance = 250
 	billboard.Adornee = head
 
 	-- Pop in/out animation lives on a UIScale child of the billboard.
@@ -92,14 +109,14 @@ local function buildBillboard(character)
 	-- drawn on top of it (higher ZIndex), so only the bottom edges show.
 	local tail = Instance.new("Frame")
 	tail.Name = "Tail"
-	tail.Size = UDim2.fromOffset(14, 14)
-	tail.Position = UDim2.new(0.5, -7, 1, -7)
+	tail.Size = UDim2.fromOffset(16, 16)
+	tail.Position = UDim2.new(0.5, -8, 1, -8)
 	tail.Rotation = 45
 	tail.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 	tail.ZIndex = 1
 	local tailStroke = Instance.new("UIStroke")
 	tailStroke.Color = Color3.fromRGB(40, 40, 50)
-	tailStroke.Thickness = 1.5
+	tailStroke.Thickness = 2
 	tailStroke.Parent = tail
 	tail.Parent = billboard
 
@@ -114,27 +131,39 @@ local function buildBillboard(character)
 	bubbleCorner.Parent = bubbleFrame
 	local bubbleStroke = Instance.new("UIStroke")
 	bubbleStroke.Color = Color3.fromRGB(40, 40, 50)
-	bubbleStroke.Thickness = 2
+	bubbleStroke.Thickness = 2.5
 	bubbleStroke.Parent = bubbleFrame
 
 	local layout = Instance.new("UIListLayout")
 	layout.FillDirection = Enum.FillDirection.Vertical
-	layout.Padding = UDim.new(0, 6)
+	layout.Padding = UDim.new(0, 8)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent = bubbleFrame
 	local pad = Instance.new("UIPadding")
-	pad.PaddingTop = UDim.new(0, 10)
-	pad.PaddingBottom = UDim.new(0, 10)
-	pad.PaddingLeft = UDim.new(0, 14)
-	pad.PaddingRight = UDim.new(0, 14)
+	pad.PaddingTop = UDim.new(0, 14)
+	pad.PaddingBottom = UDim.new(0, 14)
+	pad.PaddingLeft = UDim.new(0, 18)
+	pad.PaddingRight = UDim.new(0, 18)
 	pad.Parent = bubbleFrame
 
-	-- Row 1: hearts
+	-- Row 1: what you're typing (live)
+	typedLabel = Instance.new("TextLabel")
+	typedLabel.Name = "TypedLbl"
+	typedLabel.LayoutOrder = 1
+	typedLabel.BackgroundTransparency = 1
+	typedLabel.Size = UDim2.new(1, 0, 0, 34)
+	typedLabel.Font = Enum.Font.GothamBlack
+	typedLabel.TextScaled = true
+	typedLabel.TextColor3 = Color3.fromRGB(40, 40, 55)
+	typedLabel.Text = "(typing...)"
+	typedLabel.Parent = bubbleFrame
+
+	-- Row 2: hearts
 	local heartRow = Instance.new("Frame")
 	heartRow.Name = "HeartRow"
-	heartRow.LayoutOrder = 1
+	heartRow.LayoutOrder = 2
 	heartRow.BackgroundTransparency = 1
-	heartRow.Size = UDim2.new(1, 0, 0, 22)
+	heartRow.Size = UDim2.new(1, 0, 0, 24)
 	heartRow.Parent = bubbleFrame
 	local heartLayout = Instance.new("UIListLayout")
 	heartLayout.FillDirection = Enum.FillDirection.Horizontal
@@ -145,9 +174,9 @@ local function buildBillboard(character)
 	for i = 1, MAX_HEARTS do
 		local h = Instance.new("TextLabel")
 		h.BackgroundTransparency = 1
-		h.Size = UDim2.fromOffset(24, 22)
+		h.Size = UDim2.fromOffset(26, 24)
 		h.Font = Enum.Font.GothamBlack
-		h.TextSize = 20
+		h.TextSize = 22
 		h.Text = "♥"
 		h.TextColor3 = Color3.fromRGB(230, 60, 80)
 		h.LayoutOrder = i
@@ -155,28 +184,14 @@ local function buildBillboard(character)
 		table.insert(heartLabels, h)
 	end
 
-	-- Row 2: word slots (rebuilt every round)
-	local slotRow = Instance.new("Frame")
-	slotRow.Name = "SlotRow"
-	slotRow.LayoutOrder = 2
-	slotRow.BackgroundTransparency = 1
-	slotRow.Size = UDim2.new(1, 0, 0, 34)
-	slotRow.Parent = bubbleFrame
-	local slotLayout = Instance.new("UIListLayout")
-	slotLayout.FillDirection = Enum.FillDirection.Horizontal
-	slotLayout.Padding = UDim.new(0, 4)
-	slotLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	slotLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-	slotLayout.Parent = slotRow
-
 	-- Row 3: timer
 	timerLabel = Instance.new("TextLabel")
 	timerLabel.Name = "TimerLbl"
 	timerLabel.LayoutOrder = 3
 	timerLabel.BackgroundTransparency = 1
-	timerLabel.Size = UDim2.new(1, 0, 0, 20)
+	timerLabel.Size = UDim2.new(1, 0, 0, 22)
 	timerLabel.Font = Enum.Font.GothamBold
-	timerLabel.TextSize = 18
+	timerLabel.TextSize = 20
 	timerLabel.TextColor3 = Color3.fromRGB(60, 60, 75)
 	timerLabel.Text = ""
 	timerLabel.Parent = bubbleFrame
@@ -207,6 +222,36 @@ local function stopBob()
 	end
 end
 
+local function startTypedWatch()
+	if typedConn then
+		return
+	end
+	local last = nil
+	local stamp = 0
+	typedConn = RunService.Heartbeat:Connect(function()
+		if not shown or not typedLabel or not typedLabel.Parent then
+			return
+		end
+		local now = os.clock()
+		if now - stamp < 0.12 then
+			return
+		end
+		stamp = now
+		local text = readTypedLetters()
+		if text ~= last then
+			last = text
+			typedLabel.Text = (text == "") and "(typing...)" or text
+		end
+	end)
+end
+
+local function stopTypedWatch()
+	if typedConn then
+		typedConn:Disconnect()
+		typedConn = nil
+	end
+end
+
 local function showBubble()
 	if shown then
 		return
@@ -232,6 +277,7 @@ local function showBubble()
 		{ Scale = 1 }
 	):Play()
 	startBob()
+	startTypedWatch()
 end
 
 local function hideBubble()
@@ -240,6 +286,7 @@ local function hideBubble()
 	end
 	shown = false
 	stopBob()
+	stopTypedWatch()
 	local b = billboard
 	local sc = bubbleScale
 	billboard = nil
@@ -277,52 +324,11 @@ local function setHearts(count)
 	end
 end
 
-local function rebuildSlots(wordLength)
-	if not bubbleFrame then
-		return
-	end
-	local row = bubbleFrame:FindFirstChild("SlotRow")
-	if not row then
-		return
-	end
-	for _, c in ipairs(row:GetChildren()) do
-		if c:IsA("Frame") then
-			c:Destroy()
-		end
-	end
-	slotLabels = {}
-	for i = 1, wordLength do
-		local frame, lbl = makeSlot()
-		frame.LayoutOrder = i
-		frame.Parent = row
-		table.insert(slotLabels, lbl)
-	end
-end
-
-local function revealSlot(index, letter)
-	local lbl = slotLabels[index]
-	if lbl and typeof(letter) == "string" and letter ~= "" then
-		lbl.Text = string.upper(letter:sub(1, 1))
-		lbl.TextColor3 = Color3.fromRGB(40, 160, 70)
-	end
-end
-
-local function revealWord(word)
-	for i = 1, #slotLabels do
-		local ch = word:sub(i, i)
-		if ch ~= "" then
-			slotLabels[i].Text = string.upper(ch)
-			slotLabels[i].TextColor3 = Color3.fromRGB(40, 160, 70)
-		end
-	end
-end
-
 -------------------------------------------------------------------------------
 -- EVENTS
 -------------------------------------------------------------------------------
 RoundStart.OnClientEvent:Connect(function(wordLength)
 	showBubble()
-	rebuildSlots(math.clamp(wordLength or 4, 1, 13))
 	setHearts(MAX_HEARTS)
 end)
 
@@ -333,17 +339,6 @@ end)
 TimerUpdate.OnClientEvent:Connect(function(seconds)
 	if timerLabel then
 		timerLabel.Text = tostring(seconds or 0) .. "s"
-	end
-end)
-
-PowerupGrant.OnClientEvent:Connect(function(powerupType, success, letter, index, word)
-	if not success then
-		return
-	end
-	if powerupType == "Letter" and typeof(index) == "number" then
-		revealSlot(index, letter)
-	elseif powerupType == "Word" and typeof(word) == "string" then
-		revealWord(word)
 	end
 end)
 
