@@ -50,6 +50,8 @@ local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local SFX = require(ReplicatedStorage:WaitForChild("SFX"))
+
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
@@ -225,9 +227,10 @@ if buyBtn then
 			if ok and owns then
 				return -- already owned (the rewards were granted on purchase)
 			end
-			pcall(function()
-				MarketplaceService:PromptGamePassPurchase(player, STARTER_PACK_GAMEPASS_ID)
-			end)
+		SFX.play("robuxClick")
+		pcall(function()
+			MarketplaceService:PromptGamePassPurchase(player, STARTER_PACK_GAMEPASS_ID)
+		end)
 		end
 	end)
 end
@@ -291,16 +294,17 @@ end
 
 renderCurrentGp()
 
-if cycleGpBtn then
-	cycleGpBtn.Activated:Connect(function()
-		local gp = GAMEPASS_OFFERS[gpIndex] or GAMEPASS_OFFERS[1]
-		if gp and gp.id and gp.id > 0 then
-			pcall(function()
-				MarketplaceService:PromptGamePassPurchase(player, gp.id)
-			end)
-		end
-	end)
-end
+	if cycleGpBtn then
+		cycleGpBtn.Activated:Connect(function()
+			local gp = GAMEPASS_OFFERS[gpIndex] or GAMEPASS_OFFERS[1]
+			if gp and gp.id and gp.id > 0 then
+				SFX.play("robuxClick")
+				pcall(function()
+					MarketplaceService:PromptGamePassPurchase(player, gp.id)
+				end)
+			end
+		end)
+	end
 
 -- Automatic gamepass cycling loop
 task.spawn(function()

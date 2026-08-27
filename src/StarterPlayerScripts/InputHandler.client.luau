@@ -381,7 +381,9 @@ local function setWaitingUI(waiting)
 		if not selectorOpen and not quickMatchStarting then
 			showFrame(PlayVsBotButton)
 		end
-		setQuickPlayVisible(true)
+		-- Seated + waiting (PlayVsBot is up): QuickPlay stays DOWN. It comes
+		-- back in the lobby (stand up / leave the seat).
+		setQuickPlayVisible(false)
 		hideFrame(PuzzleArea)
 		slideTopBarOut()
 	else
@@ -920,6 +922,7 @@ local function promptBuy(powerupType)
 	if not BuyPrompt then
 		-- No BuyPrompt built in the hierarchy: no "no uses left" dialog -
 		-- go straight to the real Robux purchase prompt.
+		SFX.play("robuxClick")
 		PurchasePowerup:FireServer(powerupType)
 		return
 	end
@@ -1004,6 +1007,7 @@ end)
 if BuyConfirm then
 	BuyConfirm.Activated:Connect(function()
 		if pendingBuyType then
+			SFX.play("robuxClick")
 			PurchasePowerup:FireServer(pendingBuyType)
 		end
 		closeBuy()
@@ -1692,7 +1696,8 @@ if DifficultyBack then
 			DifficultySelector.Visible = false
 		end
 		showFrame(PlayVsBotButton)
-		setQuickPlayVisible(true) -- still seated and waiting
+		-- Seated + waiting: QuickPlay stays down (it comes back in the lobby).
+		setQuickPlayVisible(false)
 	end)
 end
 -- Close button: leave the chair and cancel (game never started). Standing up

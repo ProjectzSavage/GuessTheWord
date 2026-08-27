@@ -44,6 +44,12 @@ SFX.Sounds = {
 	botSpawn     = "", -- the bot rig spawns in the chair
 	botDespawn   = "", -- the bot despawns after the match
 	winJingle    = "", -- victory fanfare after winning
+
+	-- Commerce / feedback sounds
+	shopOpen     = "", -- the Shop UI opens (separate sound from uiPop)
+	robuxClick   = "", -- clicking ANY button that opens a Robux buy prompt
+	purchase     = "", -- a Robux purchase just completed (plays with the confetti)
+	notify       = "", -- a notification popup appears
 }
 
 -- Preload all provided sound IDs so they play instantly.
@@ -112,6 +118,69 @@ end
 preloadSounds()
 
 -- ---------------------------------------------------------------------------
+-- CONFETTI (celebration on purchase)
+-- ---------------------------------------------------------------------------
+local PlayersService = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+
+local CONFETTI_COLORS = {
+	Color3.fromRGB(255, 80, 120),
+	Color3.fromRGB(255, 200, 60),
+	Color3.fromRGB(120, 255, 150),
+	Color3.fromRGB(90, 180, 255),
+	Color3.fromRGB(255, 140, 240),
+	Color3.fromRGB(255, 255, 255),
+}
+
+local confettiGui = nil
+
+-- Spawns a burst of falling, spinning, fading confetti across the whole
+-- screen. Every piece cleans itself up when its fall finishes.
+function SFX.confetti(count)
+	local gui = confettiGui
+	if not gui or not gui.Parent then
+		gui = Instance.new("ScreenGui")
+		gui.Name = "ConfettiGui"
+		gui.IgnoreGuiInset = true
+		gui.DisplayOrder = 100
+		gui.ResetOnSpawn = false
+		gui.Parent = PlayersService.LocalPlayer:WaitForChild("PlayerGui")
+		confettiGui = gui
+	end
+	for i = 1, (count or 40) do
+		task.spawn(function()
+			local piece = Instance.new("Frame")
+			piece.Size = UDim2.fromOffset(math.random(6, 12), math.random(8, 16))
+			piece.BackgroundColor3 = CONFETTI_COLORS[math.random(1, #CONFETTI_COLORS)]
+			piece.BorderSizePixel = 0
+			piece.Position = UDim2.new(math.random(), 0, -0.06, 0)
+			piece.Rotation = math.random(0, 360)
+			piece.Parent = gui
+			local fall = TweenService:Create(
+				piece,
+				TweenInfo.new(math.random(14, 24) / 10 + 0.7, Enum.EasingStyle.Linear, Enum.EasingDirection.In),
+				{
+					Position = piece.Position + UDim2.new(0, (math.random() - 0.5) * 260, 1.1, 0),
+					Rotation = piece.Rotation + math.random(-540, 540),
+					BackgroundTransparency = 1,
+				}
+			)
+			fall:Play()
+			fall.Completed:Connect(function()
+				if piece.Parent then
+					piece:Destroy()
+				end
+			end)
+			task.delay(4, function()
+				if piece.Parent then
+					piece:Destroy()
+				end
+			end)
+		end)
+	end
+end
+
+-- ---------------------------------------------------------------------------
 -- AUTO-WIRED GAME EVENT SOUNDS
 -- ---------------------------------------------------------------------------
 local Events = ReplicatedStorage:WaitForChild("Events")
@@ -177,6 +246,29 @@ Events:WaitForChild("GameOver").OnClientEvent:Connect(function(_, youWon, isDraw
 		SFX.play("winJingle")
 	else
 		SFX.play("lose")
+	end
+end)
+
+-- Purchase celebration: special sound + confetti + a "Purchase Successful!"
+-- notification (the server sends the product / reward name). The event is
+-- created here if missing so the client never blocks on an old setup.
+local PurchaseSuccess = Events:FindFirstChild("PurchaseSuccess")
+if not PurchaseSuccess then
+	PurchaseSuccess = Instance.new("RemoteEvent")
+	PurchaseSuccess.Name = "PurchaseSuccess"
+	PurchaseSuccess.Parent = Events
+end
+PurchaseSuccess.OnClientEvent:Connect(function(label)
+	SFX.play("purchase")
+	SFX.play("notify")
+	SFX.confetti(45)
+	if _G.Notify then
+		_G.Notify({
+			title = "Purchase Successful!",
+			message = (typeof(label) == "string" and label ~= "") and label or "Thanks for your purchase!",
+			kind = "success",
+			duration = 3,
+		})
 	end
 end)
 

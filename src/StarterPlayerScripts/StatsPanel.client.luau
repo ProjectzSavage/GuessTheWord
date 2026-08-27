@@ -18,6 +18,7 @@ local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 
 local NumberFormat = require(ReplicatedStorage:WaitForChild("NumberFormat"))
+local SFX = require(ReplicatedStorage:WaitForChild("SFX"))
 
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
@@ -181,18 +182,18 @@ local function spawnFloatingCashGain(amount: number)
 	floatLbl.Position = UDim2.new(0.5, 0, 0.2, 0)
 	floatLbl.AnchorPoint = Vector2.new(0.5, 0.5)
 	floatLbl.Font = cashValue.Font or Enum.Font.GothamBold
-	floatLbl.TextSize = 20
+	floatLbl.TextSize = 24
 	floatLbl.TextColor3 = Color3.fromRGB(80, 255, 120)
-	floatLbl.TextStrokeTransparency = 0.2
-	floatLbl.TextStrokeColor3 = Color3.fromRGB(0, 50, 0)
+	floatLbl.TextStrokeTransparency = 0.1
+	floatLbl.TextStrokeColor3 = Color3.fromRGB(0, 60, 10)
 	floatLbl.Text = "+$" .. NumberFormat.commas(amount)
 	floatLbl.ZIndex = 50
 	floatLbl.Parent = container
 
-	local endPos = UDim2.new(0.5, 0, -0.4, 0)
+	local endPos = UDim2.new(0.5, 0, -0.6, 0)
 	local tween = TweenService:Create(
 		floatLbl,
-		TweenInfo.new(0.75, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+		TweenInfo.new(1.1, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
 		{
 			Position = endPos,
 			TextTransparency = 1,
@@ -267,6 +268,7 @@ local function onCashChanged(newVal: number)
 		playCashGainPunch()
 		spawnFloatingCashGain(diff)
 		animateCashCounter(displayedCash, newVal)
+		SFX.play("cash")
 	else
 		if cashCounterConn then
 			cashCounterConn:Disconnect()

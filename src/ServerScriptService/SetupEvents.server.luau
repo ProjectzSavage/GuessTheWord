@@ -47,6 +47,8 @@ local EVENT_NAMES = {
 	"QuestClaim",      -- Client -> Server : claim a completed quest
 	"QuickPlayRequest", -- Client -> Server : quick play mode ("Bot" / "Player")
 	"QuickPlayResult",  -- Server -> Client : (mode, success, note) after quick play
+	"PurchaseSuccess",  -- Server -> Client : Robux purchase completed (confetti + sound)
+	"RequestChairSync", -- Client -> Server : ask for a fresh chair sync
 }
 
 -- Idempotent: if the folder already exists, reuse it (don't wipe manual setup).

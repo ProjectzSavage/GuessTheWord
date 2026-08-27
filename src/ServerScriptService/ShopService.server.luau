@@ -29,6 +29,23 @@
 
 local Players = game:GetService("Players")
 local MarketplaceService = game:GetService("MarketplaceService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- PurchaseSuccess tells the client a Robux purchase just completed (the
+-- client plays the special sound + confetti + a notification). Created here
+-- if missing so this script never blocks on an old Events folder.
+local eventsFolder = ReplicatedStorage:FindFirstChild("Events")
+if not eventsFolder then
+	eventsFolder = Instance.new("Folder")
+	eventsFolder.Name = "Events"
+	eventsFolder.Parent = ReplicatedStorage
+end
+local PurchaseSuccess = eventsFolder:FindFirstChild("PurchaseSuccess")
+if not PurchaseSuccess then
+	PurchaseSuccess = Instance.new("RemoteEvent")
+	PurchaseSuccess.Name = "PurchaseSuccess"
+	PurchaseSuccess.Parent = eventsFolder
+end
 
 -------------------------------------------------------------------------------
 -- DEV PRODUCT CATALOG  (fill productId = the id from Creator Hub)
@@ -77,11 +94,14 @@ MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, gameP
 	local ok, info = pcall(function()
 		return MarketplaceService:GetProductInfoAsync(gamePassId, Enum.InfoType.GamePass)
 	end)
+	local passName = (ok and type(info) == "table" and info.Name) or ""
 	if ok and type(info) == "table" and info.Price then
 		if _G.RewardsAddRobuxSpent then
 			_G.RewardsAddRobuxSpent(player, math.floor(info.Price / 100))
 		end
 	end
+	-- Client celebration: special purchase sound + confetti + notification.
+	PurchaseSuccess:FireClient(player, passName)
 end)
 
 local function grantReward(player, reward)
@@ -137,6 +157,22 @@ local function grantReward(player, reward)
 	end
 end
 
+-- Human-readable summary of what the purchase granted (shown in the client's
+-- "Purchase Successful!" notification).
+local function rewardLabel(reward)
+	if reward.type == "cash" then
+		return "+$" .. tostring(reward.amount) .. " cash"
+	elseif reward.type == "wins" then
+		return "+" .. tostring(reward.amount) .. " Wins"
+	elseif reward.type == "powerup" then
+		local what = (reward.use == "Letter") and "Reveal Letter" or "Reveal Word"
+		return "+" .. tostring(reward.amount or 1) .. " " .. what .. " use(s)"
+	elseif reward.type == "perk" then
+		return tostring(reward.perk)
+	end
+	return ""
+end
+
 MarketplaceService.ProcessReceipt = function(receiptInfo)
 	local player = Players:GetPlayerByUserId(receiptInfo.PlayerId)
 	if not player then
@@ -161,6 +197,9 @@ MarketplaceService.ProcessReceipt = function(receiptInfo)
 	if _G.RewardsAddRobuxSpent then
 		_G.RewardsAddRobuxSpent(player, receiptInfo.PriceInRobux)
 	end
+
+	-- Client celebration: special purchase sound + confetti + notification.
+	PurchaseSuccess:FireClient(player, rewardLabel(reward))
 
 	warn("[ShopService] Granted product", receiptInfo.ProductId, "to", player.Name)
 	return Enum.ProductPurchaseDecision.PurchaseGranted

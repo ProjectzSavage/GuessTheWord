@@ -24,6 +24,12 @@ local gameGui = PlayerGui:WaitForChild("GameUI", 10) or PlayerGui:FindFirstChild
 local Events = ReplicatedStorage:WaitForChild("Events", 15)
 local EquipChair = Events and (Events:FindFirstChild("EquipChair") or Events:WaitForChild("EquipChair", 10))
 local ChairSync = Events and (Events:FindFirstChild("ChairSync") or Events:WaitForChild("ChairSync", 10))
+local RequestChairSync = Events and Events:FindFirstChild("RequestChairSync")
+if Events and not RequestChairSync then
+	RequestChairSync = Instance.new("RemoteEvent")
+	RequestChairSync.Name = "RequestChairSync"
+	RequestChairSync.Parent = Events
+end
 local UIFX = require(ReplicatedStorage:WaitForChild("UIFX"))
 local ChairsConfig = require(ReplicatedStorage:WaitForChild("ChairsConfig"))
 
@@ -149,7 +155,8 @@ local function renderChairPreview(vf: ViewportFrame, world: WorldModel, chairNam
 	end)
 	if not ok or not cf then return end
 	local maxDim = math.max(size.X, math.max(size.Y, size.Z)) or 1
-	local dist = maxDim * 2.2 + 2
+	-- Close-up framing: the chair should FILL the view (big 1:1 render).
+	local dist = maxDim * 1.15 + 0.5
 	cam.CFrame = CFrame.lookAt(cf.Position + Vector3.new(0, 0.2, dist), cf.Position)
 end
 
@@ -245,6 +252,21 @@ local function makeCell(chairName: string, equipped: string)
 	end)
 
 	cell.Parent = Grid
+
+	-- Bigger, square (1:1) preview, centered in the cell with AnchorPoint
+	-- (0.5, 0.5). Sized from the laid-out cell so it stays square at any
+	-- grid/cell size.
+	task.defer(function()
+		if not cell.Parent then return end
+		local sz = cell.AbsoluteSize
+		local side = math.min(sz.X, sz.Y * 0.75)
+		if side > 10 then
+			vf.Size = UDim2.fromOffset(side, side)
+			vf.Position = UDim2.new(0.5, 0, 0.375, 0)
+			vf.AnchorPoint = Vector2.new(0.5, 0.5)
+		end
+	end)
+
 	return cell
 end
 
@@ -292,6 +314,15 @@ end
 local owned0, equipped0 = readFromFolder()
 render(owned0, equipped0)
 
+-- The server's first ChairSync can fire BEFORE this client script has
+-- connected (then the inventory shows nothing until you buy/equip
+-- something). Ask for a fresh sync on load - and again on every open.
+task.defer(function()
+	if RequestChairSync then
+		RequestChairSync:FireServer()
+	end
+end)
+
 function InventoryAPI.open()
 	if not Panel then return end
 	if Panel.Visible then return end -- already open (idempotent — no double FX)
@@ -304,6 +335,9 @@ function InventoryAPI.open()
 	end
 
 	UIFX.openWindow(Panel)
+	if RequestChairSync then
+		RequestChairSync:FireServer() -- fresh server state (covers a missed first sync)
+	end
 	local owned, equipped = readFromFolder()
 	render(owned, equipped)
 end

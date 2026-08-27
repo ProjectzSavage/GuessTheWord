@@ -22,6 +22,7 @@ local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
 local UIFX = require(ReplicatedStorage:WaitForChild("UIFX"))
 local ChairsConfig = require(ReplicatedStorage:WaitForChild("ChairsConfig"))
+local SFX = require(ReplicatedStorage:WaitForChild("SFX"))
 
 local PRODUCT_IDS = {
 	-- Dev Products
@@ -101,6 +102,7 @@ local function handlePurchase(itemName: string, productId: number)
 	end
 
 	local isGamepass = GAMEPASS_NAMES[itemName] == true
+	SFX.play("robuxClick") -- every shop buy opens a Robux purchase prompt
 	if isGamepass then
 		MarketplaceService:PromptGamePassPurchase(player, productId)
 	else
@@ -197,6 +199,7 @@ function ShopAPI.open()
 		_G.InventoryAPI.close()
 	end
 
+	SFX.play("shopOpen") -- the shop's own open sound (separate from uiPop)
 	UIFX.openWindow(ShopF)
 end
 

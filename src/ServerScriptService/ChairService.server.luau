@@ -36,6 +36,14 @@ local BuyChair = Events:WaitForChild("BuyChair")
 local EquipChair = Events:WaitForChild("EquipChair")
 local ChairSync = Events:WaitForChild("ChairSync")
 local NotifyPlayer = Events:WaitForChild("NotifyPlayer")
+-- Created if missing so the sync-request below works even on an older
+-- Events folder.
+local RequestChairSync = Events:FindFirstChild("RequestChairSync")
+if not RequestChairSync then
+	RequestChairSync = Instance.new("RemoteEvent")
+	RequestChairSync.Name = "RequestChairSync"
+	RequestChairSync.Parent = Events
+end
 
 -- Folder containing the actual chair models (clone source).
 local ChairModels = ReplicatedStorage:FindFirstChild("Chairs")
@@ -248,6 +256,13 @@ EquipChair.OnServerEvent:Connect(function(player, chairName)
 	notify(player, "Equipped", "Equipped " .. chairName .. ".", "info")
 end)
 
+-- The client asks for a fresh sync on load / when it opens the inventory.
+-- This fixes "inventory empty until I buy something" on join (the initial
+-- server sync can fire before the client has connected).
+RequestChairSync.OnServerEvent:Connect(function(player)
+	syncClient(player)
+end)
+
 -------------------------------------------------------------------------------
 -- REPLACE CHAIR ON SIT
 -------------------------------------------------------------------------------
@@ -325,7 +340,11 @@ local function restoreChair(seat)
 	seatChairState[seat] = nil
 end
 
-local GAME_AREA = Workspace:WaitForChild("Tables", 15) or Workspace
+-- Tables live under Workspace.GameArea (Table1, Table2, ...) - the same
+-- layout GameManager uses. Fall back to the old layouts if needed.
+local GAME_AREA = Workspace:WaitForChild("GameArea", 10)
+	or Workspace:FindFirstChild("Tables")
+	or Workspace
 
 local function seatOccupiedBy(seat)
 	local h = seat.Occupant
