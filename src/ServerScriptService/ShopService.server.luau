@@ -30,6 +30,7 @@
 local Players = game:GetService("Players")
 local MarketplaceService = game:GetService("MarketplaceService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage = game:GetService("ServerStorage")
 
 -- PurchaseSuccess tells the client a Robux purchase just completed (the
 -- client plays the special sound + confetti + a notification). Created here
@@ -173,21 +174,21 @@ local function rewardLabel(reward)
 	return ""
 end
 
-MarketplaceService.ProcessReceipt = function(receiptInfo)
-	local player = Players:GetPlayerByUserId(receiptInfo.PlayerId)
-	if not player then
-		return Enum.ProductPurchaseDecision.NotProcessedYet
-	end
+-- Receipts are routed through the shared ReceiptRouter module so other
+-- systems (TheftService's theft tiers) can register their own dev products
+-- on the same single ProcessReceipt without overwriting each other.
+local ReceiptRouter = require(ServerStorage.Modules.ReceiptRouter)
 
+local function onShopReceipt(receiptInfo, player)
 	local reward = DEV_PRODUCTS[receiptInfo.ProductId]
 	if not reward then
 		warn("[ShopService] No dev product config for id", receiptInfo.ProductId)
-		return Enum.ProductPurchaseDecision.NotProcessedYet
+		return
 	end
 
 	-- Idempotency: don't grant twice for the same receipt.
 	if processedReceipts[receiptInfo.PurchaseId] then
-		return Enum.ProductPurchaseDecision.PurchaseGranted
+		return
 	end
 	processedReceipts[receiptInfo.PurchaseId] = true
 
@@ -202,7 +203,10 @@ MarketplaceService.ProcessReceipt = function(receiptInfo)
 	PurchaseSuccess:FireClient(player, rewardLabel(reward))
 
 	warn("[ShopService] Granted product", receiptInfo.ProductId, "to", player.Name)
-	return Enum.ProductPurchaseDecision.PurchaseGranted
+end
+
+for productId in pairs(DEV_PRODUCTS) do
+	ReceiptRouter.register(productId, onShopReceipt)
 end
 
 

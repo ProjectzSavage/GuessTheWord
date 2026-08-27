@@ -161,6 +161,9 @@ ServerScriptService
 | `src/ServerScriptService/StarterPack.server.luau`               | `ServerScriptService > Scripts` | Script   |
 | `src/ReplicatedStorage/ChairsConfig.luau`                      | `ReplicatedStorage`         | ModuleScript |
 | `src/StarterPlayerScripts/InventoryController.client.luau`      | `StarterPlayerScripts`      | LocalScript |
+| `src/ServerStorage/Modules/ReceiptRouter.luau`                  | `ServerStorage > Modules`   | ModuleScript |
+| `src/ServerScriptService/TheftService.server.luau`              | `ServerScriptService > Scripts` | Script   |
+| `src/StarterPlayerScripts/SpeechBubble.client.luau`             | `StarterPlayerScripts`      | LocalScript |
 
 > **Tip:** For each file, right-click the target container in Studio →
 > **Insert Object** → choose the right type, name it, then paste the file's

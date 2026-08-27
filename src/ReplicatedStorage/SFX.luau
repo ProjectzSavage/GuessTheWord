@@ -22,7 +22,6 @@
 local SoundService = game:GetService("SoundService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ContentProvider = game:GetService("ContentProvider")
-local AudioService = game:GetService("AudioService")
 
 local SFX = {}
 
@@ -90,15 +89,16 @@ local function preloadSounds()
 	end
 end
 
--- Validate every filled-in id (also preloads it via the audio cache). A
--- dead/invalid asset warns ONCE with the key name, so broken sounds are easy
--- to find in the Output instead of the cryptic "Failed to load sound ...".
+-- Validate every filled-in id (preloading it in the process). A dead/invalid
+-- asset errors during the per-id preload, so we warn ONCE with the key name -
+-- broken sounds are easy to find in the Output instead of the cryptic
+-- "Failed to load sound ..." Roblox prints.
 task.spawn(function()
 	for key, raw in pairs(SFX.Sounds) do
 		if type(raw) == "string" and raw ~= "" then
 			local id = normalizeId(raw)
 			local ok = pcall(function()
-				AudioService:LoadSoundIdAsync(id)
+				ContentProvider:PreloadAsync({ id })
 			end)
 			if not ok then
 				warn("[SFX] Failed to load sound '" .. tostring(key) .. "' (" .. id .. "): the asset is dead or invalid - replace that id in the SFX.Sounds table.")

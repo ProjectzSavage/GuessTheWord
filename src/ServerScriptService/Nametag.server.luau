@@ -33,6 +33,7 @@ local MarketplaceService = game:GetService("MarketplaceService")
 local PlayerPerks = require(ServerStorage.Modules.PlayerPerks)
 local VIP_PASS_ID = PlayerPerks.IDS.VIP
 local VIP_PREFIX = "[VIP] "
+local VIP_COLOR = Color3.fromRGB(255, 210, 60) -- the [VIP] tag is yellow
 
 -- VIP nametag state: Player -> { label = TextLabel, base = plain name }
 -- (Roblox system chat can't be modified by game code, so the [VIP] tag is
@@ -43,6 +44,8 @@ local function applyVipTag(Player)
 	local t = vipTags[Player]
 	if t and t.label and t.label.Parent then
 		t.label.Text = VIP_PREFIX .. t.base
+		t.label.TextColor3 = VIP_COLOR
+		t.label.TextStrokeColor3 = Color3.fromRGB(90, 60, 0)
 	end
 end
 
