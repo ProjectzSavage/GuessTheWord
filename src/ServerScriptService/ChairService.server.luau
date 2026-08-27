@@ -128,9 +128,10 @@ end
 -- VIP includes the special VIP chair: grant every VIPChairs entry at once.
 -- `assumeVip` is true when we KNOW the player just bought VIP (the purchase
 -- itself is the proof - avoids a stale perks-cache race right after buying).
+-- Returns true when at least one chair was newly granted.
 local function grantVipChairs(player, state, assumeVip)
 	if VIP_PASS_ID <= 0 or #VIP_CHAIRS == 0 then
-		return
+		return false
 	end
 	local isVip = assumeVip and true or false
 	if not isVip then
@@ -140,14 +141,17 @@ local function grantVipChairs(player, state, assumeVip)
 		isVip = ok and owns or false
 	end
 	if not isVip then
-		return
+		return false
 	end
+	local granted = false
 	for _, chairName in ipairs(VIP_CHAIRS) do
 		if CHAIR_NAMES[chairName] and not state.owned[chairName] then
 			state.owned[chairName] = true
+			granted = true
 			notify(player, "VIP Perks", "You unlocked the exclusive " .. chairName .. " chair!", "success")
 		end
 	end
+	return granted
 end
 
 -------------------------------------------------------------------------------
@@ -382,6 +386,23 @@ MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, passI
 			syncClient(player)
 			notify(player, "Gamepass Unlocked!", "You unlocked the exclusive " .. chairName .. " chair!", "success")
 			break
+		end
+	end
+end)
+
+-- Purchases made OUTSIDE the in-game prompt (the game's shop page, mobile
+-- store) never fire the event above, so re-check VIP ownership every 60s -
+-- the PlayerPerks cache (60s TTL) keeps this cheap.
+task.spawn(function()
+	while true do
+		task.wait(60)
+		for _, player in ipairs(Players:GetPlayers()) do
+			local state = playerChair[player.UserId]
+			if state then
+				if grantVipChairs(player, state) then
+					syncClient(player)
+				end
+			end
 		end
 	end
 end)

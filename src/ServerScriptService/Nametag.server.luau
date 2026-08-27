@@ -46,11 +46,30 @@ local function applyVipTag(Player)
 	end
 end
 
--- Live update: the tag flips on the moment VIP is bought (VIP can't be
--- un-owned, so it never flips back off).
-MarketplaceService.GamePassPurchaseProcessed:Connect(function(Player, passId)
-	if passId == VIP_PASS_ID then
+-- Live update: the tag flips on the moment VIP is bought via the in-game
+-- prompt (VIP can't be un-owned, so it never flips back off).
+MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(Player, passId, wasPurchased)
+	if wasPurchased and passId == VIP_PASS_ID then
 		applyVipTag(Player)
+	end
+end)
+
+-- Purchases made OUTSIDE the in-game prompt (the game's shop page, mobile
+-- store) never fire that event, so re-check VIP players without a tag
+-- every 60s - the tag only ever turns on.
+task.spawn(function()
+	while true do
+		task.wait(60)
+		for Player, t in pairs(vipTags) do
+			if t.label and t.label.Parent and string.sub(t.label.Text, 1, #VIP_PREFIX) ~= VIP_PREFIX then
+				local ok, isVip = pcall(function()
+					return PlayerPerks.owns(Player, "VIP")
+				end)
+				if ok and isVip then
+					applyVipTag(Player)
+				end
+			end
+		end
 	end
 end)
 

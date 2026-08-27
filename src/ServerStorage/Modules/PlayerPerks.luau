@@ -45,10 +45,10 @@ PlayerPerks.MULTIPLIERS = {
 local CACHE_TTL = 60 -- seconds
 local cache = {} -- userId -> { owned = {[key] = bool}, at = os.clock() }
 
--- The moment a gamepass purchase processes, drop that player's cached
--- ownership so the new pass takes effect immediately (no TTL wait).
-MarketplaceService.GamePassPurchaseProcessed:Connect(function(player)
-	if player then
+-- The moment a gamepass purchase is completed in-game, drop that player's
+-- cached ownership so the new pass takes effect immediately (no TTL wait).
+MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, passId, wasPurchased)
+	if wasPurchased and player then
 		cache[player.UserId] = nil
 	end
 end)

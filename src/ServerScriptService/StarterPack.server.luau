@@ -13,7 +13,7 @@
 
 	GRANT TIMING
 	  * Player joins ALREADY owning the gamepass (rejoin) -> granted on join.
-	  * Player buys it mid-session -> granted via GamePassPurchaseProcessed.
+	  * Player buys it mid-session -> granted via PromptGamePassPurchaseFinished.
 
 	PERSISTENCE
 	"Granted" is stored in a DataStore so a server restart never re-grants the
@@ -151,7 +151,10 @@ end
 -- EVENTS
 -------------------------------------------------------------------------------
 -- Buying the pack mid-session.
-MarketplaceService.GamePassPurchaseProcessed:Connect(function(player, gamePassId)
+MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, gamePassId, wasPurchased)
+	if not wasPurchased or not player then
+		return
+	end
 	if gamePassId ~= STARTER_PACK_GAMEPASS_ID then
 		return
 	end

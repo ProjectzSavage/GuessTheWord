@@ -70,7 +70,10 @@ local processedReceipts = {}
 -- starter pack) never hit ProcessReceipt, so count them toward the total
 -- robux-spent tracker HERE - otherwise the "Total Robux spent" in the Rewards
 -- UI only moved on dev-product purchases.
-MarketplaceService.GamePassPurchaseProcessed:Connect(function(player, gamePassId)
+MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, gamePassId, wasPurchased)
+	if not wasPurchased or not player then
+		return
+	end
 	local ok, info = pcall(function()
 		return MarketplaceService:GetProductInfoAsync(gamePassId, Enum.InfoType.GamePass)
 	end)
