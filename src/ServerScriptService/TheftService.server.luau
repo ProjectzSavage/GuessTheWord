@@ -162,7 +162,7 @@ local function attachPrompt(player)
 			prompt.HoldDuration = PROMPT_HOLD
 			prompt.MaxActivationDistance = 15
 			prompt.RequiresLineOfSight = false
-			prompt.Exclusivity = Enum.ProximityPromptExclusivity.OnePerPlayer
+			prompt.Exclusivity = Enum.ProximityPromptExclusivity.OneGlobally
 			prompt.KeyboardKeyCode = Enum.KeyCode.F -- E is used for typing letters
 			prompt.Parent = hrp
 

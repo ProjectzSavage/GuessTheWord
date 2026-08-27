@@ -33,6 +33,7 @@ local GameOver = Events:WaitForChild("GameOver")
 local MAX_HEARTS = 3
 
 local billboard = nil
+local bubbleScale = nil -- UIScale child (BillboardGui has no Scale property)
 local bubbleFrame = nil
 local heartLabels = {}
 local slotLabels = {}
@@ -79,8 +80,13 @@ local function buildBillboard(character)
 	billboard.StudsOffset = bobBase
 	billboard.AlwaysOnTop = true
 	billboard.MaxDistance = 200
-	billboard.Scale = 0
 	billboard.Adornee = head
+
+	-- Pop in/out animation lives on a UIScale child of the billboard.
+	bubbleScale = Instance.new("UIScale")
+	bubbleScale.Name = "BubbleScale"
+	bubbleScale.Scale = 0
+	bubbleScale.Parent = billboard
 
 	-- Tail: a rotated square sticking out below the bubble. The bubble is
 	-- drawn on top of it (higher ZIndex), so only the bottom edges show.
@@ -219,9 +225,9 @@ local function showBubble()
 	billboard.Adornee = character:FindFirstChild("Head")
 	billboard.Parent = character
 	shown = true
-	billboard.Scale = 0
+	bubbleScale.Scale = 0
 	TweenService:Create(
-		billboard,
+		bubbleScale,
 		TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
 		{ Scale = 1 }
 	):Play()
@@ -235,21 +241,25 @@ local function hideBubble()
 	shown = false
 	stopBob()
 	local b = billboard
+	local sc = bubbleScale
 	billboard = nil
+	bubbleScale = nil
 	if not b or not b.Parent then
 		return
 	end
-	local t = TweenService:Create(
-		b,
-		TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.In),
-		{ Scale = 0 }
-	)
-	t:Play()
-	t.Completed:Connect(function()
-		if b.Parent then
-			b:Destroy()
-		end
-	end)
+	if sc and sc.Parent then
+		local t = TweenService:Create(
+			sc,
+			TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.In),
+			{ Scale = 0 }
+		)
+		t:Play()
+		t.Completed:Connect(function()
+			if b.Parent then
+				b:Destroy()
+			end
+		end)
+	end
 	task.delay(1, function()
 		if b.Parent then
 			b:Destroy()

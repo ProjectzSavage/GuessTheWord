@@ -66,7 +66,7 @@ SFX.Sounds = {
 -- SoundId accepts a bare number ("12345") or the full form
 -- ("rbxassetid://12345") - normalize so both work.
 local function normalizeId(raw)
-	if string.find(raw, "^rbxassetid://", 1, true) then
+	if string.sub(raw, 1, 13) == "rbxassetid://" then
 		return raw
 	end
 	return "rbxassetid://" .. raw
