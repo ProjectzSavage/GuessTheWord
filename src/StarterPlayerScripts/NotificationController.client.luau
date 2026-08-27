@@ -25,6 +25,8 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
+local SFX = require(ReplicatedStorage:WaitForChild("SFX"))
+
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
@@ -208,6 +210,14 @@ local function showNotification(opts: NotifOptions)
 	local titleText = opts.title or "Notification"
 	local msgText = opts.message or ""
 	local duration = opts.duration or 3.5
+
+	-- Notification sound: warn/error kinds (not enough coins, purchase
+	-- failed, ...) get the error blip; everything else gets the normal ping.
+	if kind == "warn" or kind == "error" then
+		SFX.play("notifyError")
+	else
+		SFX.play("notify")
+	end
 
 	local iconAsset = opts.icon or NOTIFICATION_ICONS[kind] or NOTIFICATION_ICONS.info
 	local accentColor = NOTIFICATION_COLORS[kind] or NOTIFICATION_COLORS.info

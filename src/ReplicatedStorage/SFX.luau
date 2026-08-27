@@ -8,18 +8,27 @@
 	It ALSO auto-wires sounds to the game's RemoteEvents (countdown, round, etc.).
 
 	FILL IN YOUR SOUNDS
-	Use the FULL format "rbxassetid://117751546358455". Leave unused ones as "".
-	Countdown has separate 3 / 2 / 1 / GO! sounds (count3, count2, count1, go).
+	Use the FULL format "rbxassetid://117751546358455" (a bare number also
+	works - the "rbxassetid://" prefix is added automatically).
+	Leave unused ones as "". Countdown has separate 3 / 2 / 1 / GO! sounds
+	(count3, count2, count1, go).
+
+	BROKEN IDS
+	At startup every filled-in id is validated (and preloaded). A dead/invalid
+	asset (deleted, mistyped, not owned) warns ONCE with the key name:
+	    [SFX] Failed to load sound 'shopOpen' (rbxassetid://...): ...
 ]]
 
 local SoundService = game:GetService("SoundService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ContentProvider = game:GetService("ContentProvider")
+local AudioService = game:GetService("AudioService")
 
 local SFX = {}
 
 -- ---------------------------------------------------------------------------
--- SOUND CONFIG - fill in the IDs you have. Use "rbxassetid://..." full form.
+-- SOUND CONFIG - fill in the IDs you have. Use "rbxassetid://..." (or a bare
+-- number - the prefix is added automatically).
 -- ---------------------------------------------------------------------------
 SFX.Sounds = {
 	count3       = "rbxassetid://117751546358455", -- countdown "3"
@@ -37,9 +46,9 @@ SFX.Sounds = {
 	lose         = "rbxassetid://125623877509633", -- you lose the match
 	draw         = "rbxassetid://86611831132015", -- the match was a draw
 	letter       = "rbxassetid://106456870308007", -- a letter flies into the answer box
-	hover        = "rbxassetid://139800881181209", -- hovering over a tile/button
+	hover        = "rbxassetid://139800881181209", -- hovering over a tile/clue (the classic hover)
 	click        = "rbxassetid://139719503904449", -- clicking the Play vs Bot button
-	cash         = "", -- cash reward lands on the reroll
+	cash         = "", -- cash reward lands on the reroll / any money gain
 	cashRoll     = "", -- cash reward reroll spinning/cycling
 	botSpawn     = "", -- the bot rig spawns in the chair
 	botDespawn   = "", -- the bot despawns after the match
@@ -48,18 +57,28 @@ SFX.Sounds = {
 	-- Commerce / feedback sounds
 	shopOpen     = "", -- the Shop UI opens (separate sound from uiPop)
 	guiOpen      = "", -- any GUI window opens (Shop / Rewards / Inventory)
-	buttonHover  = "", -- hovering over ANY button
+	buttonHover  = "", -- hovering over ANY button (wired globally)
 	robuxClick   = "", -- clicking ANY button that opens a Robux buy prompt
 	purchase     = "", -- a Robux purchase just completed (plays with the confetti)
-	notify       = "", -- a notification popup appears
+	notify       = "", -- a normal notification popup appears
+	notifyError  = "", -- an ERROR notification (not enough coins, failed buy, ...)
 }
+
+-- SoundId accepts a bare number ("12345") or the full form
+-- ("rbxassetid://12345") - normalize so both work.
+local function normalizeId(raw)
+	if string.find(raw, "^rbxassetid://", 1, true) then
+		return raw
+	end
+	return "rbxassetid://" .. raw
+end
 
 -- Preload all provided sound IDs so they play instantly.
 local function preloadSounds()
 	local ids = {}
 	for _, id in pairs(SFX.Sounds) do
 		if type(id) == "string" and id ~= "" then
-			table.insert(ids, id)
+			table.insert(ids, normalizeId(id))
 		end
 	end
 	if #ids > 0 then
@@ -71,26 +90,33 @@ local function preloadSounds()
 	end
 end
 
+-- Validate every filled-in id (also preloads it via the audio cache). A
+-- dead/invalid asset warns ONCE with the key name, so broken sounds are easy
+-- to find in the Output instead of the cryptic "Failed to load sound ...".
+task.spawn(function()
+	for key, raw in pairs(SFX.Sounds) do
+		if type(raw) == "string" and raw ~= "" then
+			local id = normalizeId(raw)
+			local ok = pcall(function()
+				AudioService:LoadSoundIdAsync(id)
+			end)
+			if not ok then
+				warn("[SFX] Failed to load sound '" .. tostring(key) .. "' (" .. id .. "): the asset is dead or invalid - replace that id in the SFX.Sounds table.")
+			end
+		end
+	end
+end)
+
 -- Persistent base Sounds keep each clip loaded in memory, so playing a clone
 -- starts INSTANTLY (no first-play load delay) while still allowing overlap.
 local bases = {}
 
-local badIds = {} -- id -> true (warn once per broken id)
-
-local function baseFor(id, name)
+local function baseFor(id)
 	local base = bases[id]
 	if not base then
 		base = Instance.new("Sound")
 		base.Name = "SFXBase"
 		base.SoundId = id
-		-- Dead/invalid asset ids fail HERE - tell the user WHICH key to fix
-		-- (Roblox's own "Failed to load sound" log doesn't say the key name).
-		base.LoadFailed:Connect(function()
-			if not badIds[id] then
-				badIds[id] = true
-				warn("[SFX] Failed to load sound '" .. tostring(name) .. "' (" .. id .. "): the asset is dead or invalid - replace that id in the SFX.Sounds table.")
-			end
-		end)
 		base.Parent = SoundService
 		-- Keep the clip loaded by leaving it parented (Engine caches it).
 		bases[id] = base
@@ -102,12 +128,13 @@ end
 -- cleans it up when it ends. Each call is an independent Sound -> they overlap.
 function SFX.play(name, opts)
 	opts = opts or {}
-	local id = SFX.Sounds[name]
-	if type(id) ~= "string" or id == "" then
+	local raw = SFX.Sounds[name]
+	if type(raw) ~= "string" or raw == "" then
 		return
 	end
+	local id = normalizeId(raw)
 
-	local base = baseFor(id, name)
+	local base = baseFor(id)
 	local s = base:Clone()
 	s.Parent = SoundService
 	s.Volume = opts.volume or 0.6
@@ -264,6 +291,8 @@ end)
 -- Purchase celebration: special sound + confetti + a "Purchase Successful!"
 -- notification (the server sends the product / reward name). The event is
 -- created here if missing so the client never blocks on an old setup.
+-- (The notification sound itself is played by the NotificationController,
+-- based on the notification's kind.)
 local PurchaseSuccess = Events:FindFirstChild("PurchaseSuccess")
 if not PurchaseSuccess then
 	PurchaseSuccess = Instance.new("RemoteEvent")
@@ -272,7 +301,6 @@ if not PurchaseSuccess then
 end
 PurchaseSuccess.OnClientEvent:Connect(function(label)
 	SFX.play("purchase")
-	SFX.play("notify")
 	SFX.confetti(45)
 	if _G.Notify then
 		_G.Notify({
