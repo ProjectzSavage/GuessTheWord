@@ -34,7 +34,7 @@ local UIFX = require(ReplicatedStorage:WaitForChild("UIFX"))
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
-local GROUP_ID = 3597354 -- keep in sync with RewardsService
+local GROUP_ID = 35973544 -- keep in sync with RewardsService
 
 -------------------------------------------------------------------------------
 -- GUI (FreeRewardsGUI lives in StarterGui -> cloned into PlayerGui)

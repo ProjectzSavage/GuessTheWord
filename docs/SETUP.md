@@ -167,6 +167,7 @@ ServerScriptService
 | `src/StarterPlayerScripts/StealPromptUI.client.luau`            | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/FreeRewards.client.luau`              | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/SpectatorClient.client.luau`          | `StarterPlayerScripts`      | LocalScript |
+| `src/StarterPlayerScripts/Leaderboards.client.luau`             | `StarterPlayerScripts`      | LocalScript |
 
 > **Tip:** For each file, right-click the target container in Studio →
 > **Insert Object** → choose the right type, name it, then paste the file's

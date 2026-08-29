@@ -26,6 +26,7 @@ local MarketplaceService = game:GetService("MarketplaceService")
 
 local ChairsConfig = require(ReplicatedStorage:WaitForChild("ChairsConfig"))
 local PlayerPerks = require(ServerStorage.Modules.PlayerPerks)
+local NumberFormat = require(ReplicatedStorage:WaitForChild("NumberFormat"))
 local CHAIR_NAMES = ChairsConfig.Chairs
 local GAMEPASS_CHAIRS = ChairsConfig.GamepassChairs or {}
 local VIP_CHAIRS = ChairsConfig.VIPChairs or {}
@@ -212,26 +213,71 @@ local function processBuy(player, chairName)
 end
 
 local DISPLAY = Workspace:FindFirstChild("DisplayChairs") or Workspace:WaitForChild("DisplayChairs", 10)
+
+-- Text for the prompt the SCRIPT creates (fallback only — if you place your
+-- own ProximityPrompt on the part, YOUR ObjectText/ActionText are kept).
+local function fallbackPromptText(chairName)
+	local price = CHAIR_NAMES[chairName]
+	if type(price) == "string" then
+		if price == "VIP" then
+			return "Get the VIP " .. chairName .. " chair", "Get VIP"
+		end
+		return chairName .. " is a Robux exclusive chair", "Get (Robux)"
+	end
+	if price <= 0 then
+		return "Claim the " .. chairName .. " chair (free)", "Claim"
+	end
+	return "Buy the " .. chairName .. " chair", "Buy $" .. NumberFormat.commas(price)
+end
+
+local function wireDisplay(display, promptPart)
+	local chairName = display.Name
+	if CHAIR_NAMES[chairName] == nil then
+		return -- not a chair display
+	end
+
+	-- Prefer the ProximityPrompt YOU placed (on the part or anywhere in the
+	-- model). The script only wires it up — it never touches your text.
+	local prompt = promptPart:FindFirstChildOfClass("ProximityPrompt")
+		or display:FindFirstChildWhichIsA("ProximityPrompt", true)
+	local userPlaced = prompt ~= nil
+
+	if not userPlaced then
+		prompt = Instance.new("ProximityPrompt")
+		prompt.Name = "BuyPrompt"
+		prompt.ObjectText, prompt.ActionText = fallbackPromptText(chairName)
+	end
+
+	prompt.RequiresLineOfSight = false
+	prompt.MaxActivationDistance = 20
+	prompt.Exclusivity = Enum.ProximityPromptExclusivity.OnePerButton
+
+	if prompt:GetAttribute("ChairBuyBound") ~= true then
+		prompt:SetAttribute("ChairBuyBound", true)
+		prompt.Triggered:Connect(function(plr)
+			-- Cash chairs charge in-game cash; "Gamepass" chairs
+			-- (HackerChair / SpacialMist / PinkVortex) and VIPChair prompt
+			-- the Robux gamepass purchase (handled in processBuy).
+			processBuy(plr, chairName)
+		end)
+	end
+
+	if not userPlaced then
+		prompt.Parent = promptPart
+	end
+end
+
 local function setupDisplayChairs()
 	if not DISPLAY then return end
 	for _, display in ipairs(DISPLAY:GetChildren()) do
 		if display:IsA("Model") then
-			local chairName = display.Name
 			local promptPart = display.PrimaryPart or display:FindFirstChildWhichIsA("BasePart")
 			if promptPart then
-			local prompt = promptPart:FindFirstChild("BuyPrompt") or Instance.new("ProximityPrompt")
-			prompt.Name = "BuyPrompt"
-			local isVipChair = type(CHAIR_NAMES[chairName]) == "string" and CHAIR_NAMES[chairName] == "VIP"
-			prompt.ObjectText = isVipChair and "Get the VIP " .. chairName .. " chair" or ("Buy " .. chairName)
-			prompt.ActionText = isVipChair and "Get VIP" or "Buy"
-				prompt.RequiresLineOfSight = false
-				prompt.MaxActivationDistance = 20
-				prompt.Exclusivity = Enum.ProximityPromptExclusivity.OnePerButton
-				prompt.Triggered:Connect(function(plr)
-					processBuy(plr, chairName)
-				end)
-				prompt.Parent = promptPart
+				wireDisplay(display, promptPart)
 			end
+		elseif display:IsA("BasePart") then
+			-- A bare part works too (name it like the chair).
+			wireDisplay(display, display)
 		end
 	end
 end
