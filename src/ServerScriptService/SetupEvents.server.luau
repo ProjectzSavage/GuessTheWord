@@ -53,6 +53,8 @@ local EVENT_NAMES = {
 	"MatchCancelled",   -- Server -> Client : countdown ended early (someone exited) -> full reset
 	"ClaimFreeReward",  -- Client -> Server : claim the free gift (favorite + group check done)
 	"FreeRewardResult", -- Server -> Client : (success, message) after a free gift claim
+	"SpectatorData",    -- Server -> Client : match state of a table (bank, live guesses, hearts)
+	"SpectatorGuess",   -- Client -> Server : a player's live in-progress guess (for spectators)
 }
 
 -- Idempotent: if the folder already exists, reuse it (don't wipe manual setup).

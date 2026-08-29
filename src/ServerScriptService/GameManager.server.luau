@@ -47,6 +47,8 @@ local RoundStart = Events:WaitForChild("RoundStart")
 local RoundEnd = Events:WaitForChild("RoundEnd")
 local GameOver = Events:WaitForChild("GameOver")
 local MatchCancelled = Events:WaitForChild("MatchCancelled")
+local SpectatorData = Events:WaitForChild("SpectatorData")
+local SpectatorGuess = Events:WaitForChild("SpectatorGuess")
 local OpponentState = Events:WaitForChild("OpponentState")
 local WrongGuess = Events:WaitForChild("WrongGuess")
 local PreloadClueImages = Events:WaitForChild("PreloadClueImages")
@@ -65,10 +67,13 @@ local START_COUNTDOWN = 3        -- 3..2..1 before the match begins
 -- Bot difficulty config. maxCash caps the cash-reward roll for that difficulty.
 -- The bot builds guesses from the WORD's own letters (permuting them), so it can
 -- actually solve; difficulty tunes speed/consistency.
+-- warmup: seconds the bot ALWAYS waits after a round starts before its first
+-- guess. Without it, Hard (fast thinkTime) could solve the round before the
+-- players even saw the board.
 local BOT_DIFFICULTIES = {
-	Easy =   { thinkTime = 1.4, guessChance = 0.6, maxCash = 100, name = "Easy" },
-	Medium = { thinkTime = 1.0, guessChance = 0.8, maxCash = 350, name = "Medium" },
-	Hard =   { thinkTime = 0.7, guessChance = 1.0, maxCash = 750, name = "Hard" },
+	Easy =   { thinkTime = 1.4, warmup = 4,   guessChance = 0.6, maxCash = 100, name = "Easy" },
+	Medium = { thinkTime = 1.0, warmup = 3,   guessChance = 0.8, maxCash = 350, name = "Medium" },
+	Hard =   { thinkTime = 0.7, warmup = 2.5, guessChance = 1.0, maxCash = 750, name = "Hard" },
 }
 local DEFAULT_DIFFICULTY = "Easy"
 local POLL_INTERVAL = 0.2        -- how often we poll seats for a sitting player
@@ -100,7 +105,7 @@ local TABLE_AREA = Workspace:WaitForChild("GameArea")
 -- guarantees every name is in scope everywhere. Functions NOT listed here have
 -- no forward references and keep normal `local function` definitions.
 local handleGuess, gameOver, startRound, startMatch, assignPlayer, releasePlayer,
-	handleMatchEndDramatics, despawnBot, awardMatchOutcome
+	handleMatchEndDramatics, despawnBot, awardMatchOutcome, publishSpectator
 
 
 -------------------------------------------------------------------------------
@@ -137,6 +142,9 @@ local function discoverTables()
 					matchActive = false,
 					countdownActive = false, -- pre-match 3..2..1 is running (exiting cancels)
 					matchGen = 0,           -- bumped on cancel; kills the running startMatch thread
+					liveGuesses = {},      -- seatIndex -> in-progress guess (spectators)
+					lastGuess = nil,       -- last submitted guess (spectators)
+					lastMarks = {},        -- index -> true where lastGuess matched the word
 					cooldownUntil = 0,      -- time before a fresh auto-match can start
 					cashPrize = 0,          -- rolled cash prize (awarded to the winner)
 					currentWord = nil,
@@ -225,6 +233,49 @@ local function broadcastHearts(tableState)
 			end
 		end
 	end
+	publishSpectator(tableState) -- hearts changed: refresh the spectator view
+end
+
+-- Broadcast this table's match state to EVERY client (spectator HUD data).
+-- Participants simply ignore it — they render their own UI. Called whenever
+-- something spectators can see changes: match start/end, new round (bank),
+-- heart changes, submitted guesses, and live typing (SpectatorGuess).
+function publishSpectator(tableState)
+	local folder = tableState.folder
+	if not folder then
+		return
+	end
+	local bank = {}
+	for i, v in tableState.letterBank or {} do
+		bank[i] = v
+	end
+	local names = {}
+	for i, occ in tableState.occupants do
+		if occ == "BOT" then
+			names[i] = "Bot"
+		elseif occ and occ.Name then
+			names[i] = occ.Name
+		end
+	end
+	local marks = {}
+	for i, v in tableState.lastMarks or {} do
+		marks[i] = v
+	end
+	local guesses = {}
+	for i, g in tableState.liveGuesses or {} do
+		guesses[i] = g
+	end
+	SpectatorData:FireAllClients({
+		id = folder.Name,
+		active = tableState.matchActive == true,
+		bank = bank,
+		wordLength = tableState.currentWord and #tableState.currentWord or 0,
+		guesses = guesses,
+		names = names,
+		hearts = { tableState.hearts[1] or 0, tableState.hearts[2] or 0 },
+		lastGuess = tableState.lastGuess,
+		lastMarks = marks,
+	})
 end
 
 local function notifyWaiting(tableState)
@@ -361,6 +412,9 @@ local function startBotLoop(tableState, seatIndex)
 	end
 
 	tableState.botConn = task.spawn(function()
+		-- Warmup: the bot never answers in the first seconds of a round
+		-- (a freshly started round must not be solved instantly).
+		task.wait(diff.warmup or thinkTime)
 		while tableState.botActive do
 			task.wait(thinkTime)
 			if not tableState.botActive then
@@ -418,6 +472,7 @@ function gameOver(tableState, winnerSeatIndex, extraRecipients)
 	tableState.cooldownUntil = os.clock() + 4
 	stopRound(tableState)
 	stopBot(tableState)
+	publishSpectator(tableState) -- match over: spectators lose the table
 
 	-- Update the Wins/Streak leaderboard BEFORE firing GameOver, so clients read
 	-- the fresh streak in their celebration. Also covers "opponent left
@@ -579,6 +634,7 @@ local function cancelCountdown(tableState, leaver)
 		HeartHUDManager.hide(leaver)
 		MatchCancelled:FireClient(leaver)
 	end
+	publishSpectator(tableState) -- cancelled: spectators lose the table
 end
 
 local function loseHeart(tableState, seatIndex, reason)
@@ -639,6 +695,16 @@ function handleGuess(tableState, seatIndex, guess)
 
 	local word = tableState.currentWord
 
+	-- Record the submission for spectators (last guess + correct spots).
+	tableState.lastGuess = guess
+	tableState.lastMarks = {}
+	for i = 1, math.min(#guess, #word) do
+		if string.sub(guess, i, i) == string.sub(word, i, i) then
+			tableState.lastMarks[i] = true
+		end
+	end
+	publishSpectator(tableState)
+
 	if guess == word then
 		-- Guesser is correct. Dramatic beat:
 		--   1) endRound fires "correct" -> clients hide the PuzzleArea.
@@ -689,6 +755,12 @@ function startRound(tableState)
 			RoundStart:FireClient(occ, wordLength, bankForClient(), entry.images)
 		end
 	end
+
+	-- Fresh spectator state for the new round (new bank, no guesses yet).
+	tableState.liveGuesses = {}
+	tableState.lastGuess = nil
+	tableState.lastMarks = {}
+	publishSpectator(tableState)
 
 	-- Start bot thinking if one is seated.
 	for i, occ in tableState.occupants do
@@ -1038,6 +1110,30 @@ LeaveSeat.OnServerEvent:Connect(function(player)
 				humanoid.Sit = false
 			end
 			releasePlayer(tableState, player)
+			return
+		end
+	end
+end)
+
+-- Live typing for spectators: a seated player reports their in-progress
+-- guess; the server stores it and re-broadcasts the table's state to all
+-- clients (spectators only ever see OTHER tables' data).
+SpectatorGuess.OnServerEvent:Connect(function(player, guess)
+	if not player then
+		return
+	end
+	if typeof(guess) ~= "string" then
+		return
+	end
+	guess = string.lower(string.gsub(guess, "[^%a]", ""))
+	if #guess > 13 then
+		guess = string.sub(guess, 1, 13)
+	end
+	for _, tableState in tableStates do
+		local seatIdx = seatOfPlayer(tableState, player)
+		if seatIdx and tableState.matchActive then
+			tableState.liveGuesses[seatIdx] = guess
+			publishSpectator(tableState)
 			return
 		end
 	end

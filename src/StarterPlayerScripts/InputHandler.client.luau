@@ -72,6 +72,7 @@ local QuickPlayRequest = Events:WaitForChild("QuickPlayRequest")
 local QuickPlayResult = Events:WaitForChild("QuickPlayResult")
 local CashReroll = Events:WaitForChild("CashReroll")
 local MatchCancelled = Events:WaitForChild("MatchCancelled")
+local SpectatorGuess = Events:WaitForChild("SpectatorGuess")
 
 -- UI references (fail loudly if the hierarchy is wrong - easy to debug).
 local GameUI = PlayerGui:WaitForChild("GameUI")
@@ -640,6 +641,15 @@ local function refreshSlots()
 	end
 end
 
+-- Live typing feed for spectators: the server stores this and re-broadcasts
+-- the table's state to everyone (so other tables' spectators see it in real
+-- time). Only send during an actual match.
+local function pushLiveGuess()
+	if matchInProgress then
+		SpectatorGuess:FireServer(currentGuess)
+	end
+end
+
 -- Restore a used bank tile matching `letter` (un-gray it) so it can be reused.
 local function restoreTileFor(letter)
 	for tile, l in pairs(buttonMap) do
@@ -714,6 +724,7 @@ local function removeLetterAt(index)
 		flyLetterBack(ch, fromSlot, toTile)
 	end
 	refreshSlots()
+	pushLiveGuess()
 end
 
 local function buildSlots()
@@ -834,6 +845,7 @@ local function tryAppend(letter)
 		return nil
 	end
 	currentGuess = currentGuess .. letter
+	pushLiveGuess()
 	return #currentGuess
 end
 
@@ -869,6 +881,7 @@ local function setGuessAt(index, ch)
 	currentGuess = string.sub(currentGuess, 1, index - 1)
 		.. ch
 		.. string.sub(currentGuess, index + 1)
+	pushLiveGuess()
 end
 
 -- Place a revealed letter at its CORRECT index, animating from a matching bank
@@ -1050,6 +1063,7 @@ local function backspace()
 	if #currentGuess > 0 then
 		currentGuess = string.sub(currentGuess, 1, -2)
 		refreshSlots()
+		pushLiveGuess()
 	end
 end
 
@@ -1299,6 +1313,7 @@ end
 RoundStart.OnClientEvent:Connect(function(length, letterBank, images)
 	wordLength = length
 	currentGuess = ""
+	pushLiveGuess() -- clear the spectator's view of our guess for the new round
 	roundActive = true
 	timerMax = 0
 	-- The round is now live: lock the player into their chair.
@@ -1634,9 +1649,9 @@ local function showCelebration(youWon, isDraw, isBotMatch)
 			showPauseScreen()
 		else
 			-- Loser (their character was just respawned back to spawn) or a
-			-- human match: no pause overlay — straight back to the
-			-- interaction UI so they can re-sit / pick a bot again.
-			setWaitingUI(true)
+			-- human match: no pause overlay, no PlayVsBot — straight back to
+			-- the lobby so QuickPlay is immediately available.
+			enterLobby()
 		end
 	end)
 end
