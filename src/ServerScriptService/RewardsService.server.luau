@@ -153,6 +153,36 @@ local function markClaimed(player, id, grant)
 end
 
 -------------------------------------------------------------------------------
+-- FREE GIFT (in-world part with a ProximityPrompt, tagged FreeGift)
+-- The client verifies the favorite + group-join requirements and fires
+-- ClaimFreeReward; the server re-checks group membership and grants the
+-- one-time reward (in-memory claim state, like the other rewards).
+-------------------------------------------------------------------------------
+local FREE_GIFT_ID = "free_gift"
+local ClaimFreeReward  = ensureEvent("ClaimFreeReward")
+local FreeRewardResult = ensureEvent("FreeRewardResult")
+
+ClaimFreeReward.OnServerEvent:Connect(function(player)
+	if not player then
+		return
+	end
+	local data = ensureData(player)
+	if data.claimed[FREE_GIFT_ID] then
+		FreeRewardResult:FireClient(player, false, "You already claimed the free gift!")
+		return
+	end
+	local ok, inGroup = pcall(function()
+		return player:IsInGroup(GROUP_ID)
+	end)
+	if not (ok and inGroup) then
+		FreeRewardResult:FireClient(player, false, "Join the group to claim the free gift!")
+		return
+	end
+	markClaimed(player, FREE_GIFT_ID, { cash = 1000, powerup = "Word", uses = 1 })
+	FreeRewardResult:FireClient(player, true, "+$1,000 + 1 Word Reveal")
+end)
+
+-------------------------------------------------------------------------------
 -- SOCIAL (follow) + READINESS
 -------------------------------------------------------------------------------
 local followCache = {}

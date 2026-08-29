@@ -46,6 +46,7 @@ local OpponentHeartUpdate = Events:WaitForChild("OpponentHeartUpdate")
 local RoundStart = Events:WaitForChild("RoundStart")
 local RoundEnd = Events:WaitForChild("RoundEnd")
 local GameOver = Events:WaitForChild("GameOver")
+local MatchCancelled = Events:WaitForChild("MatchCancelled")
 local OpponentState = Events:WaitForChild("OpponentState")
 local WrongGuess = Events:WaitForChild("WrongGuess")
 local PreloadClueImages = Events:WaitForChild("PreloadClueImages")
@@ -134,6 +135,8 @@ local function discoverTables()
 					occupants = {},        -- seatIndex -> Player | "BOT"
 					hearts = {},           -- seatIndex -> number
 					matchActive = false,
+					countdownActive = false, -- pre-match 3..2..1 is running (exiting cancels)
+					matchGen = 0,           -- bumped on cancel; kills the running startMatch thread
 					cooldownUntil = 0,      -- time before a fresh auto-match can start
 					cashPrize = 0,          -- rolled cash prize (awarded to the winner)
 					currentWord = nil,
@@ -404,8 +407,11 @@ end
 -------------------------------------------------------------------------------
 -- ROUND / MATCH FLOW
 -------------------------------------------------------------------------------
-function gameOver(tableState, winnerSeatIndex)
+function gameOver(tableState, winnerSeatIndex, extraRecipients)
 	-- winnerSeatIndex = nil means a draw (both ran out of hearts on a timeout).
+	-- extraRecipients: Players who already left the table (removed from
+	-- occupants before this call) and must still receive GameOver so their
+	-- clients reset (camera release, jump unlock, lobby UI).
 	tableState.matchActive = false
 	-- Give the pause-menu replay control for a few seconds (so re-seating right
 	-- after game-over doesn't auto-start a fresh match underneath it).
@@ -447,6 +453,21 @@ function gameOver(tableState, winnerSeatIndex)
 				end
 			end
 			OpponentState:FireClient(occ, false) -- hide the toggle; game is over
+		end
+	end
+
+	-- Players who left the table were removed from occupants above, so the
+	-- loop never reaches them: fire GameOver to them too (as a loser).
+	for _, extra in extraRecipients or {} do
+		if extra and extra.Parent then
+			if winnerSeatIndex == nil then
+				GameOver:FireClient(extra, "", false, true, isBotMatch) -- draw
+			else
+				local winnerName = tableState.occupants[winnerSeatIndex] ~= "BOT"
+					and (tableState.occupants[winnerSeatIndex] :: Player).Name
+					or "Bot"
+				GameOver:FireClient(extra, winnerName, false, false, isBotMatch)
+			end
 		end
 	end
 
@@ -533,6 +554,30 @@ function despawnBot(tableState)
 		if occ == "BOT" then
 			tableState.occupants[i] = nil
 		end
+	end
+end
+
+-- Cancel a match while its pre-match countdown is still running: NO winner,
+-- NO awards, everything back to normal. The leaver's client gets
+-- MatchCancelled (releases the table camera, back to the lobby); the
+-- remaining seated player(s) go back to the waiting state.
+local function cancelCountdown(tableState, leaver)
+	tableState.matchActive = false
+	tableState.countdownActive = false
+	tableState.matchGen = (tableState.matchGen or 0) + 1 -- kills the startMatch thread
+	tableState.cooldownUntil = os.clock() + 2
+	stopRound(tableState)
+	stopBot(tableState)
+	despawnBot(tableState)
+	for _, occ in tableState.occupants do
+		if occ ~= "BOT" and occ then
+			HeartHUDManager.hide(occ)
+			OpponentState:FireClient(occ, true) -- seated & waiting again
+		end
+	end
+	if leaver and leaver.Parent then
+		HeartHUDManager.hide(leaver)
+		MatchCancelled:FireClient(leaver)
 	end
 end
 
@@ -790,6 +835,7 @@ end
 
 function startMatch(tableState)
 	tableState.matchActive = true
+	local gen = tableState.matchGen or 0
 	tableState.hearts[1] = HEARTS_PER_PLAYER
 	tableState.hearts[2] = HEARTS_PER_PLAYER
 	broadcastHearts(tableState) -- also reveals the above-head hearts
@@ -798,11 +844,20 @@ function startMatch(tableState)
 	-- Re-broadcast hearts shortly after (and again after the cash roll) so the
 	-- bot's above-head hearts reliably appear/update, especially on rematch.
 	task.delay(0.5, function()
-		broadcastHearts(tableState)
+		if tableState.matchGen == gen and tableState.matchActive then
+			broadcastHearts(tableState)
+		end
 	end)
 
-	-- 3..2..1 countdown before the match begins.
+	-- 3..2..1 countdown before the match begins. The player can still jump
+	-- out during it — that CANCELS the match for everyone (see
+	-- cancelCountdown). Once the countdown finishes, the match is committed.
+	tableState.countdownActive = true
 	for i = START_COUNTDOWN, 1, -1 do
+		if tableState.matchGen ~= gen or not tableState.matchActive then
+			tableState.countdownActive = false
+			return -- cancelled: someone left their seat mid-countdown
+		end
 		for _, occ in tableState.occupants do
 			if occ ~= "BOT" and occ then
 				Countdown:FireClient(occ, i)
@@ -810,6 +865,7 @@ function startMatch(tableState)
 		end
 		task.wait(1)
 	end
+	tableState.countdownActive = false
 
 	-- Cash reroll animation plays after the countdown. The round only starts
 	-- AFTER the roll finishes (and cash is awarded).
@@ -893,13 +949,23 @@ function assignPlayer(tableState, seatIndex, player)
 end
 
 function releasePlayer(tableState, player)
+	-- Leaving during the pre-match countdown CANCELS the match for everyone
+	-- (back to normal), instead of awarding the opponent a forfeit win.
+	if tableState.countdownActive then
+		local seat = seatOfPlayer(tableState, player)
+		if seat then
+			tableState.occupants[seat] = nil
+		end
+		cancelCountdown(tableState, player)
+		return
+	end
 	-- Ignore leaving while a match is running except a forfeit/quit.
 	if tableState.matchActive then
 		-- A real player left mid-match: give the match to the opponent.
 		local seat = seatOfPlayer(tableState, player)
 		if seat then
 			tableState.occupants[seat] = nil
-			gameOver(tableState, opponentSeat(seat))
+			gameOver(tableState, opponentSeat(seat), { player })
 		end
 		return
 	end

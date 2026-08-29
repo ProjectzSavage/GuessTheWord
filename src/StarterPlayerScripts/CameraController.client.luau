@@ -159,6 +159,12 @@ Events:WaitForChild("GameOver").OnClientEvent:Connect(function()
 	stopFocus()
 end)
 
+-- On a cancelled match (someone left during the countdown) release it too,
+-- so the leaver is never stuck on the table view.
+Events:WaitForChild("MatchCancelled").OnClientEvent:Connect(function()
+	stopFocus()
+end)
+
 -- If the character dies/respawns mid-game, drop the camera gracefully.
 player.CharacterAdded:Connect(function()
 	if focused then

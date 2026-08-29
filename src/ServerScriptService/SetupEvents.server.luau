@@ -50,6 +50,9 @@ local EVENT_NAMES = {
 	"PurchaseSuccess",  -- Server -> Client : Robux purchase completed (confetti + sound)
 	"RequestChairSync", -- Client -> Server : ask for a fresh chair sync
 	"StealRequest",     -- Client -> Server : thief clicks a steal button (victimUserId)
+	"MatchCancelled",   -- Server -> Client : countdown ended early (someone exited) -> full reset
+	"ClaimFreeReward",  -- Client -> Server : claim the free gift (favorite + group check done)
+	"FreeRewardResult", -- Server -> Client : (success, message) after a free gift claim
 }
 
 -- Idempotent: if the folder already exists, reuse it (don't wipe manual setup).

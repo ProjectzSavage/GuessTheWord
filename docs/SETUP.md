@@ -166,6 +166,7 @@ ServerScriptService
 | `src/ServerScriptService/TheftService.server.luau`              | `ServerScriptService > Scripts` | Script   |
 | `src/StarterPlayerScripts/SpeechBubble.client.luau`             | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/StealPromptUI.client.luau`            | `StarterPlayerScripts`      | LocalScript |
+| `src/StarterPlayerScripts/FreeRewards.client.luau`              | `StarterPlayerScripts`      | LocalScript |
 
 > **Tip:** For each file, right-click the target container in Studio →
 > **Insert Object** → choose the right type, name it, then paste the file's

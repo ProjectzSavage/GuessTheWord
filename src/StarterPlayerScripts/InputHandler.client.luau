@@ -70,6 +70,8 @@ local PurchasePowerup = Events:WaitForChild("PurchasePowerup")
 local LeaveSeat = Events:WaitForChild("LeaveSeat")
 local QuickPlayRequest = Events:WaitForChild("QuickPlayRequest")
 local QuickPlayResult = Events:WaitForChild("QuickPlayResult")
+local CashReroll = Events:WaitForChild("CashReroll")
+local MatchCancelled = Events:WaitForChild("MatchCancelled")
 
 -- UI references (fail loudly if the hierarchy is wrong - easy to debug).
 local GameUI = PlayerGui:WaitForChild("GameUI")
@@ -1627,11 +1629,13 @@ local function showCelebration(youWon, isDraw, isBotMatch)
 		CelebrationText.TextColor3 = Color3.new(1, 1, 1)
 		slideTopBarOut()
 		setCinematic(0)
-		if isBotMatch then
+		if isBotMatch and youWon and not isDraw then
+			-- Winner stays in the chair: "Play vs Bot again" pause screen.
 			showPauseScreen()
 		else
-			-- Not a bot match: give the player the interaction UI back so they're
-			-- never stuck (they can re-sit / pick a bot again).
+			-- Loser (their character was just respawned back to spawn) or a
+			-- human match: no pause overlay — straight back to the
+			-- interaction UI so they can re-sit / pick a bot again.
 			setWaitingUI(true)
 		end
 	end)
@@ -1654,6 +1658,35 @@ end)
 
 OpponentState.OnClientEvent:Connect(function(waiting)
 	setWaitingUI(waiting)
+end)
+
+-- Match cancelled (someone left during the countdown): full reset for the
+-- local player — camera release is handled by CameraController on the same
+-- event; here we restore the lobby UI.
+MatchCancelled.OnClientEvent:Connect(function()
+	roundActive = false
+	matchInProgress = false
+	celebrationActive = false
+	lockJump(false)
+	hidePauseScreen()
+	if CelebrationOverlay then
+		CelebrationOverlay.Visible = false
+	end
+	if CelebrationText then
+		CelebrationText.Visible = false
+	end
+	hideCountdown()
+	hideFrame(PuzzleArea)
+	slideTopBarOut()
+	setCinematic(0)
+	enterLobby()
+end)
+
+-- Countdown is over and the cash roll is playing: the match is committed, so
+-- the player can no longer bail out of the chair by jumping. (RoundStart
+-- re-locks too, but the roll plays BEFORE the round starts.)
+CashReroll.OnClientEvent:Connect(function()
+	lockJump(true)
 end)
 
 -------------------------------------------------------------------------------
