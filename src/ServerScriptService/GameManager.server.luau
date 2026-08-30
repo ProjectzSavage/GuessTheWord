@@ -480,12 +480,18 @@ function gameOver(tableState, winnerSeatIndex, extraRecipients)
 	-- winner), so they win exactly like a normal victory.
 	awardMatchOutcome(tableState, winnerSeatIndex)
 
-	-- Was this match against a bot? (drives the "Play vs Bot again" pause button)
-	local isBotMatch = false
-	for _, occ in tableState.occupants do
-		if occ == "BOT" then
-			isBotMatch = true
-			break
+	-- Was this match against a bot? Use the type locked in at startMatch
+	-- (fall back to a live scan if the flag was never set). This drives the
+	-- "Play vs Bot again" pause button AND the quest system (bot wins must
+	-- never count as friend wins).
+	local isBotMatch = tableState.wasBotMatch
+	if isBotMatch == nil then
+		isBotMatch = false
+		for _, occ in tableState.occupants do
+			if occ == "BOT" then
+				isBotMatch = true
+				break
+			end
 		end
 	end
 	local difficulty = isBotMatch and (tableState.botDifficulty or "Easy") or nil
@@ -908,6 +914,15 @@ end
 function startMatch(tableState)
 	tableState.matchActive = true
 	local gen = tableState.matchGen or 0
+	-- Lock in the match type NOW (a bot seat can clear mid-match; the type
+	-- must not change — quests rely on this to split bot vs friend wins).
+	tableState.wasBotMatch = false
+	for _, occ in tableState.occupants do
+		if occ == "BOT" then
+			tableState.wasBotMatch = true
+			break
+		end
+	end
 	tableState.hearts[1] = HEARTS_PER_PLAYER
 	tableState.hearts[2] = HEARTS_PER_PLAYER
 	broadcastHearts(tableState) -- also reveals the above-head hearts

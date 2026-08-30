@@ -82,6 +82,30 @@ local BOARDS = {
 }
 
 -------------------------------------------------------------------------------
+-- HEADSHOTS (Players:GetUserThumbnailAsync — works everywhere, cached)
+-------------------------------------------------------------------------------
+local headshotCache = {} -- userId -> image url
+
+local function getHeadshot(p)
+	local cached = headshotCache[p.UserId]
+	if cached then
+		return cached
+	end
+	local ok, cap = pcall(function()
+		return Players:GetUserThumbnailAsync(
+			p.UserId,
+			Enum.ThumbnailType.HeadShot,
+			Enum.ThumbnailSize.Size48x48
+		)
+	end)
+	local img = (ok and cap and cap.Image) or ""
+	if img ~= "" then
+		headshotCache[p.UserId] = img
+	end
+	return img
+end
+
+-------------------------------------------------------------------------------
 -- READ A PLAYER'S STAT
 -------------------------------------------------------------------------------
 local function getStatValue(p, from, stat)
@@ -177,7 +201,7 @@ local function refreshBoard(board, cfg)
 
 		local avatar = row:FindFirstChild("Avatar")
 		if avatar and avatar:IsA("ImageLabel") then
-			avatar.Image = "rbxassetid://" .. e.player.HeadshotImageId
+			avatar.Image = getHeadshot(e.player)
 		end
 
 		local nameLbl = row:FindFirstChild("Name")

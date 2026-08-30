@@ -179,6 +179,32 @@ end
 -- on the same single ProcessReceipt without overwriting each other.
 local ReceiptRouter = require(ServerStorage.Modules.ReceiptRouter)
 
+-- How much Robux this receipt cost. The receipt table's price field has
+-- varied across engine versions, so check the known fields first and fall
+-- back to a (cached) product lookup so the total never silently drops.
+local priceCache = {}
+local function productPriceInRobux(productId)
+	if priceCache[productId] then
+		return priceCache[productId]
+	end
+	local ok, info = pcall(function()
+		return MarketplaceService:GetProductInfoAsync(productId, Enum.InfoType.Product)
+	end)
+	local price = (ok and type(info) == "table") and tonumber(info.PriceInRobux) or 0
+	priceCache[productId] = price or 0
+	return priceCache[productId]
+end
+
+local function receiptSpent(receiptInfo)
+	local spent = tonumber(receiptInfo.PriceInRobux)
+		or tonumber(receiptInfo.CurrencySpent)
+		or tonumber(receiptInfo.Price)
+	if not spent or spent <= 0 then
+		spent = productPriceInRobux(receiptInfo.ProductId)
+	end
+	return spent or 0
+end
+
 local function onShopReceipt(receiptInfo, player)
 	local reward = DEV_PRODUCTS[receiptInfo.ProductId]
 	if not reward then
@@ -195,8 +221,14 @@ local function onShopReceipt(receiptInfo, player)
 	grantReward(player, reward)
 
 	-- Add the Robux spent to the rewards system (for robux-spent rewards).
-	if _G.RewardsAddRobuxSpent then
-		_G.RewardsAddRobuxSpent(player, receiptInfo.PriceInRobux)
+	local spent = receiptSpent(receiptInfo)
+	if spent > 0 then
+		if _G.RewardsAddRobuxSpent then
+			_G.RewardsAddRobuxSpent(player, spent)
+		end
+	else
+		warn("[ShopService] Could not determine price for product", receiptInfo.ProductId,
+			" — robux-spent total not updated.")
 	end
 
 	-- Client celebration: special purchase sound + confetti + notification.

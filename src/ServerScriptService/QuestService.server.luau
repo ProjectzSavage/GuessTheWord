@@ -51,10 +51,15 @@ local function getQuestDef(questId)
 end
 
 local function pickTwoQuests(seed)
+	-- Deterministic pick of 2 DISTINCT quests from the pool (seeded by time,
+	-- so everyone in a server session gets the same pair each cycle).
 	local pool = table.clone(QUEST_POOL)
-	local q1 = pool[1]
-	local q2 = pool[2]
-	return { q1.id, q2.id }
+	local rand = Random.new(math.floor(seed or os.time()))
+	local a = rand:NextInteger(1, #pool)
+	table.remove(pool, a)
+	local b = rand:NextInteger(1, #pool)
+	table.remove(pool, b)
+	return { pool[1].id, pool[2].id }
 end
 
 local function ensureState(player)

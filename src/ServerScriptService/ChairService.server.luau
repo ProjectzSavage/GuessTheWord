@@ -26,7 +26,6 @@ local MarketplaceService = game:GetService("MarketplaceService")
 
 local ChairsConfig = require(ReplicatedStorage:WaitForChild("ChairsConfig"))
 local PlayerPerks = require(ServerStorage.Modules.PlayerPerks)
-local NumberFormat = require(ReplicatedStorage:WaitForChild("NumberFormat"))
 local CHAIR_NAMES = ChairsConfig.Chairs
 local GAMEPASS_CHAIRS = ChairsConfig.GamepassChairs or {}
 local VIP_CHAIRS = ChairsConfig.VIPChairs or {}
@@ -214,38 +213,20 @@ end
 
 local DISPLAY = Workspace:FindFirstChild("DisplayChairs") or Workspace:WaitForChild("DisplayChairs", 10)
 
--- Text for the prompt the SCRIPT creates (fallback only — if you place your
--- own ProximityPrompt on the part, YOUR ObjectText/ActionText are kept).
-local function fallbackPromptText(chairName)
-	local price = CHAIR_NAMES[chairName]
-	if type(price) == "string" then
-		if price == "VIP" then
-			return "Get the VIP " .. chairName .. " chair", "Get VIP"
-		end
-		return chairName .. " is a Robux exclusive chair", "Get (Robux)"
-	end
-	if price <= 0 then
-		return "Claim the " .. chairName .. " chair (free)", "Claim"
-	end
-	return "Buy the " .. chairName .. " chair", "Buy $" .. NumberFormat.commas(price)
-end
-
+-- YOU place the display chairs + their ProximityPrompts in
+-- Workspace.DisplayChairs (name each part/model like the chair). The script
+-- finds YOUR prompt (on the part or anywhere in the model), wires it to the
+-- purchase, and never creates or rewrites prompt text.
 local function wireDisplay(display, promptPart)
 	local chairName = display.Name
 	if CHAIR_NAMES[chairName] == nil then
 		return -- not a chair display
 	end
 
-	-- Prefer the ProximityPrompt YOU placed (on the part or anywhere in the
-	-- model). The script only wires it up — it never touches your text.
 	local prompt = promptPart:FindFirstChildOfClass("ProximityPrompt")
 		or display:FindFirstChildWhichIsA("ProximityPrompt", true)
-	local userPlaced = prompt ~= nil
-
-	if not userPlaced then
-		prompt = Instance.new("ProximityPrompt")
-		prompt.Name = "BuyPrompt"
-		prompt.ObjectText, prompt.ActionText = fallbackPromptText(chairName)
+	if not prompt then
+		return false -- no prompt placed by the user: leave the display inert
 	end
 
 	prompt.RequiresLineOfSight = false
@@ -261,24 +242,28 @@ local function wireDisplay(display, promptPart)
 			processBuy(plr, chairName)
 		end)
 	end
-
-	if not userPlaced then
-		prompt.Parent = promptPart
-	end
+	return true
 end
 
 local function setupDisplayChairs()
 	if not DISPLAY then return end
+	local missing = {}
 	for _, display in ipairs(DISPLAY:GetChildren()) do
+		local handled
 		if display:IsA("Model") then
 			local promptPart = display.PrimaryPart or display:FindFirstChildWhichIsA("BasePart")
-			if promptPart then
-				wireDisplay(display, promptPart)
-			end
+			handled = promptPart and wireDisplay(display, promptPart)
 		elseif display:IsA("BasePart") then
 			-- A bare part works too (name it like the chair).
-			wireDisplay(display, display)
+			handled = wireDisplay(display, display)
 		end
+		if handled == false then
+			table.insert(missing, display.Name)
+		end
+	end
+	if #missing > 0 then
+		warn("[ChairService] DisplayChairs parts with no ProximityPrompt (buying disabled for them): "
+			.. table.concat(missing, ", "))
 	end
 end
 if DISPLAY then setupDisplayChairs() end

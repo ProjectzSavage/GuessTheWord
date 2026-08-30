@@ -98,6 +98,26 @@ end
 -------------------------------------------------------------------------------
 local pendingTheft = {} -- thiefUserId -> { victim = player, at = number }
 
+-- How much Robux this receipt cost (receipt price fields vary by engine
+-- version — fall back to a cached product lookup so the total never drops).
+local priceCache = {}
+local function receiptSpent(receiptInfo)
+	local spent = tonumber(receiptInfo.PriceInRobux)
+		or tonumber(receiptInfo.CurrencySpent)
+		or tonumber(receiptInfo.Price)
+	if not spent or spent <= 0 then
+		if not priceCache[receiptInfo.ProductId] then
+			local ok, info = pcall(function()
+				return MarketplaceService:GetProductInfoAsync(receiptInfo.ProductId, Enum.InfoType.Product)
+			end)
+			priceCache[receiptInfo.ProductId] = (ok and type(info) == "table")
+				and tonumber(info.PriceInRobux) or 0
+		end
+		spent = priceCache[receiptInfo.ProductId]
+	end
+	return spent or 0
+end
+
 local function onTheftReceipt(receiptInfo, thief)
 	local record = pendingTheft[thief.UserId]
 	if not record then
@@ -123,8 +143,14 @@ local function onTheftReceipt(receiptInfo, thief)
 	addCash(thief, amount)
 
 	-- Count it toward the thief's Total Robux spent (rewards system).
-	if _G.RewardsAddRobuxSpent then
-		_G.RewardsAddRobuxSpent(thief, receiptInfo.PriceInRobux)
+	local spent = receiptSpent(receiptInfo)
+	if spent > 0 then
+		if _G.RewardsAddRobuxSpent then
+			_G.RewardsAddRobuxSpent(thief, spent)
+		end
+	else
+		warn("[TheftService] Could not determine price for product", receiptInfo.ProductId,
+			" — robux-spent total not updated.")
 	end
 
 	notify(thief, "Heist Successful!", "You stole $" .. amount .. " from " .. victim.Name .. "!", "success")
