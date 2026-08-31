@@ -38,7 +38,38 @@ local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
 local GameUI = PlayerGui:WaitForChild("GameUI")
 local PuzzleArea = GameUI:WaitForChild("PuzzleArea")
-local InteractionFrame = GameUI:WaitForChild("InteractionFrame")
+
+-- The InteractionFrame was moved out of GameUI into the combined
+-- NotificationInteractionGUI ScreenGui (Frame > InteractionFrame). Tolerant
+-- lookup: old spot first, then the new combined GUI (recursive, so the
+-- wrapper depth doesn't matter).
+local function resolveInteractionFrame(): GuiObject?
+	local function scan()
+		local direct = GameUI:FindFirstChild("InteractionFrame")
+		if direct and direct:IsA("GuiObject") then
+			return direct :: GuiObject
+		end
+		local combined = PlayerGui:FindFirstChild("NotificationInteractionGUI")
+		if combined then
+			local found = combined:FindFirstChild("InteractionFrame", true)
+			if found and found:IsA("GuiObject") then
+				return found :: GuiObject
+			end
+		end
+		return nil
+	end
+	local frame = scan()
+	local startTime = os.clock()
+	while not frame and (os.clock() - startTime) < 10 do
+		frame = scan()
+		task.wait(0.1)
+	end
+	return frame
+end
+local InteractionFrame = resolveInteractionFrame()
+if not InteractionFrame then
+	error("HoverController: could not find InteractionFrame (checked GameUI and NotificationInteractionGUI)")
+end
 
 local ImageGrid = PuzzleArea:WaitForChild("ImageGrid")
 local ScrambledBank = PuzzleArea:WaitForChild("ScrambledBank")

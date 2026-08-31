@@ -2,6 +2,17 @@
 
 A fast-paced, 1v1 word guessing game in Roblox. Two players take turns picking letters and guessing words, with chairs, rewards, daily quests, exclusive gamepass chairs, notifications, dynamic effects, and special offers.
 
+## 📝 Game Description (paste into your Roblox game page)
+
+```
+Welcome to Guess The Word
+Can you guess the secret word?
+
+ Look at the clues
+ Unscramble the letters
+ First to guess it wins the cash!
+```
+
 ---
 
 ## 🛠️ Summary of Features & Fixes
@@ -15,7 +26,7 @@ A fast-paced, 1v1 word guessing game in Roblox. Two players take turns picking l
 - Smooth pop-in and dismiss scale animation at position without upward screen-slide.
 
 ### 2. Notifications with Upward Animation (`NotificationController.client.luau`)
-- Drives `NotificationGUI.Holder` with smooth **UPWARD** intro & dismissal animations.
+- Drives `NotificationInteractionGUI.Frame.Holder` with smooth **UPWARD** intro & dismissal animations.
 - Automatically handles game event alerts (victories, cash gains, purchases, quest completions).
 
 ### 3. Mutual Exclusivity: Opening Shop Automatically Closes Rewards

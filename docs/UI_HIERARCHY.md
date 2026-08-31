@@ -41,23 +41,6 @@ StarterGui
     │   ├── AnswerBox  (Frame)   -- letter slots are built here as ImageLabels
     │   └── ScrambledBank  (Frame)   letter tiles are created here as ImageButtons
     │
-    ├── InteractionFrame  (Frame)  lower area
-    │   ├── PlayVsBotButton  (TextButton)   "Play vs Bot", Visible = false initially
-    │   ├── QuickPlay  (TextButton)   "Quick Play" (dup of PlayVsBotButton), Visible = false initially
-    │   ├── DifficultySelector  (Frame, Visible=false)  shown when PlayVsBot/Rematch is clicked
-    │   │     ├── TitleLbl  (TextLabel)   "Choose Difficulty"
-    │   │     ├── Difficulties  (Frame)   (the difficulty buttons live here)
-    │   │     │     ├── EasyBtn   (TextButton)  "Easy — Max $100"
-    │   │     │     ├── MediumBtn (TextButton)  "Medium — Max $350"
-    │   │     │     └── HardBtn   (TextButton)  "Hard — Max $750"
-    │   │     ├── BackBtn   (TextButton)  "Back" (optional, returns to PlayVsBot)
-    │   │     └── CloseBtn  (TextButton)  "Leave Chair" (cancels + leaves seat)
-    │   └── QuickPlaySelector  (Frame, Visible=false)  shown when QuickPlay is clicked
-    │         ├── Mode  (Frame)   (the two mode buttons live here)
-    │         │     ├── Bot  (TextButton)   "Bot" — tp to an EMPTY table, opens DifficultySelector
-    │         │     └── Player  (TextButton) "Player" — tp to a table with a player already waiting
-    │         └── CloseBtn  (TextButton)  (optional; just closes the selector, you stay seated)
-    │
     ├── StatsPanel  (Frame)         top-left; shows Cash & Wins HUD
     │   ├── UIListLayout            Vertical, Padding 4
     │   ├── CashRow  (Frame)
@@ -77,6 +60,46 @@ StarterGui
         ├── PauseLabel  (TextLabel)      "Waiting for rematch..."
         └── RematchButton  (TextButton)  "Play vs Bot again" (fires a new bot match)
 ```
+
+## NotificationInteractionGUI (combined notifications + lobby ScreenGui)
+
+The notifications `Holder` and the lobby `InteractionFrame` now live in ONE
+ScreenGui (they used to be the separate `NotificationGUI` ScreenGui and a
+`GameUI` child, respectively). Both keep their exact internal hierarchy —
+only their parent changed. The scripts find both frames by name anywhere
+under this ScreenGui, so the extra `Frame` wrapper level is fine:
+
+```
+StarterGui
+└── NotificationInteractionGUI  (ScreenGui)
+    └── Frame  (Frame)          shared parent; size/anchor it to cover both
+        ├── Holder  (Frame)     -- notifications (NotificationController)
+        │     ├── UIAspectRatioConstraint
+        │     ├── UIListLayout
+        │     ├── UIPadding
+        │     └── NotificationTemplate (Frame)  Icon, bg, MessageLabel, TitleLabel
+        └── InteractionFrame  (Frame)  lower area
+              ├── PlayVsBotButton  (TextButton)   "Play vs Bot", Visible = false initially
+              ├── QuickPlay  (TextButton)   "Quick Play" (dup of PlayVsBotButton), Visible = false initially
+              ├── DifficultySelector  (Frame, Visible=false)  shown when PlayVsBot/Rematch is clicked
+              │     ├── TitleLbl  (TextLabel)   "Choose Difficulty"
+              │     ├── Difficulties  (Frame)   (the difficulty buttons live here)
+              │     │     ├── EasyBtn   (TextButton)  "Easy — Max $100"
+              │     │     ├── MediumBtn (TextButton)  "Medium — Max $350"
+              │     │     └── HardBtn   (TextButton)  "Hard — Max $750"
+              │     ├── BackBtn   (TextButton)  "Back" (optional, returns to PlayVsBot)
+              │     └── CloseBtn  (TextButton)  "Leave Chair" (cancels + leaves seat)
+              └── QuickPlaySelector  (Frame, Visible=false)  shown when QuickPlay is clicked
+                    ├── Mode  (Frame)   (the two mode buttons live here)
+                    │     ├── Bot  (TextButton)   "Bot" — tp to an EMPTY table, opens DifficultySelector
+                    │     └── Player  (TextButton) "Player" — tp to a table with a player already waiting
+                    └── CloseBtn  (TextButton)  (optional; just closes the selector, you stay seated)
+```
+
+> Position `Frame` (Scale + AnchorPoint) where you want the pair to sit, then
+> position `Holder` and `InteractionFrame` inside it. The in-script
+> slide/pop animations only touch the child frames' own `Position`/`UIScale`,
+> so the shared parent doesn't fight them.
 
 **QuickPlay behavior (InputHandler):**
 * Available from spawn (lobby) — no need to sit first.
@@ -176,7 +199,7 @@ Buy chairs with Cash via ProximityPrompts, then equip them in the Inventory.
 ReplicatedStorage
 └── Chairs  (Folder)           -- the chair Models (Gamer, ProGamer, SuperFire, ...)
 Workspace
-└── DisplayChairs  (Folder)    -- display chairs; each gets a ProximityPrompt
+└── DisplayChairs  (Folder)    -- display chairs; YOU place a ProximityPrompt inside each one
 GameUI
 └── ChairInvPanel  (Frame, Visible=false)   -- chair inventory (grid + 3D previews)
     ├── Grid  (ScrollingFrame)
@@ -197,8 +220,11 @@ on top of it.
 
 - Prices come from `ReplicatedStorage.ChairsConfig` (Wooden = 0, Broken = 500,
   ..., Gamer = 15000).
-- **Buy:** a ProximityPrompt is auto-added to each display chair; triggering it
-  deducts Cash and adds the chair to the player's owned list.
+- **Buy:** put your own ProximityPrompt inside each display chair part (the
+  script only binds it, it never creates one). Triggering it deducts Cash and
+  adds the chair to the player's owned list — for the 3 Robux chairs
+  (HackerChair, SpacialMist, PinkVortex) and VIPChair it prompts the Robux
+  gamepass instead.
 - **Equip:** the Inventory lists owned chairs; clicking EQUIP fires `EquipChair`.
 - **Sit:** when a player sits on a game seat, the seat's chair model is replaced
   with their equipped chair (Wooden = default).

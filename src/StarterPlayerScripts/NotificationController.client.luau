@@ -8,9 +8,11 @@
 	  * Intro: Cards slide UP into position while scaling in.
 	  * Outro: Cards slide UPWARDS towards the top of the screen while fading out.
 
-	HIERARCHY:
-		NotificationGUI (ScreenGui)
-		└── Holder (Frame)
+	HIERARCHY (the notifications Holder and the lobby InteractionFrame now
+	share ONE ScreenGui; only the Holder matters to this script):
+		NotificationInteractionGUI (ScreenGui)
+		    └── Frame (Frame)
+		        └── Holder (Frame)
 		    ├── UIAspectRatioConstraint (UIAspectRatioConstraint)
 		    ├── UIListLayout (UIListLayout)
 		    ├── UIPadding (UIPadding)
@@ -30,22 +32,36 @@ local SFX = require(ReplicatedStorage:WaitForChild("SFX"))
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- Safely resolve NotificationGUI
-local function resolveNotificationGui(): Instance?
-	local target = playerGui:FindFirstChild("NotificationGUI")
-		or playerGui:FindFirstChild("NotificationGui")
-		or playerGui:FindFirstChild("Notifications")
-	if target then return target end
+-- Safely resolve the notifications ScreenGui.
+-- Current layout: the notifications Holder and the lobby InteractionFrame
+-- share ONE ScreenGui:  NotificationInteractionGUI (ScreenGui) > Frame > Holder
+-- (older layouts with a bare NotificationGUI are still found as fallback).
+local NOTIF_GUI_NAMES = { "NotificationInteractionGUI", "NotificationGUI", "NotificationGui", "Notifications" }
 
+local function scanForNotifGui(): Instance?
+	for _, name in ipairs(NOTIF_GUI_NAMES) do
+		local found = playerGui:FindFirstChild(name)
+		if found then return found end
+	end
 	local gameUI = playerGui:FindFirstChild("GameUI")
 	if gameUI then
-		target = gameUI:FindFirstChild("NotificationGUI") or gameUI:FindFirstChild("Holder")
-		if target then return target end
+		for _, name in ipairs(NOTIF_GUI_NAMES) do
+			local inner = gameUI:FindFirstChild(name)
+			if inner then return inner end
+		end
+		local bare = gameUI:FindFirstChild("Holder")
+		if bare then return bare end
 	end
+	return nil
+end
+
+local function resolveNotificationGui(): Instance?
+	local target = scanForNotifGui()
+	if target then return target end
 
 	local startTime = os.clock()
 	while (os.clock() - startTime) < 8 do
-		target = playerGui:FindFirstChild("NotificationGUI") or playerGui:FindFirstChild("NotificationGui")
+		target = scanForNotifGui()
 		if target then return target end
 		task.wait(0.1)
 	end
@@ -109,23 +125,32 @@ local NOTIFICATION_COLORS = {
 local function ensureFallbackGui()
 	if holder and template then return end
 
-	local fallbackGui = playerGui:FindFirstChild("NotificationGUI")
+	local fallbackGui = playerGui:FindFirstChild("NotificationInteractionGUI")
+		or playerGui:FindFirstChild("NotificationGUI")
 	if not fallbackGui then
 		fallbackGui = Instance.new("ScreenGui")
-		fallbackGui.Name = "NotificationGUI"
+		fallbackGui.Name = "NotificationInteractionGUI"
 		fallbackGui.ResetOnSpawn = false
 		fallbackGui.DisplayOrder = 100
 		fallbackGui.Parent = playerGui
 	end
 
 	if not holder then
+		local container = fallbackGui:FindFirstChild("Frame")
+		if not container then
+			container = Instance.new("Frame")
+			container.Name = "Frame"
+			container.Size = UDim2.new(1, 0, 1, 0)
+			container.BackgroundTransparency = 1
+			container.Parent = fallbackGui
+		end
 		holder = Instance.new("Frame")
 		holder.Name = "Holder"
 		holder.AnchorPoint = Vector2.new(1, 0)
 		holder.Position = UDim2.new(0.98, 0, 0.05, 0)
 		holder.Size = UDim2.new(0.24, 0, 0.6, 0)
 		holder.BackgroundTransparency = 1
-		holder.Parent = fallbackGui
+		holder.Parent = container
 
 		local list = Instance.new("UIListLayout")
 		list.FillDirection = Enum.FillDirection.Vertical

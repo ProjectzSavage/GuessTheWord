@@ -22,7 +22,7 @@
 	* ROUND FLOW: on a correct answer the server hides the PuzzleArea, then the
 	  loser's heart leaves, then the next round reshores the puzzle.
 
-	REQUIRED UI (see docs/UI_HIERARCHY.md) - must exist in StarterGui.GameUI:
+	REQUIRED UI (see docs/UI_HIERARCHY.md) - must exist in StarterGui:
 		GameUI  (ScreenGui)
 		  ├── TopBar  (Frame)
 		  │     ├── OpponentHeartContainer (Folder)  Heart1/2/3 (ImageLabel)
@@ -33,8 +33,12 @@
 		  │     └── ScrambledBank (Frame)
 		  │           ├── UIGridLayout  (optional, recommended)
 		  │           └── TileTemplate  (ImageButton, optional, Visible=false)
-		  └── InteractionFrame  (Frame)
-		        └── PlayVsBotButton (TextButton)
+		-- InteractionFrame moved out of GameUI (see below)
+	NotificationInteractionGUI  (ScreenGui)  -- shares it with the notifications
+		  └── Frame  (Frame)
+		        ├── Holder  (Frame)           -- notifications (NotificationController)
+		        └── InteractionFrame  (Frame)
+		              └── PlayVsBotButton (TextButton)
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -94,7 +98,37 @@ local RevealWordPrice = RevealWordBtn and RevealWordBtn:FindFirstChild("PriceLbl
 
 -- Placeholder robux prices (later the price comes from the product id directly).
 local POWERUP_PRICE = { Letter = 10, Word = 25 }
-local InteractionFrame = GameUI:WaitForChild("InteractionFrame")
+-- The InteractionFrame was moved out of GameUI into the combined
+-- NotificationInteractionGUI ScreenGui (Frame > InteractionFrame), which it
+-- now shares with the notifications Holder. Tolerant lookup: old spot first,
+-- then the new combined GUI (recursive, so the wrapper depth doesn't matter).
+local function resolveInteractionFrame(): GuiObject?
+	local function scan()
+		local direct = GameUI:FindFirstChild("InteractionFrame")
+		if direct and direct:IsA("GuiObject") then
+			return direct :: GuiObject
+		end
+		local combined = PlayerGui:FindFirstChild("NotificationInteractionGUI")
+		if combined then
+			local found = combined:FindFirstChild("InteractionFrame", true)
+			if found and found:IsA("GuiObject") then
+				return found :: GuiObject
+			end
+		end
+		return nil
+	end
+	local frame = scan()
+	local startTime = os.clock()
+	while not frame and (os.clock() - startTime) < 10 do
+		frame = scan()
+		task.wait(0.1)
+	end
+	return frame
+end
+local InteractionFrame = resolveInteractionFrame()
+if not InteractionFrame then
+	error("InputHandler: could not find InteractionFrame (checked GameUI and NotificationInteractionGUI)")
+end
 local PlayVsBotButton = InteractionFrame:WaitForChild("PlayVsBotButton")
 -- Difficulty selector (inside InteractionFrame, shown when PlayVsBot is clicked).
 local DifficultySelector = InteractionFrame:FindFirstChild("DifficultySelector")

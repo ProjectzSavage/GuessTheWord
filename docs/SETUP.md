@@ -56,8 +56,10 @@ build it once. The full details are further down.
 
 1. **UI (`StarterGui`)** — build the `GameUI` ScreenGui from `docs/UI_HIERARCHY.md`:
    `TopBar`, `CountdownFrame` (+`CountdownLabel`), `PuzzleArea`
-   (`ImageGrid` with `Clue1..4`, `AnswerBox` Frame, `ScrambledBank`), and
-   `InteractionFrame` (+`PlayVsBotButton`).
+   (`ImageGrid` with `Clue1..4`, `AnswerBox` Frame, `ScrambledBank`).
+   Also build the combined `NotificationInteractionGUI` ScreenGui: one `Frame`
+   holding both the notifications `Holder` and `InteractionFrame`
+   (+`PlayVsBotButton`).
    - **Set top-level frame positions in Scale, not offset**, with AnchorPoints.
    - Set the 6 TopBar `HeartN.Image`s to your heart texture.
    - `AnswerBox` must be a **Frame** (not a TextBox).
@@ -179,8 +181,9 @@ ServerScriptService
 
 Build the exact tree in `docs/UI_HIERARCHY.md` **manually** in `StarterGui`:
 
-- `GameUI` ScreenGui with `TopBar`, `CountdownFrame`, `PuzzleArea`,
-  `InteractionFrame`.
+- `GameUI` ScreenGui with `TopBar`, `CountdownFrame`, `PuzzleArea`.
+- `NotificationInteractionGUI` ScreenGui with one `Frame` containing the
+  notifications `Holder` and the `InteractionFrame`.
 - `CountdownFrame` (Frame) + `CountdownLabel` (TextLabel) — the 3-2-1-GO! pulse
   overlay.
 - Heart `Folder`s with `ImageLabel`s named exactly `Heart1/2/3` (set each
