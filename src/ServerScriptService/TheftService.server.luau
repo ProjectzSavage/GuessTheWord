@@ -5,13 +5,15 @@
 	inside your "Scripts" folder).
 
 	PURPOSE
-	The SERVER authority for the cash-theft system. This script places a real
-	ProximityPrompt named "StealPrompt" on EVERY player's head (visible to all
-	players within 20 studs - the victim sees it too, but pressing it just
-	gets a friendly "can't steal yourself" toast). The ActionText shows the
-	victim's LIVE cash ("Steal $1,250"). When a thief activates it, this
-	script prompts a ROBUX dev-product purchase, tiered by how much cash the
-	victim is carrying:
+	The SERVER authority for the cash-theft system. The visible "Steal $X"
+	button is drawn CLIENT-side (StealPromptUI.client.luau) floating above
+	every OTHER player nearby - never above your own head (same design as the
+	GMC StealService; a server prompt on the victim's head would show for the
+	victim too, which is why it's a client button instead). When a thief
+	clicks it, their client fires StealRequest(victimUserId) and this script:
+	* In STUDIO: executes the steal DIRECTLY (no purchase) so you can test.
+	* In PRODUCTION: prompts a ROBUX dev-product purchase, tiered by how much
+	  cash the victim is carrying:
 
 		under $500   -> 3710136562
 		under $1,000 -> 3710136669
@@ -32,6 +34,7 @@ local Players = game:GetService("Players")
 local MarketplaceService = game:GetService("MarketplaceService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
+local RunService = game:GetService("RunService")
 
 local ReceiptRouter = require(ServerStorage.Modules.ReceiptRouter)
 
@@ -119,6 +122,27 @@ local function receiptSpent(receiptInfo)
 	return spent or 0
 end
 
+-- Shared execution (used by both the receipt path and the Studio shortcut).
+-- `spent` = Robux this heist cost (0 in Studio).
+local function executeTheft(thief, victim, spent)
+	-- Take the victim's CURRENT cash (it may have changed since the prompt).
+	local amount = getCash(victim)
+	if amount <= 0 then
+		notify(thief, "Heist Failed", victim.Name .. " has no cash left to take.", "warn")
+		return
+	end
+	addCash(victim, -amount)
+	addCash(thief, amount)
+
+	-- Count it toward the thief's Total Robux spent (rewards system).
+	if spent and spent > 0 and _G.RewardsAddRobuxSpent then
+		_G.RewardsAddRobuxSpent(thief, spent)
+	end
+
+	notify(thief, "Heist Successful!", "You stole $" .. amount .. " from " .. victim.Name .. "!", "success")
+	notify(victim, "Robbed!", "Someone stole $" .. amount .. " from you!", "warn")
+end
+
 local function onTheftReceipt(receiptInfo, thief)
 	local record = pendingTheft[thief.UserId]
 	if not record then
@@ -134,28 +158,12 @@ local function onTheftReceipt(receiptInfo, thief)
 		return
 	end
 
-	-- Take the victim's CURRENT cash (it may have changed since the prompt).
-	local amount = getCash(victim)
-	if amount <= 0 then
-		notify(thief, "Heist Failed", victim.Name .. " has no cash left to take.", "warn")
-		return
-	end
-	addCash(victim, -amount)
-	addCash(thief, amount)
-
-	-- Count it toward the thief's Total Robux spent (rewards system).
 	local spent = receiptSpent(receiptInfo)
-	if spent > 0 then
-		if _G.RewardsAddRobuxSpent then
-			_G.RewardsAddRobuxSpent(thief, spent)
-		end
-	else
+	if spent <= 0 then
 		warn("[TheftService] Could not determine price for product", receiptInfo.ProductId,
 			" — robux-spent total not updated.")
 	end
-
-	notify(thief, "Heist Successful!", "You stole $" .. amount .. " from " .. victim.Name .. "!", "success")
-	notify(victim, "Robbed!", "Someone stole $" .. amount .. " from you!", "warn")
+	executeTheft(thief, victim, spent)
 end
 
 for _, tier in ipairs(TIER_PRODUCTS) do
@@ -163,13 +171,18 @@ for _, tier in ipairs(TIER_PRODUCTS) do
 end
 
 -------------------------------------------------------------------------------
--- LEGACY REMOTE (kept for compatibility - the steal prompt is now the
--- server-side ProximityPrompt below; nothing fires this anymore).
+-- THEFT REQUEST (from StealPromptUI on the thief's client)
 -------------------------------------------------------------------------------
 local function attemptTheft(thief, victim)
 	local cash = getCash(victim)
 	if cash <= 0 then
 		notify(thief, "Steal", victim.Name .. " has no cash to steal!", "warn")
+		return
+	end
+	-- STUDIO shortcut (same as the GMC StealService): skip the Robux
+	-- purchase and execute the steal directly so you can test the flow.
+	if RunService:IsStudio() then
+		executeTheft(thief, victim, 0)
 		return
 	end
 	local tier = tierFor(cash)
@@ -186,75 +199,16 @@ StealRequest.OnServerEvent:Connect(function(thief, victimUserId)
 	if not victim or victim == thief then
 		return -- you can't steal from yourself
 	end
+	-- Anti-cheat sanity: the thief must actually be near the victim
+	-- (the button only renders within RADIUS studs, but never trust the
+	-- client).
+	local tHrp = thief.Character and thief.Character:FindFirstChild("HumanoidRootPart")
+	local vHrp = victim.Character and victim.Character:FindFirstChild("HumanoidRootPart")
+	if not tHrp or not vHrp then
+		return
+	end
+	if (tHrp.Position - vHrp.Position).Magnitude > 25 then
+		return
+	end
 	attemptTheft(thief, victim)
 end)
-
--------------------------------------------------------------------------------
--- STEAL PROMPTS (server-side ProximityPrompt on every player's head)
--- A real prompt (works even if a client script is missing/stale). It shows
--- for everyone nearby - including the victim (pressing it just gets a
--- friendly "you can't steal from yourself" toast). The ActionText always
--- shows the victim's LIVE cash.
--------------------------------------------------------------------------------
-local PROMPT_DISTANCE = 20
-
-local function updateStealPrompt(victim)
-	local character = victim.Character
-	local head = character and character:FindFirstChild("Head")
-	local prompt = head and head:FindFirstChild("StealPrompt")
-	if prompt and prompt:IsA("ProximityPrompt") then
-		prompt.ActionText = "Steal $" .. getCash(victim)
-	end
-end
-
-local function setupStealPrompt(victim)
-	local character = victim.Character
-	if not character then
-		return
-	end
-	local head = character:WaitForChild("Head", 5)
-	if not head then
-		return
-	end
-	local prompt = head:FindFirstChild("StealPrompt")
-	if not prompt then
-		prompt = Instance.new("ProximityPrompt")
-		prompt.Name = "StealPrompt"
-		prompt.ActionText = "Steal $" .. getCash(victim)
-		prompt.ObjectText = "Steal Cash"
-		prompt.MaxActivationDistance = PROMPT_DISTANCE
-		prompt.HoldDuration = 0
-		prompt.RequiresLineOfSight = false
-		prompt.Parent = head
-		prompt.Triggered:Connect(function(thief)
-			if thief == victim then
-				notify(thief, "Steal", "Nice try - you can't steal from yourself!", "warn")
-				return
-			end
-			attemptTheft(thief, victim)
-		end)
-	end
-	-- Keep the ActionText live with the victim's cash.
-	local function watchCash()
-		local ls = victim:FindFirstChild("leaderstats")
-		local cash = ls and ls:FindFirstChild("Cash")
-		if cash then
-			cash.Changed:Connect(function()
-				updateStealPrompt(victim)
-			end)
-		else
-			task.delay(1, watchCash)
-		end
-	end
-	watchCash()
-end
-
-Players.PlayerAdded:Connect(function(player)
-	player.CharacterAdded:Connect(function(character)
-		task.spawn(setupStealPrompt, player)
-	end)
-end)
-
-for _, player in ipairs(Players:GetPlayers()) do
-	task.spawn(setupStealPrompt, player)
-end
