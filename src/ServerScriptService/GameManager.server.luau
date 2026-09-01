@@ -36,6 +36,7 @@ local HeartHUDManager = require(ServerStorage.Modules.HeartHUDManager)
 local PlayerPerks = require(ServerStorage.Modules.PlayerPerks)
 local CashRerollFX = require(ServerStorage.Modules.CashRerollFX)
 local ReceiptRouter = require(ServerStorage.Modules.ReceiptRouter)
+local ProfileStore = require(ServerStorage.Modules.ProfileStore)
 
 local Events = ReplicatedStorage:WaitForChild("Events")
 local PlayVsBotRequest = Events:WaitForChild("PlayVsBotRequest")
@@ -1685,6 +1686,41 @@ end
 
 Players.PlayerAdded:Connect(function(player)
 	ensureLeaderstats(player)
+
+	-- Restore the persisted hidden Stats (Streak + powerup uses) from the
+	-- profile and keep the profile's "stats" section in sync with the live
+	-- IntValues (captured on every save). Deferred so any other PlayerAdded
+	-- handler (e.g. the starter pack's grant) has run first; max() keeps any
+	-- grant made this join safe either way.
+	task.defer(function()
+		local savedStats = ProfileStore.load(player.UserId).stats
+		if type(savedStats) == "table" then
+			local stats = player:FindFirstChild("Stats")
+			if stats then
+				for _, name in ipairs({ "Streak", "RevealLetterUses", "RevealWordUses" }) do
+					local val = stats:FindFirstChild(name)
+					local saved = tonumber(savedStats[name])
+					if val and saved and saved > val.Value then
+						val.Value = math.floor(saved)
+					end
+				end
+			end
+		end
+		ProfileStore.setSection(player.UserId, "stats", function()
+			local s = player:FindFirstChild("Stats")
+			if not s then
+				return nil
+			end
+			local out = {}
+			for _, name in ipairs({ "Streak", "RevealLetterUses", "RevealWordUses" }) do
+				local v = s:FindFirstChild(name)
+				if v then
+					out[name] = v.Value
+				end
+			end
+			return out
+		end)
+	end)
 
 	-- Send every unique clue image ID so the client preloads them all up front
 	-- (instant display instead of popping in mid-round).

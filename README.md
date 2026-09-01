@@ -54,6 +54,25 @@ Can you guess the secret word?
 ### 7. Floating & Rotating 3D Display Chairs
 - In `InventoryController.client.luau`, 3D chair models float **UP and DOWN** with a gentle sine-wave bobbing effect while **ROTATING**.
 
+### 8. Progress Persistence (DataStore)
+- `ServerStorage.Modules.ProfileStore` is the single DataStore owner (store
+  `GuessTheWordProfile_v1`, one profile per player, written with
+  `UpdateAsync`). It persists:
+  - **Chairs** — owned + equipped chair (`ChairService`),
+  - **Rewards** — claimed rewards, daily state, total Robux spent
+    (`RewardsService`),
+  - **Quests** — active pair, progress, claims for the 7h cycle
+    (`QuestService`),
+  - **Hidden Stats** — Streak + Reveal Letter/Word uses (`GameManager`).
+- Each system registers a "section getter" so all progress is merged into ONE
+  profile write per save (no key fights). Saves happen on important changes,
+  on player leave, and every 30s (autosave).
+- Cash/Wins live in `leaderstats`, which Roblox auto-persists - the profile
+  doesn't duplicate them.
+- **Studio:** enable *Game Settings → Security → Enable Studio Access to API
+  Services* or DataStores won't work in Studio (the game falls back to
+  in-memory with a warning). In a published game it works automatically.
+
 ---
 
 ## 📂 Project Structure
@@ -84,7 +103,8 @@ Can you guess the secret word?
     ├── ServerStorage/
     │   └── Modules/
     │       ├── Dictionary.luau
-    │       └── HeartHUDManager.luau
+    │       ├── HeartHUDManager.luau
+    │       └── ProfileStore.luau
     └── StarterPlayerScripts/
         ├── ButtonsController.client.luau
         ├── CameraController.client.luau

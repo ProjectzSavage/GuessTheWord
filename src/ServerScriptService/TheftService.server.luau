@@ -5,12 +5,13 @@
 	inside your "Scripts" folder).
 
 	PURPOSE
-	The SERVER authority for the cash-theft system. The visible "Steal $X"
-	buttons are drawn CLIENT-side (StealPromptUI.client.luau) above every other
-	neighboring player - so you never see a prompt on your OWN character.
-	When a thief clicks one, their client fires StealRequest(thief, victimId)
-	-> this script prompts a ROBUX dev-product purchase, tiered by how much
-	cash the victim is carrying:
+	The SERVER authority for the cash-theft system. This script places a real
+	ProximityPrompt named "StealPrompt" on EVERY player's head (visible to all
+	players within 20 studs - the victim sees it too, but pressing it just
+	gets a friendly "can't steal yourself" toast). The ActionText shows the
+	victim's LIVE cash ("Steal $1,250"). When a thief activates it, this
+	script prompts a ROBUX dev-product purchase, tiered by how much cash the
+	victim is carrying:
 
 		under $500   -> 3710136562
 		under $1,000 -> 3710136669
@@ -162,7 +163,8 @@ for _, tier in ipairs(TIER_PRODUCTS) do
 end
 
 -------------------------------------------------------------------------------
--- THEFT REQUEST (from StealPromptUI on the thief's client)
+-- LEGACY REMOTE (kept for compatibility - the steal prompt is now the
+-- server-side ProximityPrompt below; nothing fires this anymore).
 -------------------------------------------------------------------------------
 local function attemptTheft(thief, victim)
 	local cash = getCash(victim)
@@ -186,3 +188,74 @@ StealRequest.OnServerEvent:Connect(function(thief, victimUserId)
 	end
 	attemptTheft(thief, victim)
 end)
+
+-------------------------------------------------------------------------------
+-- STEAL PROMPTS (server-side ProximityPrompt on every player's head)
+-- A real prompt (works even if a client script is missing/stale). It shows
+-- for everyone nearby - including the victim (pressing it just gets a
+-- friendly "you can't steal from yourself" toast). The ActionText always
+-- shows the victim's LIVE cash.
+-------------------------------------------------------------------------------
+local PROMPT_DISTANCE = 20
+
+local function updateStealPrompt(victim)
+	local character = victim.Character
+	local head = character and character:FindFirstChild("Head")
+	local prompt = head and head:FindFirstChild("StealPrompt")
+	if prompt and prompt:IsA("ProximityPrompt") then
+		prompt.ActionText = "Steal $" .. getCash(victim)
+	end
+end
+
+local function setupStealPrompt(victim)
+	local character = victim.Character
+	if not character then
+		return
+	end
+	local head = character:WaitForChild("Head", 5)
+	if not head then
+		return
+	end
+	local prompt = head:FindFirstChild("StealPrompt")
+	if not prompt then
+		prompt = Instance.new("ProximityPrompt")
+		prompt.Name = "StealPrompt"
+		prompt.ActionText = "Steal $" .. getCash(victim)
+		prompt.ObjectText = "Cash"
+		prompt.PromptObjectText = "Steal Cash"
+		prompt.MaxActivationDistance = PROMPT_DISTANCE
+		prompt.HoldDuration = 0
+		prompt.RequiresLineOfSight = false
+		prompt.Parent = head
+		prompt.PromptTriggered:Connect(function(thief)
+			if thief == victim then
+				notify(thief, "Steal", "Nice try - you can't steal from yourself!", "warn")
+				return
+			end
+			attemptTheft(thief, victim)
+		end)
+	end
+	-- Keep the ActionText live with the victim's cash.
+	local function watchCash()
+		local ls = victim:FindFirstChild("leaderstats")
+		local cash = ls and ls:FindFirstChild("Cash")
+		if cash then
+			cash.Changed:Connect(function()
+				updateStealPrompt(victim)
+			end)
+		else
+			task.delay(1, watchCash)
+		end
+	end
+	watchCash()
+end
+
+Players.PlayerAdded:Connect(function(player)
+	player.CharacterAdded:Connect(function(character)
+		task.spawn(setupStealPrompt, player)
+	end)
+end)
+
+for _, player in ipairs(Players:GetPlayers()) do
+	task.spawn(setupStealPrompt, player)
+end

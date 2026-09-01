@@ -21,6 +21,7 @@ local ServerStorage = game:GetService("ServerStorage")
 
 local NumberFormat = require(ReplicatedStorage:WaitForChild("NumberFormat"))
 local PlayerPerks = require(ServerStorage.Modules.PlayerPerks)
+local ProfileStore = require(ServerStorage.Modules.ProfileStore)
 
 local Events = ReplicatedStorage:WaitForChild("Events")
 
@@ -88,15 +89,40 @@ local ROBUX_SPENT = {
 -------------------------------------------------------------------------------
 local playerData = {}
 
+-- Persist through the shared profile DataStore (ProfileStore module).
 local function saveData(player)
-	-- In-memory data store
+	ProfileStore.save(player.UserId)
 end
 
 local function ensureData(player)
 	if not playerData[player.UserId] then
-		playerData[player.UserId] = {
+		local data = {
 			claimed = {}, lastDailyClaim = 0, dailyDay = 1, robuxSpent = 0, totalPlaytime = 0,
 		}
+		local saved = ProfileStore.load(player.UserId).rewards
+		if type(saved) == "table" then
+			if type(saved.claimed) == "table" then
+				data.claimed = saved.claimed
+			end
+			data.lastDailyClaim = tonumber(saved.lastDailyClaim) or 0
+			data.dailyDay = tonumber(saved.dailyDay) or 1
+			data.robuxSpent = tonumber(saved.robuxSpent) or 0
+			-- totalPlaytime is a SESSION counter - it starts at 0 on every
+			-- join (playtime rewards are per-session).
+		end
+		playerData[player.UserId] = data
+		ProfileStore.setSection(player.UserId, "rewards", function()
+			local d = playerData[player.UserId]
+			if not d then
+				return nil
+			end
+			return {
+				claimed = d.claimed or {},
+				lastDailyClaim = d.lastDailyClaim or 0,
+				dailyDay = d.dailyDay or 1,
+				robuxSpent = d.robuxSpent or 0,
+			}
+		end)
 	end
 	return playerData[player.UserId]
 end
@@ -435,6 +461,7 @@ Players.PlayerAdded:Connect(function(player)
 end)
 
 Players.PlayerRemoving:Connect(function(player)
+	ProfileStore.save(player.UserId)
 	playerData[player.UserId] = nil
 	followCache[player.UserId] = nil
 end)

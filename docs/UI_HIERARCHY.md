@@ -509,9 +509,10 @@ Config lives at the top of `RewardsService.server.luau`: `GROUP_ID`, the
 ticks down while the window is open (the client computes from the last synced
 base + elapsed time).
 
-**Persistence:** reward progress is **in-memory only** right now (no DataStore) —
-it resets on server restart / player leave. Add a DataStore later once the game
-is done.
+**Persistence:** reward progress (claims, daily state, Robux spent) is saved
+through `ServerStorage.Modules.ProfileStore` (DataStore
+`GuessTheWordProfile_v1`) on claim, on leave, and every 30s. In Studio you
+need *Enable Studio Access to API Services* or it falls back to in-memory.
 
 ## Heart image resolution (256px vs 512px)
 

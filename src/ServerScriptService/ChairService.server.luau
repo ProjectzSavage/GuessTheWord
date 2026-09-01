@@ -26,6 +26,7 @@ local MarketplaceService = game:GetService("MarketplaceService")
 
 local ChairsConfig = require(ReplicatedStorage:WaitForChild("ChairsConfig"))
 local PlayerPerks = require(ServerStorage.Modules.PlayerPerks)
+local ProfileStore = require(ServerStorage.Modules.ProfileStore)
 local CHAIR_NAMES = ChairsConfig.Chairs
 local GAMEPASS_CHAIRS = ChairsConfig.GamepassChairs or {}
 local VIP_CHAIRS = ChairsConfig.VIPChairs or {}
@@ -81,10 +82,44 @@ local function checkGamepassChairs(player, state)
 	end
 end
 
+-- Build the chair state from the persisted profile (or defaults) and keep
+-- the profile's "chairs" section in sync with the live state on every save.
+local function loadChairState(player)
+	local state = { owned = { Wooden = true }, equipped = "Wooden" }
+	local saved = ProfileStore.load(player.UserId).chairs
+	if type(saved) == "table" then
+		if type(saved.owned) == "table" then
+			for name in pairs(saved.owned) do
+				state.owned[name] = true
+			end
+		end
+		if type(saved.equipped) == "string" and saved.equipped ~= "" then
+			state.equipped = saved.equipped
+		end
+	end
+	-- The equipped chair must be one we actually own.
+	if not state.owned[state.equipped] then
+		state.equipped = "Wooden"
+	end
+	playerChair[player.UserId] = state
+	checkGamepassChairs(player, state)
+	ProfileStore.setSection(player.UserId, "chairs", function()
+		local s = playerChair[player.UserId]
+		if not s then
+			return nil
+		end
+		local owned = {}
+		for name in pairs(s.owned) do
+			owned[name] = true
+		end
+		return { owned = owned, equipped = s.equipped }
+	end)
+	return state
+end
+
 local function ensureState(player)
 	if not playerChair[player.UserId] then
-		playerChair[player.UserId] = { owned = { Wooden = true }, equipped = "Wooden" }
-		checkGamepassChairs(player, playerChair[player.UserId])
+		loadChairState(player)
 	end
 	return playerChair[player.UserId]
 end
@@ -430,6 +465,7 @@ Players.PlayerAdded:Connect(function(player)
 end)
 
 Players.PlayerRemoving:Connect(function(player)
+	ProfileStore.save(player.UserId)
 	playerChair[player.UserId] = nil
 end)
 

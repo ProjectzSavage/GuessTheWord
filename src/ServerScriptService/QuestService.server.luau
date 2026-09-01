@@ -14,6 +14,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
 
 local PlayerPerks = require(ServerStorage.Modules.PlayerPerks)
+local ProfileStore = require(ServerStorage.Modules.ProfileStore)
 
 local Events = ReplicatedStorage:WaitForChild("Events")
 
@@ -71,7 +72,44 @@ local function ensureState(player)
 			progress = { q1 = 0, q2 = 0 },
 			claimed = {},
 		}
+		-- Restore the persisted quest cycle (if still valid).
+		local saved = ProfileStore.load(player.UserId).quests
+		if type(saved) == "table" then
+			local savedIds = {}
+			if type(saved.activeIds) == "table" and #saved.activeIds == 2 then
+				for _, qId in ipairs(saved.activeIds) do
+					if getQuestDef(qId) then
+						table.insert(savedIds, qId)
+					end
+				end
+			end
+			if #savedIds == 2 then
+				st.activeIds = savedIds
+				st.resetAt = tonumber(saved.resetAt) or (os.time() + RESET_SECONDS)
+				if type(saved.progress) == "table" then
+					st.progress = {}
+					for _, qId in ipairs(savedIds) do
+						st.progress[qId] = tonumber(saved.progress[qId]) or 0
+					end
+				end
+				if type(saved.claimed) == "table" then
+					st.claimed = saved.claimed
+				end
+			end
+		end
 		playerQuest[player.UserId] = st
+		ProfileStore.setSection(player.UserId, "quests", function()
+			local q = playerQuest[player.UserId]
+			if not q then
+				return nil
+			end
+			return {
+				resetAt = q.resetAt or 0,
+				activeIds = q.activeIds or {},
+				progress = q.progress or {},
+				claimed = q.claimed or {},
+			}
+		end)
 	end
 	return st
 end
@@ -224,6 +262,7 @@ Players.PlayerAdded:Connect(function(player)
 end)
 
 Players.PlayerRemoving:Connect(function(player)
+	ProfileStore.save(player.UserId)
 	playerQuest[player.UserId] = nil
 end)
 
