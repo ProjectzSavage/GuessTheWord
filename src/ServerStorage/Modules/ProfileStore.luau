@@ -7,6 +7,7 @@
 	  * rewards - claimed rewards, daily state, total Robux spent
 	  * quests  - active quest pair, progress, claims (7h cycle)
 	  * stats   - hidden Stats: Streak + Reveal Letter/Word uses
+  * wallet  - Cash + Wins mirror (leaderstats stays the source of truth)
 
 	One profile per player (key = userId), written with UpdateAsync.
 	Each system registers a "section getter" (a function returning a
@@ -58,6 +59,10 @@ local function defaultProfile()
 		rewards = { claimed = {}, lastDailyClaim = 0, dailyDay = 1, robuxSpent = 0 },
 		quests  = { resetAt = 0, activeIds = {}, progress = {}, claimed = {} },
 		stats   = { Streak = 0, RevealLetterUses = 0, RevealWordUses = 0 },
+		-- Cash/Wins live in leaderstats (which auto-persist in a LIVE game),
+		-- but Studio leaderstats can be flaky - so we mirror them here too
+		-- and restore them on join (max rule, so nothing double-grants).
+		wallet  = { Cash = 0, Wins = 0 },
 	}
 end
 

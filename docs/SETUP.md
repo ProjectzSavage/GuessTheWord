@@ -182,7 +182,7 @@ ServerScriptService
 | `src/ServerStorage/Modules/ReceiptRouter.luau`                  | `ServerStorage > Modules`   | ModuleScript |
 | `src/ServerStorage/Modules/CashRerollFX.luau`                   | `ServerStorage > Modules`   | ModuleScript |
 | `src/ServerScriptService/TheftService.server.luau`              | `ServerScriptService > Scripts` | Script   |
-| `src/StarterPlayerScripts/StealPromptUI.client.luau`            | `StarterPlayerScripts`      | LocalScript |
+| `src/StarterPlayerScripts/StealPromptHide.client.luau`          | `StarterPlayerScripts`      | LocalScript |
 | `src/ServerScriptService/LikeGoalService.server.luau`           | `ServerScriptService > Scripts` | Script   |
 | `src/ServerStorage/Modules/ProfileStore.luau`                   | `ServerStorage > Modules`   | ModuleScript |
 | `src/StarterPlayerScripts/FreeRewards.client.luau`              | `StarterPlayerScripts`      | LocalScript |

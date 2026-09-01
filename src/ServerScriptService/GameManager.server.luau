@@ -1720,6 +1720,41 @@ Players.PlayerAdded:Connect(function(player)
 			end
 			return out
 		end)
+
+		-- Mirror the wallet (leaderstats Cash + Wins) into the profile and
+		-- restore it on join. In a LIVE game leaderstats already persist by
+		-- themselves; in Studio that is not reliable, so the DataStore copy
+		-- is what keeps your cash across rejoin. Max rule = we never lower
+		-- what's already live this join (fresh grants stay safe).
+		local savedWallet = ProfileStore.load(player.UserId).wallet
+		if type(savedWallet) == "table" then
+			local ls = player:FindFirstChild("leaderstats")
+			if ls then
+				for _, name in ipairs({ "Cash", "Wins" }) do
+					local val = ls:FindFirstChild(name)
+					local saved = tonumber(savedWallet[name])
+					if val and saved and saved > val.Value then
+						val.Value = math.floor(saved)
+					end
+				end
+			end
+		end
+		ProfileStore.setSection(player.UserId, "wallet", function()
+			local ls = player:FindFirstChild("leaderstats")
+			if not ls then
+				return nil
+			end
+			local out = {}
+			local cash = ls:FindFirstChild("Cash")
+			local wins = ls:FindFirstChild("Wins")
+			if cash then
+				out.Cash = cash.Value
+			end
+			if wins then
+				out.Wins = wins.Value
+			end
+			return out
+		end)
 	end)
 
 	-- Send every unique clue image ID so the client preloads them all up front

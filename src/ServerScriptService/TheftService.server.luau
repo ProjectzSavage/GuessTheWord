@@ -5,12 +5,13 @@
 	inside your "Scripts" folder).
 
 	PURPOSE
-	The SERVER authority for the cash-theft system. The visible "Steal $X"
-	button is drawn CLIENT-side (StealPromptUI.client.luau) floating above
-	every OTHER player nearby - never above your own head (same design as the
-	GMC StealService; a server prompt on the victim's head would show for the
-	victim too, which is why it's a client button instead). When a thief
-	clicks it, their client fires StealRequest(victimUserId) and this script:
+	The SERVER authority for the cash-theft system. This script puts a real
+	"Steal" ProximityPrompt on EVERY player's head. A prompt is visible to
+	everyone in range (Roblox has no per-player prompt visibility), so a
+	tiny client LocalScript (StealPromptHide.client.luau) disables the prompt
+	locally on YOUR OWN head - the net effect: you see the prompt on every
+	OTHER player nearby, and never on yourself. When a thief presses the
+	prompt on a victim, this script:
 	* In STUDIO: executes the steal DIRECTLY (no purchase) so you can test.
 	* In PRODUCTION: prompts a ROBUX dev-product purchase, tiered by how much
 	  cash the victim is carrying:
@@ -171,7 +172,8 @@ for _, tier in ipairs(TIER_PRODUCTS) do
 end
 
 -------------------------------------------------------------------------------
--- THEFT REQUEST (from StealPromptUI on the thief's client)
+-- THEFT REQUEST (legacy remote - kept as a fallback path; the normal way
+-- to start a steal is now pressing the head prompt above)
 -------------------------------------------------------------------------------
 local function attemptTheft(thief, victim)
 	local cash = getCash(victim)
@@ -191,6 +193,65 @@ local function attemptTheft(thief, victim)
 	MarketplaceService:PromptProductPurchase(thief, tier.id)
 end
 
+-------------------------------------------------------------------------------
+-- STEAL PROMPTS (one per player, on their HEAD)
+-- Roblox ProximityPrompts have no per-player visibility: a prompt on the
+-- victim's head would also show for the victim. The fix (same trick the
+-- DevForum accepts) is: put the prompt on EVERY player's head, and let each
+-- player's own client (StealPromptHide.client.luau) disable it locally on
+-- their own head. Result: the prompt appears above every OTHER player,
+-- never above you. Triggering your own prompt is impossible (it's disabled
+-- on your client) and the server rejects self-theft below anyway.
+-------------------------------------------------------------------------------
+local promptAnnounced = false
+
+local function setupStealPrompt(character, player)
+	task.spawn(function()
+		local head = character:WaitForChild("Head", 10)
+		if not head or not head:IsA("BasePart") then
+			return
+		end
+		local old = head:FindFirstChild("StealPrompt")
+		if old then
+			old:Destroy()
+		end
+		local prompt = Instance.new("ProximityPrompt")
+		prompt.Name = "StealPrompt"
+		prompt.ActionText = "Steal"
+		prompt.ObjectText = "Steal"
+		prompt.KeyCode = Enum.KeyCode.E
+		prompt.HoldDuration = 0
+		prompt.TriggerDistance = 8
+		prompt.Adornee = head
+		prompt.Parent = head
+		prompt.Triggered:Connect(function(thief)
+			if not thief or thief == player then
+				return -- you can't steal from yourself
+			end
+			if not player.Parent then
+				return
+			end
+			attemptTheft(thief, player)
+		end)
+
+		if not promptAnnounced then
+			promptAnnounced = true
+			warn("[TheftService] Steal prompts active - 'Steal' shows above every OTHER "
+				.. "player within 8 studs (hidden on your own head by StealPromptHide.client.luau "
+				.. "- if you see it on yourself, that LocalScript is missing from StarterPlayerScripts).")
+		end
+	end)
+end
+
+Players.PlayerAdded:Connect(function(player)
+	player.CharacterAdded:Connect(function(character)
+		setupStealPrompt(character, player)
+	end)
+	if player.Character then
+		setupStealPrompt(player.Character, player)
+	end
+end)
+
 StealRequest.OnServerEvent:Connect(function(thief, victimUserId)
 	if typeof(victimUserId) ~= "number" then
 		return
@@ -200,7 +261,7 @@ StealRequest.OnServerEvent:Connect(function(thief, victimUserId)
 		return -- you can't steal from yourself
 	end
 	-- Anti-cheat sanity: the thief must actually be near the victim
-	-- (the button only renders within RADIUS studs, but never trust the
+	-- (the prompt only triggers within 8 studs, but never trust the
 	-- client).
 	local tHrp = thief.Character and thief.Character:FindFirstChild("HumanoidRootPart")
 	local vHrp = victim.Character and victim.Character:FindFirstChild("HumanoidRootPart")
