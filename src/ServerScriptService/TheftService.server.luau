@@ -221,8 +221,7 @@ local function setupStealPrompt(victim)
 		prompt = Instance.new("ProximityPrompt")
 		prompt.Name = "StealPrompt"
 		prompt.ActionText = "Steal $" .. getCash(victim)
-		prompt.ObjectText = "Cash"
-		prompt.PromptObjectText = "Steal Cash"
+		prompt.ObjectText = "Steal Cash"
 		prompt.MaxActivationDistance = PROMPT_DISTANCE
 		prompt.HoldDuration = 0
 		prompt.RequiresLineOfSight = false

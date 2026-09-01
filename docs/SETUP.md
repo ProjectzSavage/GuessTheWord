@@ -115,6 +115,22 @@ build it once. The full details are further down.
       cash price. VIP owners get it automatically (on join + on purchase);
       the 3 Robux-exclusive chairs (HackerChair/SpacialMist/PinkVortex) are
       NOT part of VIP anymore.
+13. **Like Goal** — you build the part (hierarchy below); add
+    `LikeGoalService.server.luau` to `ServerScriptService > Scripts` and edit
+    `LIKE_GOAL` / `REWARD_USES` at the top of it. The script fills the bar,
+    updates the "0/10" label from Roblox's own like-count API (server-side),
+    and turns on the `Collect` prompt when the goal is hit.
+
+```
+Workspace
+└── LikeGoal  (Part)
+    ├── SurfaceGui  (SurfaceGui)
+    │   └── Frame  (Frame)
+    │       └── Bar  (Frame)
+    │           ├── Fill  (Frame)        Size {0,0},{1,0} - script animates it
+    │           └── LikeCount  (TextLabel)  "0/10"
+    └── Collect  (ProximityPrompt)       Enabled=false (script turns it on)
+```
 
 ---
 
@@ -166,6 +182,7 @@ ServerScriptService
 | `src/ServerStorage/Modules/ReceiptRouter.luau`                  | `ServerStorage > Modules`   | ModuleScript |
 | `src/ServerStorage/Modules/CashRerollFX.luau`                   | `ServerStorage > Modules`   | ModuleScript |
 | `src/ServerScriptService/TheftService.server.luau`              | `ServerScriptService > Scripts` | Script   |
+| `src/ServerScriptService/LikeGoalService.server.luau`           | `ServerScriptService > Scripts` | Script   |
 | `src/ServerStorage/Modules/ProfileStore.luau`                   | `ServerStorage > Modules`   | ModuleScript |
 | `src/StarterPlayerScripts/FreeRewards.client.luau`              | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/SpectatorClient.client.luau`          | `StarterPlayerScripts`      | LocalScript |

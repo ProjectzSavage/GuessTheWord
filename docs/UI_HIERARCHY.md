@@ -514,6 +514,30 @@ through `ServerStorage.Modules.ProfileStore` (DataStore
 `GuessTheWordProfile_v1`) on claim, on leave, and every 30s. In Studio you
 need *Enable Studio Access to API Services* or it falls back to in-memory.
 
+## Like Goal (Workspace)
+
+You build this part; `LikeGoalService.server.luau` drives everything.
+
+```
+Workspace
+└── LikeGoal  (Part)
+    ├── SurfaceGui  (SurfaceGui)
+    │   └── Frame  (Frame)
+    │       └── Bar  (Frame)
+    │           ├── Fill  (Frame)         Size {0,0},{1,0} - animated toward the goal
+    │           └── LikeCount  (TextLabel)  "0/10" (auto-updated)
+    └── Collect  (ProximityPrompt)       Enabled=false until the goal is reached
+```
+
+- **Goal & reward:** edit `LIKE_GOAL` and `REWARD_USES` at the top of
+  `LikeGoalService.server.luau` (default: 10 likes → +2 Reveal Words).
+- **Like count source:** Roblox's own API (`games.roblox.com/v1/games/{universeId}/votes`),
+  fetched **server-side** every 60s — the client can't fake it. Works without
+  "Allow HTTP Requests" because it's a Roblox domain.
+- **Collecting:** once the count reaches the goal, the script enables
+  `Collect`. Each player can claim **once** (persisted in the DataStore
+  profile); the claim handler re-checks the goal with a fresh API call.
+
 ## Heart image resolution (256px vs 512px)
 
 The on-screen size of a heart is **not** set by the asset's pixel dimensions — it

@@ -280,28 +280,56 @@ local function wireDisplay(display, promptPart)
 	return true
 end
 
-local function setupDisplayChairs()
-	if not DISPLAY then return end
+-- Self-healing display wiring. Prompts may show up AFTER the script starts
+-- (placed by you later, or spawned by another script), so this re-scans
+-- until every chair is wired. The warning only fires once, and only if
+-- some displays STILL have no prompt after a 30s grace period.
+local wiredDisplays = {} -- display instance -> true
+local warnedOnce = false
+
+local function tryWireDisplay(display)
+	if wiredDisplays[display] then
+		return true
+	end
+	local ok
+	if display:IsA("Model") then
+		local promptPart = display.PrimaryPart or display:FindFirstChildWhichIsA("BasePart")
+		ok = promptPart and wireDisplay(display, promptPart)
+	elseif display:IsA("BasePart") then
+		ok = wireDisplay(display, display)
+	end
+	if ok == true then
+		wiredDisplays[display] = true
+	end
+	return ok == true
+end
+
+local function scanDisplays(allowWarn)
+	if not DISPLAY or not DISPLAY.Parent then
+		return
+	end
 	local missing = {}
 	for _, display in ipairs(DISPLAY:GetChildren()) do
-		local handled
-		if display:IsA("Model") then
-			local promptPart = display.PrimaryPart or display:FindFirstChildWhichIsA("BasePart")
-			handled = promptPart and wireDisplay(display, promptPart)
-		elseif display:IsA("BasePart") then
-			-- A bare part works too (name it like the chair).
-			handled = wireDisplay(display, display)
-		end
-		if handled == false then
+		if not tryWireDisplay(display) then
 			table.insert(missing, display.Name)
 		end
 	end
-	if #missing > 0 then
+	if #missing > 0 and allowWarn and not warnedOnce then
+		warnedOnce = true
 		warn("[ChairService] DisplayChairs parts with no ProximityPrompt (buying disabled for them): "
 			.. table.concat(missing, ", "))
 	end
 end
-if DISPLAY then setupDisplayChairs() end
+
+scanDisplays(false)
+task.spawn(function()
+	task.wait(30) -- grace period: give late-appearing prompts a chance
+	scanDisplays(true)
+	while true do
+		task.wait(10)
+		scanDisplays(false)
+	end
+end)
 
 BuyChair.OnServerEvent:Connect(function(player, chairName)
 	processBuy(player, chairName)
