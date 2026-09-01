@@ -170,6 +170,7 @@ ServerScriptService
 | `src/StarterPlayerScripts/FreeRewards.client.luau`              | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/SpectatorClient.client.luau`          | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/Leaderboards.client.luau`             | `StarterPlayerScripts`      | LocalScript |
+| `src/StarterPlayerScripts/StreakRestore.client.luau`            | `StarterPlayerScripts`      | LocalScript |
 
 > **Tip:** For each file, right-click the target container in Studio →
 > **Insert Object** → choose the right type, name it, then paste the file's
@@ -182,6 +183,9 @@ ServerScriptService
 Build the exact tree in `docs/UI_HIERARCHY.md` **manually** in `StarterGui`:
 
 - `GameUI` ScreenGui with `TopBar`, `CountdownFrame`, `PuzzleArea`.
+- Inside `GameUI`: a `Restore` frame containing a `TextButton` with a
+  `PriceLbl` inside it — the streak buy-back popup (the script shows/hides it;
+  you keep its look).
 - `NotificationInteractionGUI` ScreenGui with one `Frame` containing the
   notifications `Holder` and the `InteractionFrame`.
 - `CountdownFrame` (Frame) + `CountdownLabel` (TextLabel) — the 3-2-1-GO! pulse

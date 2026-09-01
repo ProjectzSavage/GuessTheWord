@@ -41,8 +41,8 @@ end
 local function makeBillboard(victim)
 	local bb = Instance.new("BillboardGui")
 	bb.Name = "StealPromptUI"
-	bb.Size = UDim2.fromScale(0.15, 0.055)
-	bb.StudsOffset = Vector3.new(0, 3.4, 0)
+	bb.Size = UDim2.fromScale(0.18, 0.065)
+	bb.StudsOffset = Vector3.new(0, 3.6, 0)
 	bb.MaxDistance = RADIUS
 	bb.AlwaysOnTop = true
 
@@ -119,29 +119,29 @@ task.spawn(function()
 					bb:Destroy()
 				end
 				billboards[other] = nil
-				continue
-			end
-
-			local char = other.Character
-			local head = char and char:FindFirstChild("Head")
-			local visible = false
-			if head and myHrp then
-				visible = (myHrp.Position - head.Position).Magnitude <= RADIUS
-			end
-
-			if visible then
-				if not bb or not bb.Parent then
-					-- (Re)create it (also after a victim respawn).
-					local newBb = makeBillboard(other)
-					billboards[other] = newBb
-					newBb.Adornee = head
-					newBb.Parent = char
-				elseif head then
-					bb.Adornee = head -- track the head
+			else
+				local char = other.Character
+				local head = char and char:FindFirstChild("Head")
+				local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+				local visible = false
+				if head and humanoid and humanoid.Health > 0 and myHrp then
+					visible = (myHrp.Position - head.Position).Magnitude <= RADIUS
 				end
-			elseif bb and bb.Parent then
-				bb:Destroy()
-				billboards[other] = nil
+
+				if visible then
+					if not bb or not bb.Parent then
+						-- (Re)create it (also after a victim respawn).
+						local newBb = makeBillboard(other)
+						billboards[other] = newBb
+						newBb.Adornee = head
+						newBb.Parent = char
+					elseif head then
+						bb.Adornee = head -- track the head
+					end
+				elseif bb and bb.Parent then
+					bb:Destroy()
+					billboards[other] = nil
+				end
 			end
 		end
 	end

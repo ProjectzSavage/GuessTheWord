@@ -56,10 +56,28 @@ StarterGui
     │   └── CelebrationText  (TextLabel)   big "YOU WON! / LOSER / DRAW!" text.
     │                                    Script sets .Text, colors, rainbow, pop.
     │
-    └── PauseOverlay  (Frame)      full-screen, transparent, Visible=false
-        ├── PauseLabel  (TextLabel)      "Waiting for rematch..."
-        └── RematchButton  (TextButton)  "Play vs Bot again" (fires a new bot match)
+    ├── PauseOverlay  (Frame)      full-screen, transparent, Visible=false
+    │   ├── PauseLabel  (TextLabel)      "Waiting for rematch..."
+    │   └── RematchButton  (TextButton)  "Play vs Bot again" (fires a new bot match)
+    │
+    └── Restore  (Frame)           streak buy-back popup; script shows/hides it
+        └── TextButton  (TextButton)   the buy button (your label/look)
+            └── PriceLbl  (TextLabel)  auto-filled with the real product price
 ```
+
+## Restore (streak buy-back)
+
+When your streak is broken (you lose a match or it's a draw), the server pops
+`GameUI.Restore` for **5 seconds** (`StreakRestore.client.luau`). Click the
+button to buy your streak back — the dev product is tiered by the size of the
+lost streak (chosen server-side, in `GameManager`):
+
+- lost streak **under 10** → product `3710848168`
+- lost streak **10 or more** → product `3710848228`
+
+If nothing is bought within 5 seconds the frame outros on its own. On a
+confirmed purchase the server restores the exact lost streak and closes the
+frame. `PriceLbl` is filled automatically from the real product price.
 
 ## NotificationInteractionGUI (combined notifications + lobby ScreenGui)
 

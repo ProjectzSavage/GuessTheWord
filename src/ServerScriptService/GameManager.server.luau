@@ -35,6 +35,7 @@ local Dictionary = require(ServerStorage.Modules.Dictionary)
 local HeartHUDManager = require(ServerStorage.Modules.HeartHUDManager)
 local PlayerPerks = require(ServerStorage.Modules.PlayerPerks)
 local CashRerollFX = require(ServerStorage.Modules.CashRerollFX)
+local ReceiptRouter = require(ServerStorage.Modules.ReceiptRouter)
 
 local Events = ReplicatedStorage:WaitForChild("Events")
 local PlayVsBotRequest = Events:WaitForChild("PlayVsBotRequest")
@@ -57,6 +58,9 @@ local CashAwarded = Events:WaitForChild("CashAwarded")
 local PowerupUse = Events:WaitForChild("PowerupUse")
 local PowerupGrant = Events:WaitForChild("PowerupGrant")
 local PurchasePowerup = Events:WaitForChild("PurchasePowerup")
+local NotifyPlayer = Events:WaitForChild("NotifyPlayer")
+local RestoreStreakPrompt = Events:WaitForChild("RestoreStreakPrompt")
+local RestoreStreakResult = Events:WaitForChild("RestoreStreakResult")
 
 -------------------------------------------------------------------------------
 -- CONFIG
@@ -1546,6 +1550,81 @@ local function ensureLeaderstats(player)
 	ensureUses("RevealWordUses")
 end
 
+-------------------------------------------------------------------------------
+-- STREAK RESTORE (buy back a lost streak)
+-- When a real player's streak is broken (they lose, or the match is a draw),
+-- the client pops the GameUI "Restore" frame for 5 seconds
+-- (StreakRestore.client.luau). Buying back uses one of two dev products,
+-- tiered by how big the lost streak was:
+--
+--   lost streak under 10   -> 3710848168
+--   lost streak 10 or more -> 3710848228
+--
+-- Once the purchase is confirmed (ProcessReceipt via ReceiptRouter), the
+-- exact lost streak is put back.
+-------------------------------------------------------------------------------
+local RESTORE_PRODUCT_UNDER_10 = 3710848168
+local RESTORE_PRODUCT_10_PLUS  = 3710848228
+local RESTORE_PENDING_TIMEOUT  = 60 -- seconds a pending restore stays claimable
+
+-- userId -> { streak = number, productId = number, at = number }
+local pendingRestore = {}
+
+local function notifyPlayer(player, title, message, kind)
+	NotifyPlayer:FireClient(player, {
+		title = title or "Streak",
+		message = message,
+		kind = kind or "info",
+		duration = 4,
+	})
+end
+
+local function queueStreakRestore(player, lostStreak)
+	if not lostStreak or lostStreak <= 0 then
+		return
+	end
+	local productId = lostStreak < 10 and RESTORE_PRODUCT_UNDER_10 or RESTORE_PRODUCT_10_PLUS
+	pendingRestore[player.UserId] = { streak = lostStreak, productId = productId, at = os.clock() }
+	RestoreStreakPrompt:FireClient(player, lostStreak, productId)
+end
+
+local function onRestoreReceipt(receiptInfo, buyer)
+	local record = pendingRestore[buyer.UserId]
+	if not record then
+		-- Nothing pending (expired or player left). Consume the receipt so
+		-- ProcessReceipt stops retrying - there is nothing left to grant.
+		return
+	end
+	if (os.clock() - record.at) > RESTORE_PENDING_TIMEOUT then
+		pendingRestore[buyer.UserId] = nil
+		return
+	end
+	pendingRestore[buyer.UserId] = nil
+
+	local stats = buyer:FindFirstChild("Stats")
+	local streak = stats and stats:FindFirstChild("Streak")
+	local restored = 0
+	if streak then
+		if streak.Value < record.streak then
+			streak.Value = record.streak
+		end
+		restored = streak.Value
+	end
+
+	notifyPlayer(buyer, "Streak Restored!", "Your streak of " .. restored .. " is back - keep it alive!", "success")
+	RestoreStreakResult:FireClient(buyer, true, restored)
+end
+
+for _, productId in ipairs({ RESTORE_PRODUCT_UNDER_10, RESTORE_PRODUCT_10_PLUS }) do
+	ReceiptRouter.register(productId, onRestoreReceipt)
+end
+
+-- If a player leaves with an unclaimed restore, drop it (the receipt is
+-- consumed quietly instead of retrying forever).
+Players.PlayerRemoving:Connect(function(player)
+	pendingRestore[player.UserId] = nil
+end)
+
 -- Award Wins/Streak based on a finished match.
 -- winnerSeatIndex == nil => draw (streak resets). A bot winner awards nothing.
 function awardMatchOutcome(tableState, winnerSeatIndex)
@@ -1556,11 +1635,14 @@ function awardMatchOutcome(tableState, winnerSeatIndex)
 	end
 
 	if winnerSeatIndex == nil then
-		-- Draw: break any streaks for real players.
+		-- Draw: break any streaks for real players (offer a buy-back).
 		for _, occ in tableState.occupants do
 			if occ ~= "BOT" and occ then
 				local streak = playerStreak(occ)
 				if streak then
+					if streak.Value > 0 then
+						queueStreakRestore(occ, streak.Value)
+					end
 					streak.Value = 0
 				end
 			end
@@ -1588,12 +1670,15 @@ function awardMatchOutcome(tableState, winnerSeatIndex)
 				if cash then
 					cash.Value = cash.Value + math.floor(prize * PlayerPerks.cashMult(occ))
 				end
-			else
-				-- Loser: reset streak (no cash).
-				if streak then
-					streak.Value = 0
+				else
+					-- Loser: reset streak (no cash) - offer a buy-back first.
+					if streak then
+						if streak.Value > 0 then
+							queueStreakRestore(occ, streak.Value)
+						end
+						streak.Value = 0
+					end
 				end
-			end
 		end
 	end
 end

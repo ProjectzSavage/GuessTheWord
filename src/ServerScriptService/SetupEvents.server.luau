@@ -55,6 +55,8 @@ local EVENT_NAMES = {
 	"FreeRewardResult", -- Server -> Client : (success, message) after a free gift claim
 	"SpectatorData",    -- Server -> Client : match state of a table (bank, live guesses, hearts)
 	"SpectatorGuess",   -- Client -> Server : a player's live in-progress guess (for spectators)
+	"RestoreStreakPrompt", -- Server -> Client : (lostStreak, productId) buy-back prompt after a lost streak
+	"RestoreStreakResult",  -- Server -> Client : (success, restoredStreak) after a restore purchase
 }
 
 -- Idempotent: if the folder already exists, reuse it (don't wipe manual setup).
