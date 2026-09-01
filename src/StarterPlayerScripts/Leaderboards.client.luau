@@ -24,11 +24,14 @@
 
 	HOW IT WORKS
 	  * Rows are clones of RowTemplate (the template itself is hidden).
-	  * Top 6 players per board, refreshed every 2 seconds (live).
+	  * Top 6 players per board, refreshed every REFRESH_SECONDS (30s),
+	    phase-locked to the global clock so every client refreshes together.
 	  * Cash + Wins come from each player's leaderstats, Streak from the
 	    "Stats" folder — all of it replicates, so every client shows the
 	    same boards.
 	  * Your own row is highlighted with a gold stroke.
+	  * Also drives the Workspace.RefreshPart "Count" label ("Refreshes in:
+	    M:SS") so the sign always matches the real refresh time.
 
 	Nothing else to do in Studio — name the three SurfaceGuis exactly as
 	above and point their Adornee at the parts you want them on.
@@ -36,6 +39,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 
 local NumberFormat = require(ReplicatedStorage:WaitForChild("NumberFormat"))
 
@@ -43,7 +47,7 @@ local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 local TOP_N = 6
-local REFRESH_SECONDS = 2
+local REFRESH_SECONDS = 30
 
 -------------------------------------------------------------------------------
 -- BOARD CONFIG (SurfaceGui name -> what it shows)
@@ -254,10 +258,34 @@ for surfaceName, cfg in pairs(BOARDS) do
 end
 
 task.spawn(function()
-	while true do
+	local function refreshAll()
 		for surfaceName, board in pairs(boards) do
 			refreshBoard(board, BOARDS[surfaceName])
 		end
-		task.wait(REFRESH_SECONDS)
+	end
+	refreshAll()
+	-- Phase-locked to the GLOBAL clock: everyone refreshes on the same
+	-- second (unix time crossing a multiple of REFRESH_SECONDS), and the
+	-- wait time is re-computed from the clock each pass so drift
+	-- self-corrects. The RefreshPart sign below uses the same phase.
+	while true do
+		local intoPhase = os.time() % REFRESH_SECONDS
+		task.wait(math.max(REFRESH_SECONDS - intoPhase, 0.1))
+		refreshAll()
+	end
+end)
+
+-- RefreshPart countdown sign: Workspace.RefreshPart > SurfaceGui > Frame >
+-- Count. Updated from the shared wall clock, so it always shows exactly how
+-- long until the boards above refresh (same phase as the loop above).
+task.spawn(function()
+	while true do
+		local part = Workspace:FindFirstChild("RefreshPart")
+		local count = part and part:FindFirstChild("Count", true)
+		if count and count:IsA("TextLabel") then
+			local rem = REFRESH_SECONDS - (os.time() % REFRESH_SECONDS)
+			count.Text = "Refreshes in: " .. string.format("%d:%02d", math.floor(rem / 60), rem % 60)
+		end
+		task.wait(1)
 	end
 end)

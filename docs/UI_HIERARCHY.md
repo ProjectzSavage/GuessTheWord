@@ -538,6 +538,20 @@ Workspace
   `Collect`. Each player can claim **once** (persisted in the DataStore
   profile); the claim handler re-checks the goal with a fresh API call.
 
+## RefreshPart (leaderboard countdown sign)
+
+```
+Workspace
+└── RefreshPart  (Part)
+    └── SurfaceGui  (SurfaceGui)
+        └── Frame  (Frame)
+            └── Count  (TextLabel)   "Refreshes in: 0:30" - auto-updated
+```
+
+`Leaderboards.client.luau` drives this label (phase-locked to the global
+clock, so it always matches the real board refresh — both use the
+`REFRESH_SECONDS` constant at the top of that script).
+
 ## Heart image resolution (256px vs 512px)
 
 The on-screen size of a heart is **not** set by the asset's pixel dimensions — it

@@ -226,7 +226,7 @@ local function setupStealPrompt(victim)
 		prompt.HoldDuration = 0
 		prompt.RequiresLineOfSight = false
 		prompt.Parent = head
-		prompt.PromptTriggered:Connect(function(thief)
+		prompt.Triggered:Connect(function(thief)
 			if thief == victim then
 				notify(thief, "Steal", "Nice try - you can't steal from yourself!", "warn")
 				return
