@@ -13,7 +13,10 @@
 	locally on YOUR OWN head - the net effect: you see the prompt on every
 	OTHER player nearby, and never on yourself. When a thief presses the
 	prompt on a victim, this script:
-	* In STUDIO: executes the steal DIRECTLY (no purchase) so you can test.
+	* In STUDIO with "Enable Studio Access to API Services": the REAL Robux
+	  purchase dialog (simulated - no real Robux spent in Studio).
+	* In STUDIO without API access: the steal executes FREE instantly so you
+	  can still test the flow.
 	* In PRODUCTION: prompts a ROBUX dev-product purchase, tiered by how much
 	  cash the victim is carrying:
 
@@ -174,6 +177,34 @@ for _, tier in ipairs(TIER_PRODUCTS) do
 end
 
 -------------------------------------------------------------------------------
+-- STUDIO PURCHASE CHECK
+-- In Studio, "Enable Studio Access to API Services" (Game Settings >
+-- Security) makes MarketplaceService work - purchases then simulate for
+-- free (no real Robux). Without it, NO purchase dialog can appear, so we
+-- fall back to a free instant steal to keep testing possible.
+-------------------------------------------------------------------------------
+local marketplaceOk = nil
+local function marketplaceAvailable()
+	if marketplaceOk ~= nil then
+		return marketplaceOk
+	end
+	if not RunService:IsStudio() then
+		marketplaceOk = true
+		return true
+	end
+	local ok = pcall(function()
+		MarketplaceService:GetProductInfoAsync(TIER_PRODUCTS[1].id, Enum.InfoType.Product)
+	end)
+	marketplaceOk = ok
+	if not ok then
+		warn("[TheftService] Studio API access is OFF - steals execute FREE in this "
+			.. "session. Enable Game Settings > Security > Enable Studio Access to API "
+			.. "Services to test the real Robux purchase dialog.")
+	end
+	return ok
+end
+
+-------------------------------------------------------------------------------
 -- THEFT REQUEST (legacy remote - kept as a fallback path; the normal way
 -- to start a steal is now pressing the head prompt above)
 -------------------------------------------------------------------------------
@@ -183,9 +214,10 @@ local function attemptTheft(thief, victim)
 		notify(thief, "Steal", victim.Name .. " has no cash to steal!", "warn")
 		return
 	end
-	-- STUDIO shortcut (same as the GMC StealService): skip the Robux
-	-- purchase and execute the steal directly so you can test the flow.
-	if RunService:IsStudio() then
+	-- Free steal ONLY when Studio can't show the purchase dialog (API
+	-- access off). With API access on - or in a live game - the real
+	-- Robux purchase flow below runs.
+	if RunService:IsStudio() and not marketplaceAvailable() then
 		executeTheft(thief, victim, 0)
 		return
 	end
