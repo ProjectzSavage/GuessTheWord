@@ -28,6 +28,12 @@ local gameGui = gui:WaitForChild("GameUI", 10) or gui:FindFirstChildWhichIsA("Sc
 local UIFX = require(ReplicatedStorage:WaitForChild("UIFX"))
 local NumberFormat = require(ReplicatedStorage:WaitForChild("NumberFormat"))
 
+-- TWEAKS: size of the reward icons inside each rewards row (pixels).
+-- Raise ICON_SIZE for bigger icons (e.g. 64), lower it if they overflow
+-- the row on small screens.
+local ICON_SIZE = 56
+local ICON_SPACING = 12
+
 local root     = gameGui and (gameGui:FindFirstChild("RewardsF", true) or gameGui:WaitForChild("RewardsF", 8))
 local closeBtn = root and (root:FindFirstChild("CloseBtn", true) :: GuiButton?)
 
@@ -201,8 +207,8 @@ local function renderRow(categoryId, idx, row)
 	if template and template:IsA("ImageLabel") and container then
 		local keys = parseRewardImages(row.rewards)
 		template.Visible = false
-		local iconSize = 44
-		local spacing = 12
+		local iconSize = ICON_SIZE
+		local spacing = ICON_SPACING
 		local count = math.min(#keys, 3)
 		local totalW = count * iconSize + (count - 1) * spacing
 		local startX = (container.AbsoluteSize.X - totalW) / 2

@@ -607,6 +607,15 @@ end)
 -------------------------------------------------------------------------------
 -- SCRAMBLED BANK (12-letter tiles)
 -------------------------------------------------------------------------------
+-- TWEAKS: size of the scrambled letter tiles (scale relative to the
+-- ScrambledBank frame). The script applies these to the grid every round,
+-- so to make the tiles bigger just raise the numbers here, e.g.
+-- TILE_CELL_X = 0.2 / TILE_CELL_Y = 0.36 for clearly bigger tiles.
+local TILE_CELL_X = 0.18
+local TILE_CELL_Y = 0.34
+local TILE_PAD_X = 0.02
+local TILE_PAD_Y = 0.04
+
 local function buildBank(letterBank)
 	clearFlying()
 	for _, child in ScrambledBank:GetChildren() do
@@ -617,14 +626,16 @@ local function buildBank(letterBank)
 	buttonMap = {}
 	usedTiles = {}
 
-	-- Ensure a UIGridLayout exists (use the user's if they added one).
-	if not ScrambledBank:FindFirstChildOfClass("UIGridLayout") then
-		local grid = Instance.new("UIGridLayout")
-		-- Scale-based so the 12 tiles lay out correctly on any screen size.
-		grid.CellSize = UDim2.new(0.16, 0, 0.3, 0)
-		grid.CellPadding = UDim2.new(0.02, 0, 0.04, 0)
+	-- Grid layout: the TWEAKS constants above are the single source of
+	-- truth for tile size (applied every round, even to a grid you placed
+	-- in Studio - change TWEAKS, not Studio, to resize the tiles).
+	local grid = ScrambledBank:FindFirstChildOfClass("UIGridLayout")
+	if not grid then
+		grid = Instance.new("UIGridLayout")
 		grid.Parent = ScrambledBank
 	end
+	grid.CellSize = UDim2.new(TILE_CELL_X, 0, TILE_CELL_Y, 0)
+	grid.CellPadding = UDim2.new(TILE_PAD_X, 0, TILE_PAD_Y, 0)
 
 	local template = ScrambledBank:FindFirstChild("TileTemplate")
 	if template and template:IsA("GuiButton") then
@@ -1158,9 +1169,23 @@ end)
 -- Pre-match 3..2..1 countdown. During the countdown, ONLY the CountdownFrame is
 -- shown (big pulsing numbers). PuzzleArea/TopBar are revealed after it's done.
 
+-- Is the local player still sitting in their chair? (Self-contained on
+-- purpose - getHumanoid is declared further down in this script.)
+local function playerSeatedNow()
+	local char = player.Character
+	local h = char and char:FindFirstChildOfClass("Humanoid")
+	return h ~= nil and h.Seated == true
+end
+
 -- Show the pause / rematch screen after the celebration (only for bot matches).
 local function showPauseScreen()
 	if not PauseOverlay then
+		return
+	end
+	-- The pause screen assumes you're still in the chair (rematching needs a
+	-- seat). If the player jumped out during the celebration, they're already
+	-- back in the lobby - don't cover the lobby with the overlay.
+	if not playerSeatedNow() then
 		return
 	end
 	PauseOverlay.Visible = true
@@ -1678,8 +1703,11 @@ local function showCelebration(youWon, isDraw, isBotMatch)
 		CelebrationText.TextColor3 = Color3.new(1, 1, 1)
 		slideTopBarOut()
 		setCinematic(0)
-		if isBotMatch and youWon and not isDraw then
-			-- Winner stays in the chair: "Play vs Bot again" pause screen.
+		if isBotMatch and youWon and not isDraw and playerSeatedNow() then
+			-- Winner is still in the chair: "Play vs Bot again" pause screen.
+			-- (If they jumped out during the celebration, onLeftSeat already
+			-- put them back in the lobby - the guard in showPauseScreen
+			-- also protects that case.)
 			showPauseScreen()
 		else
 			-- Loser (their character was just respawned back to spawn) or a

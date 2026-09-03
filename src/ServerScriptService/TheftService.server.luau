@@ -6,11 +6,11 @@
 
 	PURPOSE
 	The SERVER authority for the cash-theft system. This script puts a real
-	"Steal $X" ProximityPrompt on EVERY player's head (X = the victim's live
-	cash, shown in the prompt's own text). A prompt is visible to
+	"Steal $X" ProximityPrompt on EVERY player's torso (X = the victim's
+	live cash, shown in the prompt's own text). A prompt is visible to
 	everyone in range (Roblox has no per-player prompt visibility), so a
 	tiny client LocalScript (StealPromptHide.client.luau) disables the prompt
-	locally on YOUR OWN head - the net effect: you see the prompt on every
+	locally on YOUR OWN torso - the net effect: you see the prompt on every
 	OTHER player nearby, and never on yourself. When a thief presses the
 	prompt on a victim, this script:
 	* In STUDIO with "Enable Studio Access to API Services": the REAL Robux
@@ -206,7 +206,7 @@ end
 
 -------------------------------------------------------------------------------
 -- THEFT REQUEST (legacy remote - kept as a fallback path; the normal way
--- to start a steal is now pressing the head prompt above)
+-- to start a steal is now pressing the torso prompt above)
 -------------------------------------------------------------------------------
 local function attemptTheft(thief, victim)
 	local cash = getCash(victim)
@@ -228,14 +228,14 @@ local function attemptTheft(thief, victim)
 end
 
 -------------------------------------------------------------------------------
--- STEAL PROMPTS (one per player, on their HEAD)
+-- STEAL PROMPTS (one per player, on their TORSO)
 -- Roblox ProximityPrompts have no per-player visibility: a prompt on the
--- victim's head would also show for the victim. The fix (same trick the
--- DevForum accepts) is: put the prompt on EVERY player's head, and let each
--- player's own client (StealPromptHide.client.luau) disable it locally on
--- their own head. Result: the prompt appears above every OTHER player,
--- never above you. Triggering your own prompt is impossible (it's disabled
--- on your client) and the server rejects self-theft below anyway.
+-- victim would also show for the victim. The fix (same trick the DevForum
+-- accepts) is: put the prompt on EVERY player's torso, and let each player's
+-- own client (StealPromptHide.client.luau) disable it locally on their own
+-- torso. Result: the prompt appears on every OTHER player, never on you.
+-- Triggering your own prompt is impossible (it's disabled on your client)
+-- and the server rejects self-theft below anyway.
 -------------------------------------------------------------------------------
 local missingProps = {} -- prompt prop names this engine rejected (warned once)
 local promptAnnounced = false
@@ -265,11 +265,15 @@ end
 
 local function setupStealPrompt(character, player)
 	task.spawn(function()
-		local head = character:WaitForChild("Head", 10)
-		if not head or not head:IsA("BasePart") then
+		-- The prompt anchors to the TORSO (R15 = UpperTorso, R6 = Torso);
+		-- head as a last-resort anchor for odd rigs.
+		local anchor = character:FindFirstChild("UpperTorso")
+			or character:FindFirstChild("Torso")
+			or character:WaitForChild("Head", 10)
+		if not anchor or not anchor:IsA("BasePart") then
 			return
 		end
-		local old = head:FindFirstChild("StealPrompt")
+		local old = anchor:FindFirstChild("StealPrompt")
 		if old then
 			old:Destroy()
 		end
@@ -290,14 +294,14 @@ local function setupStealPrompt(character, player)
 		end
 		setProp(prompt, "HoldDuration", 0)
 		setProp(prompt, "TriggerDistance", 10, "MaxActivationDistance")
-		setProp(prompt, "Adornee", head, "AdorneePart")
+		setProp(prompt, "Adornee", anchor, "AdorneePart")
 		-- CRITICAL: new engine builds default RequiresLineOfSight to true,
 		-- and the visibility raycast is blocked by YOUR OWN character when
 		-- you stand next to the victim - which made the prompt on other
 		-- players invisible (yours stayed visible because a prompt's
 		-- raycast excludes its own parent). Stealing needs no line of sight.
 		setProp(prompt, "RequiresLineOfSight", false)
-		prompt.Parent = head
+		prompt.Parent = anchor
 
 		-- The prompt's own text shows the victim's CURRENT cash
 		-- ("Steal $1,500") and live-updates whenever it changes.
@@ -342,10 +346,10 @@ local function setupStealPrompt(character, player)
 					.. " - normal on the 2026 prompt update (the prompt anchors to its parent part "
 					.. "instead). Everything still works, the pill shows which key to press.")
 			end
-			warn("[TheftService] Steal prompts active - a 'Steal $X' pill shows above every "
-				.. "OTHER player within ~10 studs (press the key the pill shows, or click it; "
-				.. "hidden on your own head by StealPromptHide.client.luau - if you see it on "
-				.. "yourself, that LocalScript is missing from StarterPlayerScripts).")
+			warn("[TheftService] Steal prompts active - a 'Steal $X' pill shows on every "
+				.. "OTHER player's torso within ~10 studs (press the key the pill shows, or "
+				.. "click it; hidden on your own torso by StealPromptHide.client.luau - if "
+				.. "you see it on yourself, that LocalScript is missing from StarterPlayerScripts).")
 		end
 	end)
 end
