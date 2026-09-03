@@ -58,6 +58,10 @@ local queue = {}
 local lastPopupAt = 0
 local popupCount = 0
 local lastShownByFriend = {}
+-- True from the match countdown until GameOver/MatchCancelled. While a
+-- match runs the popup is suppressed; friends who come online mid-match
+-- stay queued and the popup shows right after the match ends.
+local matchActive = false
 
 local function makeCornerScale(inst: GuiObject, scaleRadius: number)
 	local c = Instance.new("UICorner")
@@ -303,6 +307,7 @@ local function canShow(userId: number): boolean
 end
 
 local function tryShowFromQueue()
+	if matchActive then return end -- no popups during a match
 	if popup and popup.Visible then return end
 	if #queue == 0 then return end
 
@@ -364,3 +369,43 @@ task.spawn(function()
 		task.wait(POLL_INTERVAL)
 	end
 end)
+
+-------------------------------------------------------------------------------
+-- MATCH AWARENESS: no popups while a match is running (countdown -> game
+-- over). Friends who come online mid-match stay in the queue and the popup
+-- shows right after the match ends.
+-------------------------------------------------------------------------------
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local events = ReplicatedStorage:WaitForChild("Events", 5)
+if events then
+	local function suppressForMatch()
+		if matchActive then
+			return
+		end
+		matchActive = true
+		-- Interrupt a popup that's mid-show.
+		if popup and popup.Visible then
+			hidePopup()
+		end
+	end
+	local function resumeAfterMatch()
+		if not matchActive then
+			return
+		end
+		matchActive = false
+		-- Flush friends who came online during the match.
+		task.defer(tryShowFromQueue)
+	end
+	for _, name in ipairs({ "Countdown", "RoundStart" }) do
+		local e = events:FindFirstChild(name)
+		if e then
+			e.OnClientEvent:Connect(suppressForMatch)
+		end
+	end
+	for _, name in ipairs({ "GameOver", "MatchCancelled" }) do
+		local e = events:FindFirstChild(name)
+		if e then
+			e.OnClientEvent:Connect(resumeAfterMatch)
+		end
+	end
+end

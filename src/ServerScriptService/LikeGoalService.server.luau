@@ -79,6 +79,12 @@ end
 
 -- The script owns the prompt's Enabled state - start locked.
 collect.Enabled = false
+-- New engine builds default the prompt's line-of-sight check to ON, which
+-- can hide the prompt behind terrain or your own character. Collecting a
+-- world reward should never require line of sight.
+pcall(function()
+	collect.RequiresLineOfSight = false
+end)
 
 -------------------------------------------------------------------------------
 -- LIKE COUNT (Roblox API, server-side only)
@@ -113,27 +119,34 @@ local function getUniverseId()
 	local json = jsonGet(string.format(PLACE_DETAILS_URL, game.PlaceId))
 	if json and type(json.data) == "table" and #json.data > 0 and type(json.data[1]) == "table" then
 		cachedUniverseId = tonumber(json.data[1].universeId)
+	elseif json and tonumber(json.universeId) then
+		cachedUniverseId = tonumber(json.universeId)
 	end
 	return cachedUniverseId
 end
 
 -- Fresh fetch; on any failure keeps the last known value (never nil->junk).
+-- VERIFIED API SHAPE: {"id":...,"upVotes":N,"downVotes":N} - upVotes is
+-- TOP-LEVEL. (This endpoint has NO "data" wrapper - reading json.data
+-- always gave nil, which is why the bar never moved.)
 local function fetchLikes()
 	local universeId = getUniverseId()
 	if not universeId then
 		return lastLikes
 	end
 	local json = jsonGet(string.format(VOTES_URL, universeId))
-	if json and type(json.data) == "table" then
-		local upVotes
-		if json.data.upVotes ~= nil then
-			upVotes = json.data.upVotes
-		elseif #json.data > 0 and type(json.data[1]) == "table" then
-			upVotes = json.data[1].upVotes
+	if type(json) == "table" then
+		local upVotes = tonumber(json.upVotes)
+		if not upVotes and type(json.data) == "table" then
+			-- Fallback if Roblox ever wraps this endpoint in "data" again.
+			if json.data.upVotes ~= nil then
+				upVotes = tonumber(json.data.upVotes)
+			elseif #json.data > 0 and type(json.data[1]) == "table" then
+				upVotes = tonumber(json.data[1].upVotes)
+			end
 		end
-		local likes = tonumber(upVotes)
-		if likes then
-			lastLikes = likes
+		if upVotes then
+			lastLikes = upVotes
 			lastFetchedAt = os.clock()
 		end
 	end
@@ -255,6 +268,7 @@ end)
 -------------------------------------------------------------------------------
 -- MAIN LOOP: check the like count, update the bar, unlock when reached
 -------------------------------------------------------------------------------
+local announced = false
 task.spawn(function()
 	while true do
 		local likes = fetchLikes()
@@ -263,6 +277,16 @@ task.spawn(function()
 			if likes >= LIKE_GOAL then
 				collect.Enabled = true
 			end
+			if not announced then
+				announced = true
+				warn("[LikeGoalService] Active - goal is " .. NumberFormat.commas(LIKE_GOAL)
+					.. " likes, currently at " .. NumberFormat.commas(likes)
+					.. " (Collect unlocks when the goal is reached).")
+			end
+		elseif not announced then
+			announced = true
+			warn("[LikeGoalService] Could not read the like count yet (game must be published). "
+				.. "Retrying every " .. CHECK_INTERVAL .. "s.")
 		end
 		task.wait(CHECK_INTERVAL)
 	end
