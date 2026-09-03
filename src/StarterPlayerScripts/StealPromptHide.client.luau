@@ -23,14 +23,17 @@ local announced = false
 local function hideOwnPrompt(character)
 	task.spawn(function()
 		-- Same anchor as the server: torso (R15 = UpperTorso, R6 = Torso),
-		-- head as a last resort.
-		local anchor = character:FindFirstChild("UpperTorso")
-			or character:FindFirstChild("Torso")
+		-- head as a last resort. Must use WaitForChild (NOT FindFirstChild):
+		-- at CharacterAdded the rig parts can still be loading, and a nil
+		-- result here makes the hider give up on the wrong part - which is
+		-- exactly how you ended up seeing the prompt on your own body.
+		local anchor = character:WaitForChild("UpperTorso", 2)
+			or character:WaitForChild("Torso", 2)
 			or character:WaitForChild("Head", 10)
 		if not anchor then
 			return
 		end
-		local prompt = anchor:WaitForChild("StealPrompt", 10)
+		local prompt = anchor:WaitForChild("StealPrompt", 15)
 		if prompt and prompt:IsA("ProximityPrompt") then
 			prompt.Enabled = false -- local only; every other player still sees it
 			if not announced then

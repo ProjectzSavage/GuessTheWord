@@ -266,9 +266,10 @@ end
 local function setupStealPrompt(character, player)
 	task.spawn(function()
 		-- The prompt anchors to the TORSO (R15 = UpperTorso, R6 = Torso);
-		-- head as a last-resort anchor for odd rigs.
-		local anchor = character:FindFirstChild("UpperTorso")
-			or character:FindFirstChild("Torso")
+		-- head as a last-resort anchor for odd rigs. Same wait-chain as the
+		-- client hider, so both sides always pick the same part.
+		local anchor = character:WaitForChild("UpperTorso", 2)
+			or character:WaitForChild("Torso", 2)
 			or character:WaitForChild("Head", 10)
 		if not anchor or not anchor:IsA("BasePart") then
 			return
