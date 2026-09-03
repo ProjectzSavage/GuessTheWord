@@ -205,7 +205,31 @@ end
 -- never above you. Triggering your own prompt is impossible (it's disabled
 -- on your client) and the server rejects self-theft below anyway.
 -------------------------------------------------------------------------------
+local missingProps = {} -- prompt prop names this engine rejected (warned once)
 local promptAnnounced = false
+
+-- ProximityPrompt property names have changed across engine versions
+-- (some builds reject KeyCode / TriggerDistance / Adornee), so every
+-- optional property is set through pcall: classic name first, newer name
+-- as fallback, engine default if neither exists. Nothing here is fatal -
+-- the prompt still shows and still triggers either way.
+local function setProp(obj, name, value, fallbackName)
+	local ok = pcall(function()
+		obj[name] = value
+	end)
+	if ok then
+		return
+	end
+	if fallbackName then
+		ok = pcall(function()
+			obj[fallbackName] = value
+		end)
+		if ok then
+			return
+		end
+	end
+	missingProps[name] = true
+end
 
 local function setupStealPrompt(character, player)
 	task.spawn(function()
@@ -219,17 +243,22 @@ local function setupStealPrompt(character, player)
 		end
 		local prompt = Instance.new("ProximityPrompt")
 		prompt.Name = "StealPrompt"
-		prompt.ActionText = "Steal"
-		prompt.ObjectText = "Steal"
+		setProp(prompt, "ActionText", "Steal")
+		setProp(prompt, "ObjectText", "Steal")
 		-- Its OWN key (R): the chair buy prompts use E, and with OnePerButton
 		-- a closer E-prompt would steal the key and the steal prompt would
-		-- never activate. AlwaysShow = the "[R] Steal" pill shows as long as
-		-- you're in range, no matter what other prompts are around.
-		prompt.KeyCode = Enum.KeyCode.R
-		prompt.Exclusivity = Enum.ProximityPromptExclusivity.AlwaysShow
-		prompt.HoldDuration = 0
-		prompt.TriggerDistance = 10
-		prompt.Adornee = head
+		-- never activate. AlwaysShow = the pill shows as long as you're in
+		-- range, no matter what other prompts are around.
+		setProp(prompt, "KeyCode", Enum.KeyCode.R, "KeyboardKeyCode")
+		local okExcl, exclusivity = pcall(function()
+			return Enum.ProximityPromptExclusivity.AlwaysShow
+		end)
+		if okExcl and exclusivity then
+			setProp(prompt, "Exclusivity", exclusivity)
+		end
+		setProp(prompt, "HoldDuration", 0)
+		setProp(prompt, "TriggerDistance", 10, "MaxActivationDistance")
+		setProp(prompt, "Adornee", head, "AdorneePart")
 		prompt.Parent = head
 
 		-- The prompt's own text shows the victim's CURRENT cash
@@ -242,8 +271,10 @@ local function setupStealPrompt(character, player)
 			end
 			local function refresh()
 				local t = "Steal $" .. NumberFormat.commas(getCash(player))
-				prompt.ObjectText = t
-				prompt.ActionText = t
+				pcall(function()
+					prompt.ObjectText = t
+					prompt.ActionText = t
+				end)
 			end
 			refresh()
 			local conn = cashVal.Changed:Connect(refresh)
@@ -264,10 +295,19 @@ local function setupStealPrompt(character, player)
 
 		if not promptAnnounced then
 			promptAnnounced = true
-			warn("[TheftService] Steal prompts active - a '[R] Steal' pill shows above every "
-				.. "OTHER player within 10 studs (press R or click the pill; hidden on your own "
-				.. "head by StealPromptHide.client.luau - if you see it on yourself, that "
-				.. "LocalScript is missing from StarterPlayerScripts).")
+			local rejected = {}
+			for name in pairs(missingProps) do
+				table.insert(rejected, name)
+			end
+			if #rejected > 0 then
+				warn("[TheftService] Your Studio rejected prompt properties: " .. table.concat(rejected, ", ")
+					.. " - the prompt still works with its default key/range (the pill shows which "
+					.. "key to press). Update Roblox Studio (File > Check for Updates) for full behavior.")
+			end
+			warn("[TheftService] Steal prompts active - a 'Steal $X' pill shows above every "
+				.. "OTHER player within ~10 studs (press the key the pill shows, or click it; "
+				.. "hidden on your own head by StealPromptHide.client.luau - if you see it on "
+				.. "yourself, that LocalScript is missing from StarterPlayerScripts).")
 		end
 	end)
 end
