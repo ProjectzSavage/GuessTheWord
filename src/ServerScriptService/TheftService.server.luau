@@ -219,9 +219,14 @@ local function setupStealPrompt(character, player)
 		prompt.Name = "StealPrompt"
 		prompt.ActionText = "Steal"
 		prompt.ObjectText = "Steal"
-		prompt.KeyCode = Enum.KeyCode.E
+		-- Its OWN key (R): the chair buy prompts use E, and with OnePerButton
+		-- a closer E-prompt would steal the key and the steal prompt would
+		-- never activate. AlwaysShow = the "[R] Steal" pill shows as long as
+		-- you're in range, no matter what other prompts are around.
+		prompt.KeyCode = Enum.KeyCode.R
+		prompt.Exclusivity = Enum.ProximityPromptExclusivity.AlwaysShow
 		prompt.HoldDuration = 0
-		prompt.TriggerDistance = 8
+		prompt.TriggerDistance = 10
 		prompt.Adornee = head
 		prompt.Parent = head
 		prompt.Triggered:Connect(function(thief)
@@ -236,9 +241,10 @@ local function setupStealPrompt(character, player)
 
 		if not promptAnnounced then
 			promptAnnounced = true
-			warn("[TheftService] Steal prompts active - 'Steal' shows above every OTHER "
-				.. "player within 8 studs (hidden on your own head by StealPromptHide.client.luau "
-				.. "- if you see it on yourself, that LocalScript is missing from StarterPlayerScripts).")
+			warn("[TheftService] Steal prompts active - a '[R] Steal' pill shows above every "
+				.. "OTHER player within 10 studs (press R or click the pill; hidden on your own "
+				.. "head by StealPromptHide.client.luau - if you see it on yourself, that "
+				.. "LocalScript is missing from StarterPlayerScripts).")
 		end
 	end)
 end
@@ -261,7 +267,7 @@ StealRequest.OnServerEvent:Connect(function(thief, victimUserId)
 		return -- you can't steal from yourself
 	end
 	-- Anti-cheat sanity: the thief must actually be near the victim
-	-- (the prompt only triggers within 8 studs, but never trust the
+	-- (the prompt only triggers within 10 studs, but never trust the
 	-- client).
 	local tHrp = thief.Character and thief.Character:FindFirstChild("HumanoidRootPart")
 	local vHrp = victim.Character and victim.Character:FindFirstChild("HumanoidRootPart")
