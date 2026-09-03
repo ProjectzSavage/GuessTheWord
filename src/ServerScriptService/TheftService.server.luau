@@ -259,6 +259,12 @@ local function setupStealPrompt(character, player)
 		setProp(prompt, "HoldDuration", 0)
 		setProp(prompt, "TriggerDistance", 10, "MaxActivationDistance")
 		setProp(prompt, "Adornee", head, "AdorneePart")
+		-- CRITICAL: new engine builds default RequiresLineOfSight to true,
+		-- and the visibility raycast is blocked by YOUR OWN character when
+		-- you stand next to the victim - which made the prompt on other
+		-- players invisible (yours stayed visible because a prompt's
+		-- raycast excludes its own parent). Stealing needs no line of sight.
+		setProp(prompt, "RequiresLineOfSight", false)
 		prompt.Parent = head
 
 		-- The prompt's own text shows the victim's CURRENT cash
@@ -300,9 +306,9 @@ local function setupStealPrompt(character, player)
 				table.insert(rejected, name)
 			end
 			if #rejected > 0 then
-				warn("[TheftService] Your Studio rejected prompt properties: " .. table.concat(rejected, ", ")
-					.. " - the prompt still works with its default key/range (the pill shows which "
-					.. "key to press). Update Roblox Studio (File > Check for Updates) for full behavior.")
+				warn("[TheftService] This engine's prompt has no: " .. table.concat(rejected, ", ")
+					.. " - normal on the 2026 prompt update (the prompt anchors to its parent part "
+					.. "instead). Everything still works, the pill shows which key to press.")
 			end
 			warn("[TheftService] Steal prompts active - a 'Steal $X' pill shows above every "
 				.. "OTHER player within ~10 studs (press the key the pill shows, or click it; "
