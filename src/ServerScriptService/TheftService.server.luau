@@ -6,7 +6,8 @@
 
 	PURPOSE
 	The SERVER authority for the cash-theft system. This script puts a real
-	"Steal" ProximityPrompt on EVERY player's head. A prompt is visible to
+	"Steal $X" ProximityPrompt on EVERY player's head (X = the victim's live
+	cash, shown in the prompt's own text). A prompt is visible to
 	everyone in range (Roblox has no per-player prompt visibility), so a
 	tiny client LocalScript (StealPromptHide.client.luau) disables the prompt
 	locally on YOUR OWN head - the net effect: you see the prompt on every
@@ -38,6 +39,7 @@ local ServerStorage = game:GetService("ServerStorage")
 local RunService = game:GetService("RunService")
 
 local ReceiptRouter = require(ServerStorage.Modules.ReceiptRouter)
+local NumberFormat = require(ReplicatedStorage:WaitForChild("NumberFormat"))
 
 local Events = ReplicatedStorage:WaitForChild("Events")
 local NotifyPlayer = Events:WaitForChild("NotifyPlayer")
@@ -229,6 +231,27 @@ local function setupStealPrompt(character, player)
 		prompt.TriggerDistance = 10
 		prompt.Adornee = head
 		prompt.Parent = head
+
+		-- The prompt's own text shows the victim's CURRENT cash
+		-- ("Steal $1,500") and live-updates whenever it changes.
+		task.spawn(function()
+			local ls = player:WaitForChild("leaderstats", 10)
+			local cashVal = ls and ls:WaitForChild("Cash", 10)
+			if not cashVal then
+				return
+			end
+			local function refresh()
+				local t = "Steal $" .. NumberFormat.commas(getCash(player))
+				prompt.ObjectText = t
+				prompt.ActionText = t
+			end
+			refresh()
+			local conn = cashVal.Changed:Connect(refresh)
+			character.Destroying:Connect(function()
+				conn:Disconnect()
+			end)
+		end)
+
 		prompt.Triggered:Connect(function(thief)
 			if not thief or thief == player then
 				return -- you can't steal from yourself
