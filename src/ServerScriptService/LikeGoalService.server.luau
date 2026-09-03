@@ -268,6 +268,39 @@ end)
 -------------------------------------------------------------------------------
 -- MAIN LOOP: check the like count, update the bar, unlock when reached
 -------------------------------------------------------------------------------
+-- One-time deep diagnostic when the like count can't be read: shows exactly
+-- which step fails (universeId lookup vs votes fetch) with the RAW response,
+-- so we can see whether it's an HTTP block, an unpublished place, or a
+-- response-shape mismatch.
+local function diagnoseOnce()
+	local placeUrl = string.format(PLACE_DETAILS_URL, game.PlaceId)
+	local ok, resp = pcall(function()
+		return HttpService:GetAsync(placeUrl)
+	end)
+	if not ok or type(resp) ~= "string" then
+		warn("[LikeGoalService] DIAGNOSTIC: universeId lookup FAILED: ", tostring(resp),
+			" (URL: ", placeUrl, ")")
+		return
+	end
+	if not getUniverseId() then
+		warn("[LikeGoalService] DIAGNOSTIC: universeId lookup returned no universeId. Raw: ",
+			string.sub(resp, 1, 300))
+		return
+	end
+	local universeId = getUniverseId()
+	local votesUrl = string.format(VOTES_URL, universeId)
+	local ok2, resp2 = pcall(function()
+		return HttpService:GetAsync(votesUrl)
+	end)
+	if not ok2 or type(resp2) ~= "string" then
+		warn("[LikeGoalService] DIAGNOSTIC: votes fetch FAILED: ", tostring(resp2),
+			" (URL: ", votesUrl, ")")
+		return
+	end
+	warn("[LikeGoalService] DIAGNOSTIC: universeId=", universeId,
+		" - votes raw response: ", string.sub(resp2, 1, 300))
+end
+
 local announced = false
 task.spawn(function()
 	while true do
@@ -285,8 +318,9 @@ task.spawn(function()
 			end
 		elseif not announced then
 			announced = true
-			warn("[LikeGoalService] Could not read the like count yet (game must be published). "
-				.. "Retrying every " .. CHECK_INTERVAL .. "s.")
+			warn("[LikeGoalService] Could not read the like count - running a one-time "
+				.. "diagnostic, retrying every " .. CHECK_INTERVAL .. "s.")
+			task.spawn(diagnoseOnce)
 		end
 		task.wait(CHECK_INTERVAL)
 	end

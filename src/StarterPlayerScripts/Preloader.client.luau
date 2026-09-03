@@ -94,15 +94,82 @@ for _, inst in instances do
 	table.insert(all, inst)
 end
 
-preload(all)
+-------------------------------------------------------------------------------
+-- LOAD REPORT (one-time, PER CLIENT)
+-- Each client preloads every asset individually (so one dead id can't abort
+-- the batch) and prints exactly what it cached to its OWN Output window.
+-- In Studio: open the Output of BOTH clients and compare - that's how you
+-- verify the images loaded for both parties.
+-- --------------------------------------------------------------------------
+local function uniqueIds(items)
+	local seen, ids = {}, {}
+	for _, item in items do
+		local id
+		if type(item) == "string" then
+			id = item
+		elseif typeof(item) == "Instance" and item:IsA("GuiObject") then
+			id = item.Image
+		end
+		if type(id) == "string" and id ~= "" and not seen[id] then
+			seen[id] = true
+			table.insert(ids, id)
+		end
+	end
+	return ids
+end
+
+local function reportAssets(ids, label)
+	task.spawn(function()
+		local hasIsPreloaded = nil
+		local failed, checked = {}, 0
+		for _, id in ids do
+			local ok = pcall(function()
+				ContentProvider:PreloadAsync({ id })
+			end)
+			if hasIsPreloaded == nil then
+				hasIsPreloaded = pcall(function()
+					return ContentProvider:IsPreloaded(id)
+				end)
+			end
+			-- IsPreloaded is the definitive cache check; fall back to the
+			-- preload pcall result on engines that don't have it.
+			local loaded = ok
+			if hasIsPreloaded then
+				local ok2, cached = pcall(function()
+					return ContentProvider:IsPreloaded(id)
+				end)
+				if ok2 then
+					loaded = cached == true
+				end
+			end
+			checked = checked + 1
+			if not loaded then
+				table.insert(failed, id)
+			end
+		end
+		if #failed > 0 then
+			warn("[Preloader] ", label, ": ", #failed, " of ", checked, " did NOT load: ",
+				table.concat(failed, ", "))
+		else
+			warn("[Preloader] ", label, ": all ", checked, " loaded OK on this client.")
+		end
+	end)
+end
+
+reportAssets(uniqueIds(all), "Images (letters/hearts/grid)")
 
 
 
 -- Preload all clue image IDs the server sends at join (so clue images are
--- already cached when a round starts).
+-- already cached when a round starts) + report per-client load status.
 local Events = ReplicatedStorage:WaitForChild("Events")
+local clueReported = false
 Events:WaitForChild("PreloadClueImages").OnClientEvent:Connect(function(ids)
 	preload(ids)
+	if not clueReported then
+		clueReported = true
+		reportAssets(uniqueIds(ids or {}), "Clue images")
+	end
 end)
 
 -- Also preload a round's clue images + letter bank the moment they arrive.

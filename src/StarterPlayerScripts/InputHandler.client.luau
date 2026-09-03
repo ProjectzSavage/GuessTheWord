@@ -1158,23 +1158,12 @@ end)
 -- Pre-match 3..2..1 countdown. During the countdown, ONLY the CountdownFrame is
 -- shown (big pulsing numbers). PuzzleArea/TopBar are revealed after it's done.
 
--- Is the local player still sitting in their chair? (Self-contained on
--- purpose - getHumanoid is declared further down in this script.)
-local function playerSeatedNow()
-	local char = player.Character
-	local h = char and char:FindFirstChildOfClass("Humanoid")
-	return h ~= nil and h.Seated == true
-end
-
--- Show the pause / rematch screen after the celebration (only for bot matches).
+-- Show the pause / rematch screen after the celebration (only for bot
+-- matches). Whether the player jumped out during the celebration is decided
+-- by the CALLER via leftSeatAfterMatch (the live Seated state at that moment
+-- is not reliable - end-of-match seat handling can disturb it).
 local function showPauseScreen()
 	if not PauseOverlay then
-		return
-	end
-	-- The pause screen assumes you're still in the chair (rematching needs a
-	-- seat). If the player jumped out during the celebration, they're already
-	-- back in the lobby - don't cover the lobby with the overlay.
-	if not playerSeatedNow() then
 		return
 	end
 	PauseOverlay.Visible = true
@@ -1208,6 +1197,14 @@ end
 -------------------------------------------------------------------------------
 local playerHumanoid = nil
 
+-- True while the win/lose celebration is playing (set in showCelebration).
+-- Declared up here so onLeftSeat (below) can reference it.
+local celebrationActive = false
+-- Set when the local player jumps out of the seat DURING the celebration.
+-- In that case the "Play again" pause screen must NOT appear after the
+-- celebration ends - the player already chose to walk away.
+local leftSeatAfterMatch = false
+
 function getHumanoid()
 	local char = player.Character
 	if not char then
@@ -1232,6 +1229,11 @@ function onLeftSeat()
 			h.Sit = true
 		end
 		return
+	end
+	-- Left the seat during the win celebration? Remember it - the
+	-- "Play again" pause screen must not appear after the celebration.
+	if celebrationActive then
+		leftSeatAfterMatch = true
 	end
 	-- Not in a match: back to the lobby - pause overlay out, QuickPlay
 	-- immediately available again.
@@ -1519,8 +1521,6 @@ end)
 -------------------------------------------------------------------------------
 -- WIN / LOSE CELEBRATION
 -------------------------------------------------------------------------------
-local celebrationActive = false
-
 local function shakeCamera(intensity, duration)
 	if not Camera then
 		return
@@ -1692,11 +1692,10 @@ local function showCelebration(youWon, isDraw, isBotMatch)
 		CelebrationText.TextColor3 = Color3.new(1, 1, 1)
 		slideTopBarOut()
 		setCinematic(0)
-		if isBotMatch and youWon and not isDraw and playerSeatedNow() then
+		if isBotMatch and youWon and not isDraw and not leftSeatAfterMatch then
 			-- Winner is still in the chair: "Play vs Bot again" pause screen.
-			-- (If they jumped out during the celebration, onLeftSeat already
-			-- put them back in the lobby - the guard in showPauseScreen
-			-- also protects that case.)
+			-- If they jumped out DURING the celebration, leftSeatAfterMatch
+			-- is set (by onLeftSeat) and they go straight back to the lobby.
 			showPauseScreen()
 		else
 			-- Loser (their character was just respawned back to spawn) or a
@@ -1710,6 +1709,7 @@ end
 GameOver.OnClientEvent:Connect(function(winnerName, youWon, isDraw, isBotMatch)
 	roundActive = false
 	matchInProgress = false -- allow the player to jump out again
+	leftSeatAfterMatch = false -- reset for this match's celebration
 	lockJump(false)
 	setQuickPlayVisible(false) -- match just ended; re-shown via enterLobby/waiting
 	showCelebration(youWon, isDraw, isBotMatch)
