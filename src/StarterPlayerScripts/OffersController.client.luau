@@ -106,7 +106,7 @@ end
 -- CONFIGURATION
 -- ============================================================================
 local STARTER_PACK_GAMEPASS_ID = 1958400378 -- GamePass id (Creator Hub)
-local STARTER_PACK_PRICE = "3" -- placeholder, replaced by the real price on load
+local STARTER_PACK_PRICE = "3" -- edit this to your real price (Creator Hub)
 
 local GAMEPASS_OFFERS = {
 	{ id = 1960374374, name = "VIP",       priceText = "189", icon = "rbxassetid://76065691872422" },
@@ -159,8 +159,7 @@ if starterNameLbl then starterNameLbl.Text = "Starter Pack" end
 if popupTitle then popupTitle.Text = "STARTER PACK!" end
 
 -- Set the starter pack price in BOTH spots (the button + the popup BuyBtn).
--- Starts with the placeholder, then the real Creator Hub price replaces it
--- automatically (see the AUTO PRICES section at the bottom of this script).
+-- The text comes from STARTER_PACK_PRICE in the CONFIG above (edit it there).
 local function setStarterPrice(priceNumber)
 	local text = tostring(priceNumber)
 	if starterPriceLbl then starterPriceLbl.Text = text end
@@ -329,56 +328,13 @@ if starterBtn or cycleGpBtn then
 end
 
 -- ============================================================================
--- AUTO PRICES
--- Every price in the RightStack (the cycling gamepass button + the starter
--- pack button, and the popup's BuyPrice) is fetched from the REAL gamepass
--- id on load - nothing is hardcoded. If a fetch fails (e.g. the id is not a
--- real gamepass), the placeholder values stay on screen and a one-time warn
--- names the bad id.
+-- PRICES
+-- No live price fetching - the RightStack prices are the text in this
+-- script's CONFIG above, which you edit to match Creator Hub:
+--   * GAMEPASS_OFFERS: the `priceText` field of each entry (cycling button)
+--   * STARTER_PACK_PRICE: the starter pack (button + popup BuyPrice)
+-- The purchase itself always uses the real id, so Roblox charges whatever
+-- price you set in Creator Hub for that pass.
 -- ============================================================================
--- Read the Robux price from a GetProductInfoAsync result. Newer engines
--- expose PriceInRobux, older ones Price - both are ALREADY IN ROBUX (not
--- cents), so no conversion is needed.
-local function priceInRobux(info)
-	if type(info) ~= "table" then
-		return nil
-	end
-	local p = tonumber(info.PriceInRobux)
-	if not p then
-		p = tonumber(info.Price)
-	end
-	return p
-end
-
-task.spawn(function()
-	local offersChanged = false
-	for _, gp in ipairs(GAMEPASS_OFFERS) do
-		local ok, info = pcall(function()
-			return MarketplaceService:GetProductInfoAsync(gp.id, Enum.InfoType.GamePass)
-		end)
-		local price = priceInRobux(info)
-		if ok and price then
-			gp.priceText = tostring(math.floor(price))
-			offersChanged = true
-		elseif not ok then
-			warn("[Offers] Could not read the price for", gp.name, "(id", gp.id,
-				") - if that id is not a real gamepass in Creator Hub the placeholder price stays.")
-		end
-	end
-	if offersChanged then
-		renderCurrentGp()
-	end
-
-	local ok, spInfo = pcall(function()
-		return MarketplaceService:GetProductInfoAsync(STARTER_PACK_GAMEPASS_ID, Enum.InfoType.GamePass)
-	end)
-	local spPrice = priceInRobux(spInfo)
-	if ok and spPrice then
-		setStarterPrice(math.floor(spPrice))
-	elseif not ok then
-		warn("[Offers] Could not read the price for the Starter Pack (id", STARTER_PACK_GAMEPASS_ID,
-			") - if that id is not a real gamepass in Creator Hub the placeholder price stays.")
-	end
-end)
 
 

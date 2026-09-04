@@ -1881,8 +1881,27 @@ task.spawn(function()
 			table.concat(bad, ", "),
 			"- perks for those can never activate. Get each pass's real id in Creator Hub (Monetization > Game passes, hover a pass > ... > Copy Asset ID) and update it in: PlayerPerks (ServerStorage.Modules), ShopController, OffersController, ChairsConfig.")
 	else
-		warn("[GameManager] Gamepass ID check: all", checked, "configured gamepass IDs are valid gamepasses - the shop shows their real prices, and the perks activate for any account that OWNS (bought) the pass.")
+		warn("[GameManager] Gamepass ID check: all", checked, "configured gamepass IDs are valid gamepasses - the perks activate for any account that OWNS (bought) the pass.")
 	end
+end)
+
+-- ONE LINE PER PLAYER JOIN - the REAL ownership answer for the four perk
+-- passes, straight from UserOwnsGamePassAsync. This is ground truth for
+-- "does THIS account own the pass?". Creating a pass in Creator Hub does
+-- NOT make your account own it - only a purchase does. If it prints NO for
+-- you, the perks for that pass cannot apply until the pass is purchased
+-- once (simulated buy in Studio / real buy in live).
+Players.PlayerAdded:Connect(function(player)
+	task.spawn(function()
+		local parts = {}
+		for key, id in PlayerPerks.IDS do
+			local ok, owns = pcall(function()
+				return MarketplaceService:UserOwnsGamePassAsync(player.UserId, id)
+			end)
+			table.insert(parts, key .. "=" .. (ok and owns and "YES" or "NO"))
+		end
+		warn("[GameManager] Pass ownership for", player.Name, ":", table.concat(parts, ", "))
+	end)
 end)
 
 -------------------------------------------------------------------------------
