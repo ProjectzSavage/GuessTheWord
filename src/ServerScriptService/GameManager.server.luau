@@ -873,13 +873,23 @@ local function pickCashRewardCapped(maxCash)
 end
 
 local function runCashReroll(tableState)
-	-- Difficulty caps the roll's max cash (Easy 100 / Medium 350 / Hard 750).
-	local diff = BOT_DIFFICULTIES[tableState.botDifficulty] or BOT_DIFFICULTIES[DEFAULT_DIFFICULTY]
-	local maxCash = diff.maxCash
-	local reward = pickCashRewardCapped(maxCash)
+	-- BOT matches cap the roll by difficulty (Easy 100 / Medium 350 / Hard
+	-- 750). Player-vs-player matches roll the FULL reward table (up to 5000)
+	-- - the difficulty cap must not leak into real-player games.
+	local maxCash
+	if tableState.wasBotMatch then
+		local diff = BOT_DIFFICULTIES[tableState.botDifficulty] or BOT_DIFFICULTIES[DEFAULT_DIFFICULTY]
+		maxCash = diff.maxCash
+	end
+	local reward
+	if maxCash then
+		reward = pickCashRewardCapped(maxCash)
+	else
+		reward = pickCashReward()
+	end
 	local rewardList = {}
 	for _, r in CASH_REWARDS do
-		if r.value <= maxCash then
+		if not maxCash or r.value <= maxCash then
 			table.insert(rewardList, r.value)
 		end
 	end

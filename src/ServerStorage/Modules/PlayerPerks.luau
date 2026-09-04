@@ -4,8 +4,9 @@
 	Shared, CACHED gamepass ownership for the perk gamepasses. Every server
 	system (cash multipliers, win/streak multipliers, VIP nametag, VIP chairs)
 	reads perks through this module so ownership is checked consistently and
-	UserOwnsGamePassAsync stays cheap (60s cache per player, invalidated the
-	moment the player buys any gamepass).
+	UserOwnsGamePassAsync stays cheap (60s cache per player, and the purchase
+	event itself grants the perk - required because Studio purchases are
+	SIMULATED and never show up in UserOwnsGamePassAsync).
 
 	PERKS
 	  VIP        1960374374  -> x1.5 cash, [VIP] nametag, exclusive VIP chairs
@@ -45,11 +46,27 @@ PlayerPerks.MULTIPLIERS = {
 local CACHE_TTL = 60 -- seconds
 local cache = {} -- userId -> { owned = {[key] = bool}, at = os.clock() }
 
--- The moment a gamepass purchase is completed in-game, drop that player's
--- cached ownership so the new pass takes effect immediately (no TTL wait).
+-- Reverse lookup: gamepass id -> perk key.
+local passIdToKey = {}
+for key, id in pairs(PlayerPerks.IDS) do
+	passIdToKey[id] = key
+end
+
+-- The moment a gamepass purchase is completed in-game, record it. In Studio
+-- purchases are SIMULATED - UserOwnsGamePassAsync never learns about them -
+-- so the perk must be granted from the purchase event itself (in live this
+-- is just as correct: they really do own the pass now). Purchases of other
+-- passes just clear the cache for a fresh check.
 MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, passId, wasPurchased)
 	if wasPurchased and player then
-		cache[player.UserId] = nil
+		local key = passIdToKey[passId]
+		if key then
+			local entry = cache[player.UserId] or { owned = {}, at = os.clock() }
+			entry.owned[key] = true
+			cache[player.UserId] = entry
+		else
+			cache[player.UserId] = nil
+		end
 	end
 end)
 

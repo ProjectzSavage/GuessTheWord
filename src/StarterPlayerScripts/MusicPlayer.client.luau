@@ -17,12 +17,14 @@
 	     Leave "" to keep whatever image you set on the button in Studio.
 	  3. Make sure your GameUI has an ImageButton named exactly "Music".
 
-	Each player hears their own music (it's a LocalScript), and the button
-	only pauses/resumes for that player.
+	2026 ENGINE NOTE
+	  The old `Audio` class was removed from the current engine, so this uses
+	  the new audio system: AudioPlayer -> Wire -> AudioDeviceOutput (the
+	  official pattern). Each player hears their own music (it's a
+	  LocalScript), and the button only pauses/resumes for that player.
 ]]
 
 local Players = game:GetService("Players")
-local ContentProvider = game:GetService("ContentProvider")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -75,23 +77,61 @@ end
 -- even without it (we just tell you in Output).
 local gui = playerGui:WaitForChild("GameUI", 15)
 local button = gui and (gui:FindFirstChild("Music") or gui:FindFirstChild("Music", true))
-if button and not button:IsA("ButtonBase") then
+if button and not button:IsA("GuiButton") then
 	button = nil
 end
 if not button then
-	warn("[MusicPlayer] No ImageButton named 'Music' found inside GameUI - the music "
+	warn("[MusicPlayer] No button named 'Music' found inside GameUI - the music "
 		.. "will still play, but there is no pause button.")
 end
 
-local audio = Instance.new("Audio")
-audio.Name = "MusicAudio"
-audio.Volume = VOLUME
-audio.Loops = false -- this script advances the playlist manually
-audio.Parent = playerGui
+-- Build the new-audio graph (2026 engine):
+--   AudioPlayer (the track) --Wire--> AudioDeviceOutput (your speakers).
+local audioPlayer, deviceOutput, wire
+local okGraph, graphErr = pcall(function()
+	audioPlayer = Instance.new("AudioPlayer")
+	deviceOutput = Instance.new("AudioDeviceOutput")
+	wire = Instance.new("Wire")
+end)
+if not okGraph or not audioPlayer then
+	warn("[MusicPlayer] The new audio system (AudioPlayer) is unavailable in this "
+		.. "engine (" .. tostring(graphErr) .. ") - music disabled.")
+	return
+end
+
+audioPlayer.Name = "MusicAudio"
+audioPlayer.Volume = VOLUME
+audioPlayer.Looping = false -- this script advances the playlist manually
+audioPlayer.Parent = playerGui
+
+deviceOutput.Name = "MusicDeviceOutput"
+deviceOutput.Parent = playerGui
+
+wire.Name = "MusicWire"
+wire.Parent = playerGui
+wire.SourceInstance = audioPlayer
+wire.TargetInstance = deviceOutput
+
+-- The 2026 engine names the asset property `Asset`; `AssetId` is the
+-- classic name (deprecated but still accepted) - try the new one first.
+local function setAsset(pl, url)
+	local ok = pcall(function()
+		pl.Asset = url
+	end)
+	if not ok then
+		pl.AssetId = url
+	end
+end
+
+-- How long to wait for a track to load / start before calling it dead.
+local READY_TIMEOUT = 8
+local START_TIMEOUT = 8
 
 local index = 1
 local paused = false
+local savedPosition = 0
 local deadInARow = 0
+local finishedAll = false
 
 local function setButtonImage()
 	if not button then
@@ -103,18 +143,51 @@ local function setButtonImage()
 	end
 end
 
--- Load + start track #i. Preloading first means a DEAD id fails instantly
--- (bad ids throw) and gets skipped, instead of stalling the whole playlist;
--- good ids start without a loading hitch.
+-- Load + start track #i. A dead id never becomes Ready, so bad ids get
+-- skipped (with one warn if the WHOLE list is dead) instead of stalling
+-- the playlist. Yields while waiting.
 local function playTrack(i)
+	if finishedAll then
+		return
+	end
 	index = i
+	savedPosition = 0
 	local url = urls[i]
-	local ok = pcall(function()
-		ContentProvider:PreloadAsync({ url })
-	end)
+	setAsset(audioPlayer, url)
+
+	-- 1) Wait for the asset to become ready.
+	local ok = true
+	local deadline = os.clock() + READY_TIMEOUT
+	while not audioPlayer.IsReady do
+		if os.clock() > deadline or index ~= i then
+			ok = false
+			break
+		end
+		task.wait(0.1)
+	end
+
+	-- 2) Start it (unless paused) and confirm it actually begins playing.
+	if ok and not paused then
+		audioPlayer:Play()
+		local startDeadline = os.clock() + START_TIMEOUT
+		while not audioPlayer.IsPlaying do
+			if os.clock() > startDeadline or index ~= i or paused then
+				break
+			end
+			task.wait(0.05)
+		end
+		if not audioPlayer.IsPlaying then
+			ok = false
+		end
+	end
+
 	if not ok then
+		if index ~= i or paused then
+			return -- superseded or paused mid-load - nothing to fix here
+		end
 		deadInARow = deadInARow + 1
 		if deadInARow >= #urls then
+			finishedAll = true
 			warn("[MusicPlayer] None of the SONG_IDS could be loaded - check the ids "
 				.. "in the CONFIG block.")
 			return
@@ -123,37 +196,37 @@ local function playTrack(i)
 		return
 	end
 	deadInARow = 0
-	audio.SoundId = url
-	if paused then
-		-- Load the track while staying paused: Play kicks the load off,
-		-- Pause holds it at position 0. The button's Resume() starts it.
-		audio:Play()
-		audio:Pause()
-	else
-		audio:Play()
-	end
 end
 
 -- A song finished: advance to the next one (wraps to the first).
-audio.Played:Connect(function()
-	if paused then
+audioPlayer.Ended:Connect(function()
+	if paused or finishedAll then
 		return
 	end
-	playTrack(index % #urls + 1)
+	task.defer(playTrack, index % #urls + 1)
 end)
 
 if button then
 	button.Activated:Connect(function()
 		paused = not paused
 		if paused then
-			if audio.IsPlaying then
-				audio:Pause()
+			if audioPlayer.IsPlaying then
+				savedPosition = audioPlayer.TimePosition
+				audioPlayer:Stop()
 			end
-		elseif audio.IsLoaded then
-			audio:Resume()
-		else
-			-- A track was loaded while paused and never started.
-			audio:Play()
+		elseif not audioPlayer.IsPlaying then
+			if audioPlayer.IsReady then
+				-- Resume where we paused (TimePosition restore may be a
+				-- no-op on engines where it's read-only - then it just
+				-- restarts the track, which is fine).
+				pcall(function()
+					audioPlayer.TimePosition = savedPosition
+				end)
+				audioPlayer:Play()
+			else
+				-- Nothing loaded yet (paused mid-load) - redo the load.
+				task.defer(playTrack, index)
+			end
 		end
 		setButtonImage()
 	end)

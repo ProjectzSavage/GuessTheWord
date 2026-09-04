@@ -15,7 +15,6 @@
 
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
-local MarketplaceService = game:GetService("MarketplaceService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
 
@@ -44,7 +43,6 @@ local RewardRequestSync = ensureEvent("RewardRequestSync")
 -- CONFIG
 -------------------------------------------------------------------------------
 local GROUP_ID = 35973544
-local VIP_GAMEPASS_ID = 1960374374
 local SOCIAL_OWNERS = {
 	{ username = "TheCoolBaconHairIsMe", userId = 3107183806 },
 	{ username = "YurisMatrix",          userId = 3721585498 },
@@ -306,13 +304,10 @@ local function buildPayload(player, data)
 		claimed = groupClaimed, ready = (ok and inGroup) and not groupClaimed,
 	})
 
-	local ownsVip = false
-	if VIP_GAMEPASS_ID > 0 then
-		local vok, v = pcall(function()
-			return MarketplaceService:UserOwnsGamePassAsync(player.UserId, VIP_GAMEPASS_ID)
-		end)
-		ownsVip = vok and v
-	end
+	-- Through PlayerPerks (not a raw ownership call) so VIP purchases made
+	-- in Studio - which are simulated and invisible to
+	-- UserOwnsGamePassAsync - unlock the daily there too.
+	local ownsVip = PlayerPerks.owns(player, "VIP")
 	local vipClaimed = data.claimed["vip_main"] == true
 	table.insert(categories.vipdaily, {
 		id = "vip_main", rewards = "+$1000, +3 Reveal Letter, Random Chair", left = "VIP",
