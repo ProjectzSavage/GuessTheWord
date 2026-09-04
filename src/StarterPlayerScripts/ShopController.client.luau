@@ -130,12 +130,78 @@ end
 wireBuyButtons()
 
 -------------------------------------------------------------------------------
--- PRICES
--- The PriceLbls are left completely untouched - whatever price text you set
--- in Studio is what players see. The script only wires each item's BuyBtn
--- (above) to the REAL purchase for that item's id, so Roblox always charges
--- the price you set in Creator Hub for that id.
+-- BUY BUTTON PRICES
+-- Each item's BuyBtn / PurchaseBtn shows the price of its gamepass / dev
+-- product as the NUMBER ONLY (no "R$") - e.g. a 45 Robux pass makes the
+-- button say "45". The PriceLbls are left completely untouched. If a price
+-- can't be read (bad id), the button keeps whatever text you set in Studio.
 -------------------------------------------------------------------------------
+local priceCache = {} -- productId -> robux price (once fetched)
+local priceFailed = {} -- productId -> true (warned once)
+
+-- Read the Robux price from a GetProductInfoAsync result. PriceInRobux /
+-- Price are ALREADY in Robux (not cents).
+local function fetchPrice(productId, isGamepass)
+	local cached = priceCache[productId]
+	if cached then
+		return cached
+	end
+	local ok, info = pcall(function()
+		if isGamepass then
+			return MarketplaceService:GetProductInfoAsync(productId, Enum.InfoType.GamePass)
+		end
+		return MarketplaceService:GetProductInfoAsync(productId, Enum.InfoType.Product)
+	end)
+	if ok and type(info) == "table" then
+		local price = tonumber(info.PriceInRobux) or tonumber(info.Price)
+		if price then
+			priceCache[productId] = price
+			return price
+		end
+	end
+	if not priceFailed[productId] then
+		priceFailed[productId] = true
+		warn("[Shop] Could not read the price for id", productId,
+			isGamepass and "(gamepass)" or "(dev product)",
+			"- the buy button keeps its Studio text.")
+	end
+	return nil
+end
+
+-- The gamepass/dev-product id for a node: the nearest ancestor (including
+-- itself, up to ShopF) whose name is a key in PRODUCT_IDS.
+local function idForNode(node)
+	local n: Instance? = node
+	while n and n ~= ShopF do
+		local id = PRODUCT_IDS[n.Name]
+		if id and id > 0 then
+			return id, GAMEPASS_NAMES[n.Name] == true
+		end
+		n = n.Parent
+	end
+	return nil, false
+end
+
+local function applyPriceToBuyBtn(btn)
+	local id, isGamepass = idForNode(btn)
+	if not id then
+		return -- no id configured for this item: keep the Studio text
+	end
+	local price = fetchPrice(id, isGamepass)
+	if price and btn.Parent then
+		btn.Text = tostring(math.floor(price))
+	end
+end
+
+local function applyBuyBtnPrices()
+	if not ShopF then return end
+	for _, item in ShopF:GetDescendants() do
+		if item:IsA("GuiButton") and (item.Name == "BuyBtn" or item.Name == "PurchaseBtn") then
+			task.spawn(applyPriceToBuyBtn, item)
+		end
+	end
+end
+applyBuyBtnPrices()
 
 if ShopF then
 	ShopF.DescendantAdded:Connect(function(item)
@@ -150,6 +216,8 @@ if ShopF then
 				end)
 				item:SetAttribute("BuyBound", true)
 			end
+			-- A buy button added later gets its price number too.
+			task.spawn(applyPriceToBuyBtn, item)
 		end
 	end)
 end
