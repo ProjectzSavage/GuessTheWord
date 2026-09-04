@@ -1241,13 +1241,37 @@ end
 local function quickTeleport(player, seat)
 	local char = player.Character
 	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-	if not char or not humanoid then
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if not char or not humanoid or not hrp then
 		return false
 	end
-	char:PivotTo(seat.CFrame * CFrame.new(0, 0.6, 0))
-	task.wait(0.1)
+	local target = seat.CFrame * CFrame.new(0, 0.6, 0)
+	if humanoid.Seated then
+		-- Stand up from whatever seat they're in first, or the old seat keeps
+		-- the rig latched and the new one never registers.
+		humanoid.Sit = false
+		task.wait(0.1)
+	end
+	char:PivotTo(target)
 	humanoid.Sit = true
-	return true
+	-- Humanoid.Sit only latches when the rig is settled over the seat; a bare
+	-- PivotTo + Sit sometimes leaves the player standing half off the chair
+	-- (and nothing starts until Seat.Occupant is set). Verify the seat
+	-- actually took, re-centering + re-requesting until it does (~1.5s max).
+	for _ = 1, 10 do
+		task.wait(0.15)
+		if not humanoid.Parent then
+			return true -- rig gone (respawn) - nothing left to fix here
+		end
+		if humanoid.Seated and humanoid.SeatPart == seat then
+			return true
+		end
+		if (hrp.Position - seat.Position).Magnitude > 2 then
+			char:PivotTo(target)
+		end
+		humanoid.Sit = true
+	end
+	return humanoid.Seated and humanoid.SeatPart == seat
 end
 
 local function playerInActiveMatch(player)
@@ -1621,9 +1645,12 @@ for _, productId in ipairs({ RESTORE_PRODUCT_UNDER_10, RESTORE_PRODUCT_10_PLUS }
 end
 
 -- If a player leaves with an unclaimed restore, drop it (the receipt is
--- consumed quietly instead of retrying forever).
+-- consumed quietly instead of retrying forever). Also write the final
+-- profile so the last match's Cash/Wins/Streak can never be lost to the
+-- autosave window.
 Players.PlayerRemoving:Connect(function(player)
 	pendingRestore[player.UserId] = nil
+	ProfileStore.save(player.UserId)
 end)
 
 -- Award Wins/Streak based on a finished match.
@@ -1754,6 +1781,29 @@ Players.PlayerAdded:Connect(function(player)
 				out.Wins = wins.Value
 			end
 			return out
+		end)
+
+		-- Auto-persist the leaderboard values: whenever Cash / Wins / Streak
+		-- change for ANY reason (match payout, theft, free gift, shop,
+		-- streak restore), schedule a debounced profile save. Without this,
+		-- a session that ends inside the 30s autosave window loses the last
+		-- match's values on rejoin ("leaderboards don't save").
+		local watchConns = {}
+		local function watchVal(obj, name)
+			local v = obj and obj:FindFirstChild(name)
+			if v and v:IsA("ValueBase") then
+				table.insert(watchConns, v.Changed:Connect(function()
+					ProfileStore.scheduleSave(player.UserId)
+				end))
+			end
+		end
+		watchVal(player:FindFirstChild("leaderstats"), "Cash")
+		watchVal(player:FindFirstChild("leaderstats"), "Wins")
+		watchVal(player:FindFirstChild("Stats"), "Streak")
+		player.Destroying:Connect(function()
+			for _, c in watchConns do
+				c:Disconnect()
+			end
 		end)
 	end)
 

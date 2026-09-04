@@ -115,11 +115,13 @@ build it once. The full details are further down.
       cash price. VIP owners get it automatically (on join + on purchase);
       the 3 Robux-exclusive chairs (HackerChair/SpacialMist/PinkVortex) are
       NOT part of VIP anymore.
-13. **Like Goal** — you build the part (hierarchy below); add
-    `LikeGoalService.server.luau` to `ServerScriptService > Scripts` and edit
-    `LIKE_GOAL` / `REWARD_USES` at the top of it. The script fills the bar,
-    updates the "0/10" label from Roblox's own like-count API (server-side),
-    and turns on the `Collect` prompt when the goal is hit.
+13. **Like Goal** — **disabled by default** (set `ENABLED = true` at the top
+    of `LikeGoalService` to turn it back on). You build the part (hierarchy
+    below); add `LikeGoalService.server.luau` to `ServerScriptService >
+    Scripts` and edit `LIKE_GOAL` / `REWARD_USES` at the top of it. The
+    script fills the bar, updates the "0/10" label from Roblox's like-count
+    API (server-side, via the RoProxy mirror), and turns on the `Collect`
+    prompt when the goal is hit.
 
 ```
 Workspace

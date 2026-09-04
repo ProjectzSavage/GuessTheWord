@@ -48,6 +48,7 @@ local NotifyPlayer = Events:WaitForChild("NotifyPlayer")
 -------------------------------------------------------------------------------
 -- CONFIG (edit me)
 -------------------------------------------------------------------------------
+local ENABLED = false                -- <- flip to true to turn the Like Goal back on
 local LIKE_GOAL = 10                 -- <- change your like goal HERE
 local REWARD_USES = 2                -- <- reward: this many Reveal Word uses
 local CHECK_INTERVAL = 60            -- seconds between like-count API checks
@@ -57,6 +58,11 @@ local CHECK_INTERVAL = 60            -- seconds between like-count API checks
 -- requires auth for that lookup from in-game, so this verified fallback is
 -- what actually gets used (place 87837163852448 -> universe 16084134).
 local UNIVERSE_ID_FALLBACK = 16084134
+
+if not ENABLED then
+	warn("[LikeGoalService] Like goal is DISABLED (set ENABLED = true in the CONFIG block to turn it back on).")
+	return
+end
 
 -------------------------------------------------------------------------------
 -- FIND THE PART (fail loudly if missing)

@@ -27,8 +27,10 @@
 		ProfileStore.setSection(player.UserId, "<section>", function()
 			return { ...live state... }
 		end)
-		-- on important changes and on leave:
-		ProfileStore.save(player.UserId)
+	-- on important changes and on leave:
+	ProfileStore.save(player.UserId)
+	-- for live watchers (leaderstats / Stats changes):
+	ProfileStore.scheduleSave(player.UserId)
 ]]
 
 local DataStoreService = game:GetService("DataStoreService")
@@ -128,6 +130,24 @@ function ProfileStore.save(userId)
 	end
 end
 
+-- Debounced save for live-value watchers (leaderstats / Stats changes).
+-- The write happens SAVE_DEBOUNCE_SECONDS after the LAST change, so a burst
+-- of updates (a match payout touches Wins + Cash + Streak at once) costs
+-- exactly one DataStore write.
+local SAVE_DEBOUNCE_SECONDS = 2
+local pendingSaves = {} -- userId -> true while a debounced save is queued
+
+function ProfileStore.scheduleSave(userId)
+	if not profiles[userId] or pendingSaves[userId] then
+		return
+	end
+	pendingSaves[userId] = true
+	task.delay(SAVE_DEBOUNCE_SECONDS, function()
+		pendingSaves[userId] = nil
+		ProfileStore.save(userId)
+	end)
+end
+
 -- Save every present player's profile (autosave loop).
 function ProfileStore.saveAll()
 	for userId in pairs(profiles) do
@@ -141,6 +161,7 @@ end
 function ProfileStore.forget(userId)
 	profiles[userId] = nil
 	getters[userId] = nil
+	pendingSaves[userId] = nil
 end
 
 -- Periodic autosave so a server crash loses at most ~30s of progress.
