@@ -52,6 +52,10 @@ StarterGui
     │         ├── Value   (TextLabel)  "0"  (Wins)
     │         └── Plus    (TextButton) "+" (opens shop later)
     │
+    ├── Music  (ImageButton)        can live anywhere inside GameUI - the
+    │                                MusicPlayer script finds it by name and
+    │                                toggles the background music pause/resume
+    │
     ├── CelebrationOverlay  (Frame)   full-screen, transparent, Visible=false
     │   └── CelebrationText  (TextLabel)   big "YOU WON! / LOSER / DRAW!" text.
     │                                    Script sets .Text, colors, rainbow, pop.

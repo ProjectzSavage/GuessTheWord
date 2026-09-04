@@ -190,6 +190,7 @@ ServerScriptService
 | `src/StarterPlayerScripts/FreeRewards.client.luau`              | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/SpectatorClient.client.luau`          | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/Leaderboards.client.luau`             | `StarterPlayerScripts`      | LocalScript |
+| `src/StarterPlayerScripts/MusicPlayer.client.luau`              | `StarterPlayerScripts`      | LocalScript |
 | `src/StarterPlayerScripts/StreakRestore.client.luau`            | `StarterPlayerScripts`      | LocalScript |
 
 > **Tip:** For each file, right-click the target container in Studio →
