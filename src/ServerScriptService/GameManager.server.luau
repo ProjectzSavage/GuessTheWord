@@ -1848,15 +1848,17 @@ end)
 -- A perk (2x Cash/Wins/Streak, VIP, the gamepass chairs) can only ever
 -- activate if its configured id is a REAL gamepass of this game -
 -- UserOwnsGamePassAsync always answers "no" for any other id. So validate
--- every configured gamepass id once at server start; anything invalid is
--- listed in a single warn (valid ids produce no output).
+-- every configured gamepass id once at server start and print EXACTLY ONE
+-- verdict line: either "all valid" or the list of invalid ids.
 -------------------------------------------------------------------------------
 task.spawn(function()
 	local bad = {}
+	local checked = 0
 	local function check(key, id)
 		if not id or id == 0 then
 			return
 		end
+		checked += 1
 		local ok, info = pcall(function()
 			return MarketplaceService:GetProductInfoAsync(id, Enum.InfoType.GamePass)
 		end)
@@ -1873,10 +1875,13 @@ task.spawn(function()
 			check(name, id)
 		end
 	end
+	-- Always prints exactly one line so you can see the check ran:
 	if #bad > 0 then
-		warn("[GameManager] These gamepass IDs are NOT valid gamepasses - the perks for them can NEVER activate:",
+		warn("[GameManager] Gamepass ID check:", #bad, "of", checked, "configured IDs are NOT valid gamepasses:",
 			table.concat(bad, ", "),
-			"-> in Creator Hub open your game > Monetization > Game passes, copy each pass's REAL id (the number in the pass URL) and update the same id in: PlayerPerks (ServerStorage.Modules), ShopController, OffersController, ChairsConfig.")
+			"- perks for those can never activate. Get each pass's real id in Creator Hub (Monetization > Game passes, hover a pass > ... > Copy Asset ID) and update it in: PlayerPerks (ServerStorage.Modules), ShopController, OffersController, ChairsConfig.")
+	else
+		warn("[GameManager] Gamepass ID check: all", checked, "configured gamepass IDs are valid gamepasses - the shop shows their real prices, and the perks activate for any account that OWNS (bought) the pass.")
 	end
 end)
 
