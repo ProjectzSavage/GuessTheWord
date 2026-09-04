@@ -111,9 +111,9 @@ function PlayerPerks.owns(player, key)
 	if granted[player.UserId] and granted[player.UserId][key] then
 		return true
 	end
-	-- 2) Recent cache hit.
+	-- 2) Recent cache hit — only trust it if THIS key was actually checked before.
 	local e = entryFor(player)
-	if e then
+	if e and e.owned[key] ~= nil then
 		return e.owned[key] == true
 	end
 	-- 3) Ask the real ownership API (live purchases are caught here).
@@ -121,7 +121,7 @@ function PlayerPerks.owns(player, key)
 		return MarketplaceService:UserOwnsGamePassAsync(player.UserId, passId)
 	end)
 	local result = ok and owns or false
-	local entry = entryFor(player) or { owned = {}, at = os.time() }
+	local entry = e or { owned = {}, at = os.time() }
 	entry.owned[key] = result
 	cache[player.UserId] = entry
 	return result
