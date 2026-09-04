@@ -1039,10 +1039,14 @@ task.spawn(function()
 	for _, typeName in ipairs({ "Letter", "Word" }) do
 		local id = POWERUP_PRODUCT_IDS[typeName]
 		local ok, info = pcall(function()
-			return MarketplaceService:GetProductInfoAsync(id)
+			return MarketplaceService:GetProductInfoAsync(id, Enum.InfoType.Product)
 		end)
-		if ok and type(info) == "table" and info.Price then
-			POWERUP_PRICE[typeName] = math.floor(info.Price / 100)
+		if ok and type(info) == "table" then
+			-- PriceInRobux / Price are ALREADY in Robux (not cents).
+			local price = tonumber(info.PriceInRobux) or tonumber(info.Price)
+			if price then
+				POWERUP_PRICE[typeName] = math.floor(price)
+			end
 		end
 	end
 	updatePowerupPrices()

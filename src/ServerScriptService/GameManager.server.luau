@@ -1844,6 +1844,43 @@ Players.PlayerAdded:Connect(function(player)
 end)
 
 -------------------------------------------------------------------------------
+-- GAMEPASS ID SANITY CHECK (one-time, server start)
+-- A perk (2x Cash/Wins/Streak, VIP, the gamepass chairs) can only ever
+-- activate if its configured id is a REAL gamepass of this game -
+-- UserOwnsGamePassAsync always answers "no" for any other id. So validate
+-- every configured gamepass id once at server start; anything invalid is
+-- listed in a single warn (valid ids produce no output).
+-------------------------------------------------------------------------------
+task.spawn(function()
+	local bad = {}
+	local function check(key, id)
+		if not id or id == 0 then
+			return
+		end
+		local ok, info = pcall(function()
+			return MarketplaceService:GetProductInfoAsync(id, Enum.InfoType.GamePass)
+		end)
+		if not (ok and type(info) == "table") then
+			table.insert(bad, key .. " = " .. id)
+		end
+	end
+	for key, id in PlayerPerks.IDS do
+		check(key, id)
+	end
+	local ChairsConfig = require(ReplicatedStorage:WaitForChild("ChairsConfig"))
+	if ChairsConfig.GamepassChairs then
+		for name, id in ChairsConfig.GamepassChairs do
+			check(name, id)
+		end
+	end
+	if #bad > 0 then
+		warn("[GameManager] These gamepass IDs are NOT valid gamepasses - the perks for them can NEVER activate:",
+			table.concat(bad, ", "),
+			"-> in Creator Hub open your game > Monetization > Game passes, copy each pass's REAL id (the number in the pass URL) and update the same id in: PlayerPerks (ServerStorage.Modules), ShopController, OffersController, ChairsConfig.")
+	end
+end)
+
+-------------------------------------------------------------------------------
 -- INIT
 -------------------------------------------------------------------------------
 discoverTables()

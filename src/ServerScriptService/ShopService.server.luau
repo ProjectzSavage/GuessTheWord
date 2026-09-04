@@ -96,9 +96,11 @@ MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, gameP
 		return MarketplaceService:GetProductInfoAsync(gamePassId, Enum.InfoType.GamePass)
 	end)
 	local passName = (ok and type(info) == "table" and info.Name) or ""
-	if ok and type(info) == "table" and info.Price then
-		if _G.RewardsAddRobuxSpent then
-			_G.RewardsAddRobuxSpent(player, math.floor(info.Price / 100))
+	if ok and type(info) == "table" then
+		-- PriceInRobux / Price are ALREADY in Robux (not cents).
+		local price = tonumber(info.PriceInRobux) or tonumber(info.Price)
+		if price and _G.RewardsAddRobuxSpent then
+			_G.RewardsAddRobuxSpent(player, math.floor(price))
 		end
 	end
 	-- Client celebration: special purchase sound + confetti + notification.

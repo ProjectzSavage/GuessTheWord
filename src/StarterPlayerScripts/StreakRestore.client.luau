@@ -60,13 +60,13 @@ local currentProductId = nil
 
 local function fetchPriceText(productId)
 	local ok, info = pcall(function()
-		return MarketplaceService:GetProductInfoAsync(productId)
+		return MarketplaceService:GetProductInfoAsync(productId, Enum.InfoType.Product)
 	end)
 	if ok and type(info) == "table" then
-		local robux = tonumber(info.PriceInRobux)
-			or (info.Price and math.floor(tonumber(info.Price) / 100))
+		-- PriceInRobux / Price are ALREADY in Robux (not cents).
+		local robux = tonumber(info.PriceInRobux) or tonumber(info.Price)
 		if robux then
-			return "R$" .. robux
+			return "R$" .. math.floor(robux)
 		end
 	end
 	return nil

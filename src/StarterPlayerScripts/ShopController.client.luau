@@ -131,41 +131,92 @@ wireBuyButtons()
 
 -------------------------------------------------------------------------------
 -- AUTO PRICES
--- Every item frame's PriceLbl is filled from the REAL price in Creator Hub
--- (dev product or gamepass, per item name). Nothing is hardcoded - if a fetch
--- fails the label keeps whatever text you set in Studio.
+-- EVERY TextLabel named PriceLbl inside the shop (including the ones inside
+-- the scroll) gets the REAL price of its item's gamepass / dev product id.
+-- The item id is found by walking UP from the label to the first frame whose
+-- name is a key in PRODUCT_IDS (Cash5000, DoubleCash, ...). Nothing is
+-- hardcoded. If a fetch fails (e.g. the id is not a real product/pass) the
+-- label keeps whatever text you set in Studio, and a one-time warn names the
+-- bad id.
 -------------------------------------------------------------------------------
-local function fetchPriceText(productId, isGamepass)
+local priceCache = {} -- productId -> robux price (once fetched)
+local priceFailed = {} -- productId -> true (warned once)
+local priceInFlight = {} -- productId -> true (a fetch is running)
+
+-- Read the Robux price from a GetProductInfoAsync result. Newer engines
+-- expose PriceInRobux, older ones Price - both are ALREADY IN ROBUX (not
+-- cents), so no conversion is needed.
+local function priceInRobux(info)
+	if type(info) ~= "table" then
+		return nil
+	end
+	local p = tonumber(info.PriceInRobux)
+	if not p then
+		p = tonumber(info.Price)
+	end
+	return p
+end
+
+-- The gamepass/dev-product id for a node: the nearest ancestor (including
+-- itself, up to ShopF) whose name is a key in PRODUCT_IDS.
+local function idForNode(node)
+	local n: Instance? = node
+	while n and n ~= ShopF do
+		local id = PRODUCT_IDS[n.Name]
+		if id and id > 0 then
+			return id, GAMEPASS_NAMES[n.Name] == true
+		end
+		n = n.Parent
+	end
+	return nil, false
+end
+
+local function fetchPrice(productId, isGamepass)
+	local cached = priceCache[productId]
+	if cached then
+		return cached
+	end
+	if priceInFlight[productId] then
+		return nil
+	end
+	priceInFlight[productId] = true
 	local ok, info = pcall(function()
 		if isGamepass then
 			return MarketplaceService:GetProductInfoAsync(productId, Enum.InfoType.GamePass)
 		end
-		return MarketplaceService:GetProductInfoAsync(productId)
+		return MarketplaceService:GetProductInfoAsync(productId, Enum.InfoType.Product)
 	end)
-	if ok and type(info) == "table" and info.Price then
-		return "R$" .. tostring(math.floor(info.Price / 100))
+	priceInFlight[productId] = nil
+	local price = priceInRobux(info)
+	if ok and price then
+		priceCache[productId] = price
+		return price
+	end
+	if not priceFailed[productId] then
+		priceFailed[productId] = true
+		warn("[Shop] Could not read the real price for id", productId,
+			isGamepass and "(gamepass)" or "(dev product)",
+			"- if that id is not a real product/pass in Creator Hub the label keeps its Studio text.")
 	end
 	return nil
 end
 
+local function applyPriceToLabel(label)
+	local id, isGamepass = idForNode(label)
+	if not id then
+		return -- no id configured for this label: keep its Studio text
+	end
+	local price = fetchPrice(id, isGamepass)
+	if price and label.Parent then
+		label.Text = "R$" .. tostring(math.floor(price))
+	end
+end
+
 local function applyItemPrices()
 	if not ShopF then return end
-	for _, frame in ShopF:GetDescendants() do
-		if frame:IsA("Frame") then
-			local hasBuy = frame:FindFirstChild("BuyBtn") ~= nil or frame:FindFirstChild("PurchaseBtn") ~= nil
-			local priceLbl = frame:FindFirstChild("PriceLbl")
-			if hasBuy and priceLbl and priceLbl:IsA("TextLabel") then
-				local productId = PRODUCT_IDS[frame.Name]
-				if productId and productId > 0 then
-					local isGamepass = GAMEPASS_NAMES[frame.Name] == true
-					task.spawn(function()
-						local text = fetchPriceText(productId, isGamepass)
-						if text and frame.Parent then
-							priceLbl.Text = text
-						end
-					end)
-				end
-			end
+	for _, item in ShopF:GetDescendants() do
+		if item:IsA("TextLabel") and item.Name == "PriceLbl" then
+			task.spawn(applyPriceToLabel, item)
 		end
 	end
 end
@@ -184,6 +235,10 @@ if ShopF then
 				end)
 				item:SetAttribute("BuyBound", true)
 			end
+		end
+		-- A PriceLbl added later (dynamically) gets its real price too.
+		if item:IsA("TextLabel") and item.Name == "PriceLbl" then
+			task.spawn(applyPriceToLabel, item)
 		end
 	end)
 end

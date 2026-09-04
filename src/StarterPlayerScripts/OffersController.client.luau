@@ -330,19 +330,39 @@ end
 
 -- ============================================================================
 -- AUTO PRICES
--- Every price text is fetched from the real product/gamepass ids in Creator
--- Hub on load - nothing is hardcoded. If a fetch fails (e.g. offline), the
--- placeholder values stay on screen.
+-- Every price in the RightStack (the cycling gamepass button + the starter
+-- pack button, and the popup's BuyPrice) is fetched from the REAL gamepass
+-- id on load - nothing is hardcoded. If a fetch fails (e.g. the id is not a
+-- real gamepass), the placeholder values stay on screen and a one-time warn
+-- names the bad id.
 -- ============================================================================
+-- Read the Robux price from a GetProductInfoAsync result. Newer engines
+-- expose PriceInRobux, older ones Price - both are ALREADY IN ROBUX (not
+-- cents), so no conversion is needed.
+local function priceInRobux(info)
+	if type(info) ~= "table" then
+		return nil
+	end
+	local p = tonumber(info.PriceInRobux)
+	if not p then
+		p = tonumber(info.Price)
+	end
+	return p
+end
+
 task.spawn(function()
 	local offersChanged = false
 	for _, gp in ipairs(GAMEPASS_OFFERS) do
 		local ok, info = pcall(function()
 			return MarketplaceService:GetProductInfoAsync(gp.id, Enum.InfoType.GamePass)
 		end)
-		if ok and type(info) == "table" and info.Price then
-			gp.priceText = tostring(math.floor(info.Price / 100))
+		local price = priceInRobux(info)
+		if ok and price then
+			gp.priceText = tostring(math.floor(price))
 			offersChanged = true
+		elseif not ok then
+			warn("[Offers] Could not read the price for", gp.name, "(id", gp.id,
+				") - if that id is not a real gamepass in Creator Hub the placeholder price stays.")
 		end
 	end
 	if offersChanged then
@@ -352,8 +372,12 @@ task.spawn(function()
 	local ok, spInfo = pcall(function()
 		return MarketplaceService:GetProductInfoAsync(STARTER_PACK_GAMEPASS_ID, Enum.InfoType.GamePass)
 	end)
-	if ok and type(spInfo) == "table" and spInfo.Price then
-		setStarterPrice(math.floor(spInfo.Price / 100))
+	local spPrice = priceInRobux(spInfo)
+	if ok and spPrice then
+		setStarterPrice(math.floor(spPrice))
+	elseif not ok then
+		warn("[Offers] Could not read the price for the Starter Pack (id", STARTER_PACK_GAMEPASS_ID,
+			") - if that id is not a real gamepass in Creator Hub the placeholder price stays.")
 	end
 end)
 
