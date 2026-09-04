@@ -13,9 +13,10 @@
 	YOU can change the goal and the reward in the CONFIG block below.
 
 	ANTI-EXPLOIT
-	* The like count is fetched SERVER-SIDE from Roblox's own API
-	  (games.roblox.com) - the client never sends or controls it, so a hacker
-	  cannot fake the goal.
+	* The like count is fetched SERVER-SIDE from Roblox's public games API
+	  (via the RoProxy mirror, because in-experience HTTP to the classic
+	  roblox.com endpoints is blocked) - the client never sends or controls
+	  it, so a hacker cannot fake the goal.
 	* The Collect prompt's Enabled is only ever toggled by this script.
 	* The claim handler re-verifies the goal with a fresh API check AND
 	  enforces once-per-player, persisted in the ProfileStore DataStore -
@@ -50,6 +51,12 @@ local NotifyPlayer = Events:WaitForChild("NotifyPlayer")
 local LIKE_GOAL = 10                 -- <- change your like goal HERE
 local REWARD_USES = 2                -- <- reward: this many Reveal Word uses
 local CHECK_INTERVAL = 60            -- seconds between like-count API checks
+
+-- Your game's Roblox UNIVERSE id (a place belongs to one universe). The
+-- script tries to auto-resolve it from game.PlaceId, but Roblox now
+-- requires auth for that lookup from in-game, so this verified fallback is
+-- what actually gets used (place 87837163852448 -> universe 16084134).
+local UNIVERSE_ID_FALLBACK = 16084134
 
 -------------------------------------------------------------------------------
 -- FIND THE PART (fail loudly if missing)
@@ -89,12 +96,25 @@ end)
 -------------------------------------------------------------------------------
 -- LIKE COUNT (Roblox API, server-side only)
 -------------------------------------------------------------------------------
-local PLACE_DETAILS_URL = "https://games.roblox.com/v1/games/multiget-place-details?placeIds=%d"
-local VOTES_URL = "https://games.roblox.com/v1/games/%d/votes"
+-- In-experience HttpService is limited to third-party domains + a small
+-- keyed Open Cloud subset (Roblox docs, Sept 2026) - the classic
+-- games.roblox.com endpoints below are BLOCKED from the game server
+-- ("HttpService is not allowed to access that Roblox resource"). Primary
+-- route is therefore the RoProxy mirror of the same public API - the game
+-- already trusts roproxy.com for the follow check, and "Allow HTTP
+-- Requests" (which the game needs anyway) covers it. The direct roblox.com
+-- host stays as a fallback in case Roblox ever allows these endpoints again.
+local GAMES_API_HOSTS = {
+	"https://games.roproxy.com/v1/games",
+	"https://games.roblox.com/v1/games",
+}
+local PLACE_DETAILS_PATH = "/multiget-place-details?placeIds=%d"
+local VOTES_PATH = "/%d/votes"
 
 local cachedUniverseId = nil
 local lastLikes = nil
 local lastFetchedAt = 0
+local lookupTriedAt = 0 -- os.clock() of the last universeId auto-lookup attempt
 
 local function jsonGet(url)
 	local ok, response = pcall(function()
@@ -112,17 +132,45 @@ local function jsonGet(url)
 	return nil
 end
 
+-- Try to resolve the universe id from game.PlaceId. Rate-limited: that
+-- endpoint is currently auth-gated from in-game, so don't hammer it every
+-- check. If it ever starts working again, the cached value sticks.
+local function tryLookupUniverseId()
+	local now = os.clock()
+	if lookupTriedAt ~= 0 and now - lookupTriedAt < 900 then
+		return false
+	end
+	lookupTriedAt = now
+	for _, host in ipairs(GAMES_API_HOSTS) do
+		local json = jsonGet(host .. string.format(PLACE_DETAILS_PATH, game.PlaceId))
+		if type(json) ~= "table" then
+			continue
+		end
+		local uid = nil
+		if type(json.data) == "table" and type(json.data[1]) == "table" then
+			uid = tonumber(json.data[1].universeId)
+		end
+		if not uid then
+			uid = tonumber(json.universeId)
+		end
+		if uid then
+			cachedUniverseId = uid
+			return true
+		end
+	end
+	return false
+end
+
 local function getUniverseId()
 	if cachedUniverseId then
 		return cachedUniverseId
 	end
-	local json = jsonGet(string.format(PLACE_DETAILS_URL, game.PlaceId))
-	if json and type(json.data) == "table" and #json.data > 0 and type(json.data[1]) == "table" then
-		cachedUniverseId = tonumber(json.data[1].universeId)
-	elseif json and tonumber(json.universeId) then
-		cachedUniverseId = tonumber(json.universeId)
+	if tryLookupUniverseId() then
+		return cachedUniverseId
 	end
-	return cachedUniverseId
+	-- Auto-lookup is blocked by Roblox right now - use this game's known
+	-- universe (see UNIVERSE_ID_FALLBACK in the CONFIG block).
+	return UNIVERSE_ID_FALLBACK
 end
 
 -- Fresh fetch; on any failure keeps the last known value (never nil->junk).
@@ -134,20 +182,23 @@ local function fetchLikes()
 	if not universeId then
 		return lastLikes
 	end
-	local json = jsonGet(string.format(VOTES_URL, universeId))
-	if type(json) == "table" then
-		local upVotes = tonumber(json.upVotes)
-		if not upVotes and type(json.data) == "table" then
-			-- Fallback if Roblox ever wraps this endpoint in "data" again.
-			if json.data.upVotes ~= nil then
-				upVotes = tonumber(json.data.upVotes)
-			elseif #json.data > 0 and type(json.data[1]) == "table" then
-				upVotes = tonumber(json.data[1].upVotes)
+	for _, host in ipairs(GAMES_API_HOSTS) do
+		local json = jsonGet(host .. string.format(VOTES_PATH, universeId))
+		if type(json) == "table" then
+			local upVotes = tonumber(json.upVotes)
+			if not upVotes and type(json.data) == "table" then
+				-- Fallback if Roblox ever wraps this endpoint in "data" again.
+				if json.data.upVotes ~= nil then
+					upVotes = tonumber(json.data.upVotes)
+				elseif #json.data > 0 and type(json.data[1]) == "table" then
+					upVotes = tonumber(json.data[1].upVotes)
+				end
 			end
-		end
-		if upVotes then
-			lastLikes = upVotes
-			lastFetchedAt = os.clock()
+			if upVotes then
+				lastLikes = upVotes
+				lastFetchedAt = os.clock()
+				break
+			end
 		end
 	end
 	return lastLikes
@@ -161,6 +212,9 @@ local function updateVisual(likes)
 	local ratio = 0
 	if LIKE_GOAL > 0 then
 		ratio = math.clamp(shown / LIKE_GOAL, 0, 1)
+	elseif shown > 0 then
+		-- LIKE_GOAL = 0 (used to test Collect) with real likes: full bar.
+		ratio = 1
 	end
 	if likeLabel and likeLabel:IsA("TextLabel") then
 		likeLabel.Text = NumberFormat.commas(shown) .. "/" .. NumberFormat.commas(LIKE_GOAL)
@@ -273,32 +327,38 @@ end)
 -- so we can see whether it's an HTTP block, an unpublished place, or a
 -- response-shape mismatch.
 local function diagnoseOnce()
-	local placeUrl = string.format(PLACE_DETAILS_URL, game.PlaceId)
-	local ok, resp = pcall(function()
-		return HttpService:GetAsync(placeUrl)
-	end)
-	if not ok or type(resp) ~= "string" then
-		warn("[LikeGoalService] DIAGNOSTIC: universeId lookup FAILED: ", tostring(resp),
-			" (URL: ", placeUrl, ")")
-		return
-	end
-	if not getUniverseId() then
-		warn("[LikeGoalService] DIAGNOSTIC: universeId lookup returned no universeId. Raw: ",
-			string.sub(resp, 1, 300))
-		return
+	-- Test every route for BOTH calls and show exactly what each one
+	-- returns, so the Output pins down which host works and which is blocked.
+	for _, host in ipairs(GAMES_API_HOSTS) do
+		local placeUrl = host .. string.format(PLACE_DETAILS_PATH, game.PlaceId)
+		local ok, resp = pcall(function()
+			return HttpService:GetAsync(placeUrl)
+		end)
+		if not ok or type(resp) ~= "string" then
+			warn("[LikeGoalService] DIAGNOSTIC: place-details on ", host,
+				" FAILED: ", tostring(resp))
+		else
+			warn("[LikeGoalService] DIAGNOSTIC: place-details on ", host,
+				" raw: ", string.sub(resp, 1, 200))
+		end
 	end
 	local universeId = getUniverseId()
-	local votesUrl = string.format(VOTES_URL, universeId)
-	local ok2, resp2 = pcall(function()
-		return HttpService:GetAsync(votesUrl)
-	end)
-	if not ok2 or type(resp2) ~= "string" then
-		warn("[LikeGoalService] DIAGNOSTIC: votes fetch FAILED: ", tostring(resp2),
-			" (URL: ", votesUrl, ")")
-		return
+	warn("[LikeGoalService] DIAGNOSTIC: using universeId ", tostring(universeId))
+	if universeId then
+		for _, host in ipairs(GAMES_API_HOSTS) do
+			local votesUrl = host .. string.format(VOTES_PATH, universeId)
+			local ok, resp = pcall(function()
+				return HttpService:GetAsync(votesUrl)
+			end)
+			if not ok or type(resp) ~= "string" then
+				warn("[LikeGoalService] DIAGNOSTIC: votes on ", host,
+					" FAILED: ", tostring(resp))
+			else
+				warn("[LikeGoalService] DIAGNOSTIC: votes on ", host,
+					" raw: ", string.sub(resp, 1, 200))
+			end
+		end
 	end
-	warn("[LikeGoalService] DIAGNOSTIC: universeId=", universeId,
-		" - votes raw response: ", string.sub(resp2, 1, 300))
 end
 
 local announced = false
@@ -312,9 +372,9 @@ task.spawn(function()
 			end
 			if not announced then
 				announced = true
-				warn("[LikeGoalService] Active - goal is " .. NumberFormat.commas(LIKE_GOAL)
-					.. " likes, currently at " .. NumberFormat.commas(likes)
-					.. " (Collect unlocks when the goal is reached).")
+			warn("[LikeGoalService] Active - goal is " .. NumberFormat.commas(LIKE_GOAL)
+				.. " likes, currently at " .. NumberFormat.commas(likes)
+				.. " (Collect unlocks at the goal; likes read server-side via the roproxy mirror).")
 			end
 		elseif not announced then
 			announced = true
