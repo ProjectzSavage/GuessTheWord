@@ -106,6 +106,8 @@ local useGlobal = pushEvent ~= nil
 
 local globalLists = {} -- boardKey ("cash"/"wins"/"streak") -> {userId, name, value} list
 local hasData = {}     -- boardKey -> true once at least one push has arrived
+local firstDataWarned = false -- one-time: first usable global list arrived
+local noDataWarned = false    -- one-time: 60s in and still no global data
 
 if useGlobal then
 	warn("[Leaderboards] Global mode: boards show the all-time world top lists (GlobalLeaderboards server script).")
@@ -385,6 +387,12 @@ if pushEvent then
 			end
 		end
 		if reRender then
+			if not firstDataWarned then
+				firstDataWarned = true
+				warn("[Leaderboards] first global data received (cash="
+					.. #(globalLists.cash or {}) .. " wins=" .. #(globalLists.wins or {})
+					.. " streak=" .. #(globalLists.streak or {}) .. ").")
+			end
 			safeRefreshAll()
 		end
 	end)
@@ -396,10 +404,17 @@ task.spawn(function()
 	-- second (unix time crossing a multiple of REFRESH_SECONDS), and the
 	-- wait time is re-computed from the clock each pass so drift
 	-- self-corrects. The RefreshPart sign below uses the same phase.
+	local startAt = os.clock()
 	while true do
 		local intoPhase = os.time() % REFRESH_SECONDS
 		task.wait(math.max(REFRESH_SECONDS - intoPhase, 0.1))
 		safeRefreshAll()
+		-- One-time diagnostic: if the boards are in "Loading..." forever,
+		-- point the player at the server-side lines that explain why.
+		if useGlobal and not firstDataWarned and not noDataWarned and os.clock() - startAt > 60 then
+			noDataWarned = true
+			warn("[Leaderboards] still no global data 60s in - check the server Output for the [GlobalLeaderboards] lines (DataStore loaded / first DataStore write OK).")
+		end
 	end
 end)
 

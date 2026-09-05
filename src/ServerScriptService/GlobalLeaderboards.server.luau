@@ -72,6 +72,10 @@ end
 -- section below assigns the real one (declared early so upsert can call it).
 local broadcast = function() end
 
+-- One-time diagnostic: proves the write path works (pair it with the
+-- startup load line + the client's "first global data" line in Output).
+local firstWriteWarned = false
+
 -- Keep only well-formed entries, sorted descending by value.
 local function sanitize(list)
 	local out = {}
@@ -136,6 +140,11 @@ local function upsert(b, userId, name, value)
 	if ok then
 		if type(result) == "table" then
 			b.data = result
+			if not firstWriteWarned then
+				firstWriteWarned = true
+				warn("[GlobalLeaderboards] first DataStore write OK (" .. b.storeKey
+					.. " now has " .. #result .. " entr" .. (#result == 1 and "y" or "ies") .. ") - global boards are live.")
+			end
 			broadcast() -- boards pick up the change right away (was up to 30s)
 		end
 	else

@@ -63,6 +63,11 @@ local NotifyPlayer = Events:WaitForChild("NotifyPlayer")
 local RestoreStreakPrompt = Events:WaitForChild("RestoreStreakPrompt")
 local RestoreStreakResult = Events:WaitForChild("RestoreStreakResult")
 
+-- One-time build marker: if behavior still looks old after pasting, check
+-- Output for this line - if you don't see THIS version, the pasted script is
+-- not the one running.
+warn("[GameManager] build v11 (fast quickplay, reset=forfeit, leaver streak break) running.")
+
 -------------------------------------------------------------------------------
 -- CONFIG
 -------------------------------------------------------------------------------
@@ -147,6 +152,7 @@ local function discoverTables()
 					matchActive = false,
 					countdownActive = false, -- pre-match 3..2..1 is running (exiting cancels)
 					matchGen = 0,           -- bumped on cancel; kills the running startMatch thread
+				resetBailers = {},      -- Players who RESET/disconnected after the countdown (forfeit, not a cancel)
 					liveGuesses = {},      -- seatIndex -> in-progress guess (spectators)
 					lastGuess = nil,       -- last submitted guess (spectators)
 					lastMarks = {},        -- index -> true where lastGuess matched the word
@@ -482,8 +488,9 @@ function gameOver(tableState, winnerSeatIndex, extraRecipients)
 	-- Update the Wins/Streak leaderboard BEFORE firing GameOver, so clients read
 	-- the fresh streak in their celebration. Also covers "opponent left
 	-- mid-match" (releasePlayer calls gameOver with the remaining player as the
-	-- winner), so they win exactly like a normal victory.
-	awardMatchOutcome(tableState, winnerSeatIndex)
+	-- winner), so they win exactly like a normal victory. Leavers (bail/reset)
+	-- lose their streak too - see awardMatchOutcome.
+	awardMatchOutcome(tableState, winnerSeatIndex, extraRecipients)
 
 	-- Was this match against a bot? Use the type locked in at startMatch
 	-- (fall back to a live scan if the flag was never set). This drives the
@@ -944,6 +951,7 @@ end
 
 function startMatch(tableState)
 	tableState.matchActive = true
+	tableState.resetBailers = {} -- fresh match: no one has bailed yet
 	local gen = tableState.matchGen or 0
 	-- Lock in the match type NOW (a bot seat can clear mid-match; the type
 	-- must not change — quests rely on this to split bot vs friend wins).
@@ -1087,18 +1095,23 @@ function releasePlayer(tableState, player)
 	if tableState.matchActive then
 		local seat = seatOfPlayer(tableState, player)
 		if seat then
-			-- Last-second jump: no heart has been lost yet (still in the cash
+			-- Last-second JUMP: no heart has been lost yet (still in the cash
 			-- roll or the very start of round 1) - the match never really got
 			-- going, so CANCEL it for everyone instead of awarding the
 			-- opponent a forfeit win (that forfeit raced the running roll and
 			-- left the other player with a dead round + stuck camera).
+			-- A RESET/disconnect after the countdown is flagged (resetBailers)
+			-- and still forfeits - jumping is a bail, resetting is a loss.
 			if tableState.hearts[1] == HEARTS_PER_PLAYER
-				and tableState.hearts[2] == HEARTS_PER_PLAYER then
+				and tableState.hearts[2] == HEARTS_PER_PLAYER
+				and not tableState.resetBailers[player] then
 				tableState.occupants[seat] = nil
 				cancelCountdown(tableState, player)
 				return
 			end
-			-- A real player left mid-match: give the match to the opponent.
+			-- A real player left mid-match (or bailed via reset/disconnect):
+			-- give the match to the opponent.
+			tableState.resetBailers[player] = nil
 			tableState.occupants[seat] = nil
 			gameOver(tableState, opponentSeat(seat), { player })
 		end
@@ -1299,20 +1312,23 @@ local function quickTeleport(player, seat)
 	end
 	local target = seat.CFrame * CFrame.new(0, 0.6, 0)
 	if humanoid.Seated then
-		-- Stand up from whatever seat they're in first, or the old seat keeps
-		-- the rig latched and the new one never registers. A bare Sit=false
-		-- + 0.1s was not enough: the old seat's release can lag, and a rig
-		-- still latched to it never seats on the new one (the teleport looks
-		-- "weird" and the verify loop below fails). Wait until it lets go.
+		-- Release the old seat, then IMMEDIATELY teleport away: the PivotTo
+		-- itself breaks the old seat's grip (a rig tens of studs from its
+		-- seat can't stay latched to it). Waiting for the full release before
+		-- moving used to eat up to a second before the teleport even started.
 		humanoid.Sit = false
-		for _ = 1, 10 do
-			if not humanoid.Parent or not humanoid.Seated then
+		char:PivotTo(target)
+		for _ = 1, 6 do
+			if not humanoid.Parent then
+				return false -- rig gone (respawn) - the caller reports it
+			end
+			if not humanoid.Seated then
 				break
 			end
-			task.wait(0.1)
+			task.wait(0.05)
 		end
 		if not humanoid.Parent then
-			return false -- rig gone (respawn) - the caller reports it
+			return false
 		end
 	end
 	char:PivotTo(target)
@@ -1734,7 +1750,9 @@ end)
 
 -- Award Wins/Streak based on a finished match.
 -- winnerSeatIndex == nil => draw (streak resets). A bot winner awards nothing.
-function awardMatchOutcome(tableState, winnerSeatIndex)
+-- extraRecipients = players who LEFT the table (bail/reset): they lose this
+-- match too, so their streak is broken as well.
+function awardMatchOutcome(tableState, winnerSeatIndex, extraRecipients)
 	-- Read the (hidden) streak from the "Stats" folder, not leaderstats.
 	local function playerStreak(player)
 		local stats = player:FindFirstChild("Stats")
@@ -1786,6 +1804,23 @@ function awardMatchOutcome(tableState, winnerSeatIndex)
 						streak.Value = 0
 					end
 				end
+		end
+	end
+	
+	-- Players who LEFT mid-match (bail / reset / disconnect) LOSE this match
+	-- too: break their streak in the live IntValue AND re-save their profile
+	-- right now, so rejoining does not bring the old streak back (leaving was
+	-- a forfeit, not a free streak save). Players still in the game (a reset)
+	-- also get the usual buy-back offer; for someone who is gone the prompt is
+	-- a harmless no-op and the pending restore is dropped on leave.
+	for _, leaver in extraRecipients or {} do
+		if leaver and leaver.Parent then
+			local streak = playerStreak(leaver)
+			if streak and streak.Value > 0 then
+				queueStreakRestore(leaver, streak.Value)
+				streak.Value = 0
+				ProfileStore.save(leaver.UserId) -- persist the 0 immediately
+			end
 		end
 	end
 end
@@ -1905,8 +1940,14 @@ Players.PlayerAdded:Connect(function(player)
 	end)
 
 	player.CharacterRemoving:Connect(function(character)
-		-- If a player disconnects or respawns, free their seat.
+		-- If a player disconnects or respawns, free their seat. If the match
+		-- was already COMMITTED (countdown finished), this is a bail-out
+		-- (reset or disconnect) - NOT a last-second jump: mark it so
+		-- releasePlayer awards the forfeit instead of cancelling.
 		for _, tableState in tableStates do
+			if tableState.matchActive and not tableState.countdownActive then
+				tableState.resetBailers[player] = true
+			end
 			releasePlayer(tableState, player)
 		end
 	end)

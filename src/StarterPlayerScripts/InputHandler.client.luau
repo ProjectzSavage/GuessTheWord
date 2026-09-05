@@ -1775,12 +1775,14 @@ MatchCancelled.OnClientEvent:Connect(function()
 	enterLobby()
 end)
 
--- Countdown is over and the cash roll is playing: the match is committed, so
--- the player can no longer bail out of the chair by jumping. (RoundStart
--- re-locks too, but the roll plays BEFORE the round starts.)
+-- Countdown is over and the cash roll is playing. NOTE: the jump is NOT
+-- locked here anymore - bailing during the roll is a clean cancel now (the
+-- server treats a pre-heart-loss leave as a cancel), so the seated player
+-- must be able to jump out. The old lock is what left the remaining player
+-- unable to jump after a last-second cancel. (RoundStart still locks: once
+-- a round is actually running, you're in.)
 CashReroll.OnClientEvent:Connect(function()
 	matchArmed = true -- the roll only plays for a committed match
-	lockJump(true)
 end)
 
 -------------------------------------------------------------------------------
@@ -1884,7 +1886,7 @@ if QuickPlayButton then
 		hideFrame(PlayVsBotButton)
 		hideFrame(DifficultySelector) -- never show both selectors at once
 		setQuickPlayVisible(false)
-		task.delay(0.1, openQuickPlaySelector)
+		task.delay(0.05, openQuickPlaySelector)
 	end)
 end
 
@@ -1941,7 +1943,7 @@ QuickPlayResult.OnClientEvent:Connect(function(mode, success, note)
 		-- the teleport + the waiting-state UI settle first (the seat is
 		-- already CONFIRMED before this event fires, so any long delay is
 		-- pure lag).
-		task.delay(0.1, function()
+		task.delay(0.05, function()
 			quickMatchStarting = false
 			local h = getHumanoid()
 			if not (h and h.Seated) then
