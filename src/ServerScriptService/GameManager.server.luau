@@ -1184,8 +1184,17 @@ local QuickPlayRequest = Events:WaitForChild("QuickPlayRequest")
 local QuickPlayResult = Events:WaitForChild("QuickPlayResult")
 
 -- Is this seat physically + logically free?
-local function quickSeatIsFree(tableState, seatIndex)
+local function quickSeatIsFree(tableState, seatIndex, player)
 	local seat = tableState.seats[seatIndex]
+	-- Logically free (no tracked occupant) AND physically empty. The
+	-- Occupant check catches a stale bot body still sitting in the seat
+	-- (its despawn is delayed) - teleporting onto that body made the seat
+	-- never latch and the player float "weirdly". The player's own rig on
+	-- the seat is fine (replay on the same table).
+	local myRig = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+	if seat.Occupant and seat.Occupant ~= myRig then
+		return false
+	end
 	return not playerOnSeat(seat) and tableState.occupants[seatIndex] == nil
 end
 
@@ -1201,7 +1210,7 @@ local function quickFindSeat(tableState, player, allowWaitingPlayer)
 		return nil
 	end
 	for seatIndex = 1, #tableState.seats do
-		if quickSeatIsFree(tableState, seatIndex) then
+		if quickSeatIsFree(tableState, seatIndex, player) then
 			local other = tableState.occupants[opponentSeat(seatIndex)]
 			if other == player then
 				other = nil
@@ -1258,9 +1267,20 @@ local function quickTeleport(player, seat)
 	local target = seat.CFrame * CFrame.new(0, 0.6, 0)
 	if humanoid.Seated then
 		-- Stand up from whatever seat they're in first, or the old seat keeps
-		-- the rig latched and the new one never registers.
+		-- the rig latched and the new one never registers. A bare Sit=false
+		-- + 0.1s was not enough: the old seat's release can lag, and a rig
+		-- still latched to it never seats on the new one (the teleport looks
+		-- "weird" and the verify loop below fails). Wait until it lets go.
 		humanoid.Sit = false
-		task.wait(0.1)
+		for _ = 1, 10 do
+			if not humanoid.Parent or not humanoid.Seated then
+				break
+			end
+			task.wait(0.1)
+		end
+		if not humanoid.Parent then
+			return false -- rig gone (respawn) - the caller reports it
+		end
 	end
 	char:PivotTo(target)
 	humanoid.Sit = true
@@ -1373,9 +1393,23 @@ QuickPlayRequest.OnServerEvent:Connect(function(player, mode)
 		return
 	end
 
+	-- Distinguish the two failure modes (the old message blamed a missing
+	-- character even when the seat simply failed to latch).
+	local char = player.Character
+	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+	if not char or not humanoid or not char:FindFirstChild("HumanoidRootPart") then
+		QuickPlayResult:FireClient(player, mode, false, "You need a character to quick play")
+		return
+	end
+
 	local seated = quickTeleport(player, chosenTable.seats[chosenSeat])
 	if not seated then
-		QuickPlayResult:FireClient(player, mode, false, "You need a character to quick play")
+		-- The rig may be half-latched mid-air: stand it up cleanly so the
+		-- player can just sit normally instead of looking "weird".
+		if humanoid.Parent then
+			humanoid.Sit = false
+		end
+		QuickPlayResult:FireClient(player, mode, false, "Couldn't get you seated - try again")
 		return
 	end
 
