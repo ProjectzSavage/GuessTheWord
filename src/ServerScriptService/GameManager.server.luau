@@ -1284,12 +1284,13 @@ local function quickTeleport(player, seat)
 	end
 	char:PivotTo(target)
 	seat:Sit(humanoid)
-	-- Humanoid.Sit only latches when the rig is settled over the seat; a bare
+	-- Seat:Sit only latches when the rig is settled over the seat; a bare
 	-- PivotTo + Sit sometimes leaves the player standing half off the chair
 	-- (and nothing starts until Seat.Occupant is set). Verify the seat
-	-- actually took, re-centering + re-requesting until it does (~1.5s max).
+	-- actually took, re-centering + re-requesting until it does (~1s max).
+	-- 0.1s steps: a successful seat should not wait out a 0.15s sleep.
 	for _ = 1, 10 do
-		task.wait(0.15)
+		task.wait(0.1)
 		if not humanoid.Parent then
 			return true -- rig gone (respawn) - nothing left to fix here
 		end

@@ -1239,6 +1239,17 @@ function onLeftSeat()
 	if celebrationActive then
 		leftSeatAfterMatch = true
 	end
+	-- Jumped out with a selector still open (e.g. the bot difficulty picker
+	-- after a QuickPlay seat): dismiss it first. enterLobby() ->
+	-- setQuickPlayVisible(true) treats an open selector as "stay hidden", so
+	-- without this the selector would sit there forever and QuickPlay would
+	-- never come back.
+	if QuickPlaySelector and QuickPlaySelector.Visible then
+		QuickPlaySelector.Visible = false
+	end
+	if DifficultySelector and DifficultySelector.Visible then
+		DifficultySelector.Visible = false
+	end
 	-- Not in a match: back to the lobby - pause overlay out, QuickPlay
 	-- immediately available again.
 	hidePauseScreen()
@@ -1913,9 +1924,10 @@ QuickPlayResult.OnClientEvent:Connect(function(mode, success, note)
 
 	if mode == "Bot" then
 		-- The server just seated us at an empty table: open the difficulty
-		-- selector right away (same as clicking Play vs Bot). Slight delay so
-		-- the teleport + the waiting-state UI settle first.
-		task.delay(0.5, function()
+		-- selector right away (same as clicking Play vs Bot). Small delay so
+		-- the teleport + the waiting-state UI settle first (the seat is
+		-- already CONFIRMED before this event fires, so 0.5s was pure lag).
+		task.delay(0.2, function()
 			quickMatchStarting = false
 			local h = getHumanoid()
 			if not (h and h.Seated) then
@@ -1946,6 +1958,28 @@ QuickPlayResult.OnClientEvent:Connect(function(mode, success, note)
 		if note and note ~= "" and _G.Notify then
 			_G.Notify({ title = "Quick Play", message = note, kind = "info" })
 		end
-		-- Nothing else to do: the match auto-starts once the seat reconciles.
+		if note and note ~= "" then
+			-- Nobody was waiting: we're alone at a table. The OpponentState
+			-- "waiting" event that fired when we got seated was suppressed
+			-- (quickMatchStarting was still up), so bring the waiting button
+			-- up ourselves - otherwise there is NO way to start a bot match
+			-- from a QuickPlay-Player seat. (A real player opposite
+			-- auto-starts the match, so no button is needed in that case.)
+			task.delay(0.15, function()
+				local h = getHumanoid()
+				if not (h and h.Seated) then
+					return -- stood up in the meantime; the lobby UI is up
+				end
+				local selectorOpen = (QuickPlaySelector and QuickPlaySelector.Visible)
+					or (DifficultySelector and DifficultySelector.Visible)
+				if selectorOpen then
+					return
+				end
+				if not InteractionFrame.Visible then
+					showFrame(InteractionFrame)
+				end
+				showFrame(PlayVsBotButton)
+			end)
+		end
 	end
 end)

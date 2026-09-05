@@ -260,6 +260,15 @@ local function refreshBoard(board, cfg)
 		local nameLbl = row:FindFirstChild("Name")
 		if nameLbl and nameLbl:IsA("TextLabel") then
 			nameLbl.Text = e.name or "?"
+			-- Top 3 get distinct name colors (gold / silver / bronze); rows
+			-- 4+ keep the template's default color.
+			if i == 1 then
+				nameLbl.TextColor3 = Color3.fromRGB(255, 199, 44)
+			elseif i == 2 then
+				nameLbl.TextColor3 = Color3.fromRGB(192, 199, 212)
+			elseif i == 3 then
+				nameLbl.TextColor3 = Color3.fromRGB(205, 127, 50)
+			end
 		end
 
 		local rankLbl = row:FindFirstChild("Rank")
