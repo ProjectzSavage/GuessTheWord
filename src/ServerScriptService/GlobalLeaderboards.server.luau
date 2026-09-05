@@ -68,6 +68,10 @@ local function withStore(fn)
 	return ok, result
 end
 
+-- Pushes the current lists to every player. Placeholder until the PUSHING
+-- section below assigns the real one (declared early so upsert can call it).
+local broadcast = function() end
+
 -- Keep only well-formed entries, sorted descending by value.
 local function sanitize(list)
 	local out = {}
@@ -132,24 +136,50 @@ local function upsert(b, userId, name, value)
 	if ok then
 		if type(result) == "table" then
 			b.data = result
+			broadcast() -- boards pick up the change right away (was up to 30s)
 		end
 	else
 		local c = applyUpsert(b.data, userId, name, value)
 		if c then
 			b.data = c
+			broadcast()
 		end
 	end
 end
 
--- Load the three lists once at server start.
+-- Load the three lists at server start (retried: a Studio DataStore cold
+-- start or a transient error would otherwise leave the boards stuck on the
+-- per-server fallback for the WHOLE server lifetime).
 task.spawn(function()
-	for _, b in BOARDS do
-		local ok, list = withStore(function()
-			return store:GetAsync(b.storeKey)
-		end)
-		if ok and type(list) == "table" then
-			b.data = sanitize(list)
+	local allOk = false
+	for attempt = 1, 5 do
+		allOk = true
+		for _, b in BOARDS do
+			local ok, list = withStore(function()
+				return store:GetAsync(b.storeKey)
+			end)
+			if ok and type(list) == "table" then
+				b.data = sanitize(list)
+			elseif not ok then
+				allOk = false
+			end
 		end
+		if allOk then
+			break
+		end
+		if attempt < 5 then
+			task.wait(5)
+		end
+	end
+	if allOk then
+		local sizes = {}
+		for _, b in BOARDS do
+			table.insert(sizes, b.storeKey .. "=" .. #b.data)
+		end
+		warn("[GlobalLeaderboards] DataStore loaded (" .. table.concat(sizes, ", ") .. ").")
+		broadcast() -- anyone already in gets the real lists right away
+	else
+		warn("[GlobalLeaderboards] DataStore still unreadable after 5 tries - boards stay on this server's players.")
 	end
 end)
 
@@ -190,6 +220,16 @@ end
 local function pushTo(p)
 	if p and p.Parent then
 		Push:FireClient(p, snapshot())
+	end
+end
+
+-- The real broadcast (replaces the placeholder above).
+broadcast = function()
+	local snap = snapshot()
+	for _, p in Players:GetPlayers() do
+		if p.Parent then
+			Push:FireClient(p, snap)
+		end
 	end
 end
 

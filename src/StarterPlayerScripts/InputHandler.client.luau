@@ -509,6 +509,7 @@ local slots = {}             -- index -> ImageLabel slot
 local usedTiles = {}         -- tiles already flown to the answer (grayed out)
 local roundActive = false
 local matchInProgress = false -- true during an active match (jump locked)
+local matchArmed = false      -- a countdown/roll was seen for the current match
 local flyingLetters = {}     -- in-flight flying clones (for cleanup)
 
 -- Forward declarations for helpers that are CALLED early (by the Countdown
@@ -1296,6 +1297,7 @@ if RematchButton then
 end
 
 Countdown.OnClientEvent:Connect(function(n)
+	matchArmed = true -- a real match start is in progress (see RoundStart guard)
 	hidePauseScreen()
 	hideFrame(PuzzleArea)
 	setQuickPlayVisible(false) -- a match is starting
@@ -1376,6 +1378,14 @@ function animateClueIntro()
 end
 
 RoundStart.OnClientEvent:Connect(function(length, letterBank, images)
+	if not matchArmed then
+		-- Stale RoundStart: its match already ended. This used to race a
+		-- last-second jump (GameOver went out, then a leftover RoundStart
+		-- into the dead match) and left the player stuck: dead puzzle that
+		-- could never be played, jump re-locked, table camera re-focused.
+		warn("[InputHandler] Ignored stale RoundStart (no countdown/roll for this match).")
+		return
+	end
 	wordLength = length
 	currentGuess = ""
 	pushLiveGuess() -- clear the spectator's view of our guess for the new round
@@ -1724,6 +1734,7 @@ end
 GameOver.OnClientEvent:Connect(function(winnerName, youWon, isDraw, isBotMatch)
 	roundActive = false
 	matchInProgress = false -- allow the player to jump out again
+	matchArmed = false      -- the next match needs its own countdown/roll
 	leftSeatAfterMatch = false -- reset for this match's celebration
 	lockJump(false)
 	setQuickPlayVisible(false) -- match just ended; re-shown via enterLobby/waiting
@@ -1747,6 +1758,7 @@ end)
 MatchCancelled.OnClientEvent:Connect(function()
 	roundActive = false
 	matchInProgress = false
+	matchArmed = false
 	celebrationActive = false
 	lockJump(false)
 	hidePauseScreen()
@@ -1767,6 +1779,7 @@ end)
 -- the player can no longer bail out of the chair by jumping. (RoundStart
 -- re-locks too, but the roll plays BEFORE the round starts.)
 CashReroll.OnClientEvent:Connect(function()
+	matchArmed = true -- the roll only plays for a committed match
 	lockJump(true)
 end)
 
@@ -1926,8 +1939,9 @@ QuickPlayResult.OnClientEvent:Connect(function(mode, success, note)
 		-- The server just seated us at an empty table: open the difficulty
 		-- selector right away (same as clicking Play vs Bot). Small delay so
 		-- the teleport + the waiting-state UI settle first (the seat is
-		-- already CONFIRMED before this event fires, so 0.5s was pure lag).
-		task.delay(0.2, function()
+		-- already CONFIRMED before this event fires, so any long delay is
+		-- pure lag).
+		task.delay(0.1, function()
 			quickMatchStarting = false
 			local h = getHumanoid()
 			if not (h and h.Seated) then

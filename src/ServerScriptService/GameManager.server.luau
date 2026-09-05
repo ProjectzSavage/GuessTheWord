@@ -638,6 +638,9 @@ local function cancelCountdown(tableState, leaver)
 	for _, occ in tableState.occupants do
 		if occ ~= "BOT" and occ then
 			HeartHUDManager.hide(occ)
+			-- Full client reset first (releases the table camera + unlocks
+			-- the jump set by the cash roll), THEN the waiting state.
+			MatchCancelled:FireClient(occ)
 			OpponentState:FireClient(occ, true) -- seated & waiting again
 		end
 	end
@@ -873,6 +876,9 @@ local function pickCashRewardCapped(maxCash)
 end
 
 local function runCashReroll(tableState)
+	-- The match generation when the roll started: if the match is cancelled
+	-- (or replaced) mid-roll this changes, and the wait below exits early.
+	local gen = tableState.matchGen or 0
 	-- BOT matches cap the roll by difficulty (Easy 100 / Medium 350 / Hard
 	-- 750). Player-vs-player matches roll the FULL reward table (up to 5000)
 	-- - the difficulty cap must not leak into real-player games.
@@ -913,8 +919,18 @@ local function runCashReroll(tableState)
 	end
 
 	-- Wait for the animation to finish, then a little more so the reward is
-	-- clearly shown before the game starts.
-	task.wait(REROLL_DURATION + REWARD_SHOW_WAIT)
+	-- clearly shown before the game starts. The wait is CANCELLABLE: a
+	-- last-second jump cancels the match mid-roll, and startMatch must not
+	-- then fire a RoundStart into the dead match.
+	local total = REROLL_DURATION + REWARD_SHOW_WAIT
+	local waited = 0
+	while waited < total do
+		task.wait(0.1)
+		waited = waited + 0.1
+		if tableState.matchGen ~= gen or not tableState.matchActive then
+			return nil -- cancelled mid-roll
+		end
+	end
 
 	-- Tell clients the roll is done (StatsPanel slides out to the top here).
 	for _, occ in tableState.occupants do
@@ -973,8 +989,14 @@ function startMatch(tableState)
 	-- AFTER the roll finishes (and cash is awarded).
 	runCashReroll(tableState)
 
-	broadcastHearts(tableState) -- re-sync bot hearts before the round starts
-	startRound(tableState)
+	-- The reroll is long (~4.5s) and cancellable: if the match was cancelled
+	-- while the roll played (a last-second jump), a leftover thread must NOT
+	-- start a round - it would fire RoundStart into a dead match and the
+	-- other player would be stuck on a puzzle with a locked jump + camera.
+	if tableState.matchGen == gen and tableState.matchActive then
+		broadcastHearts(tableState) -- re-sync bot hearts before the round starts
+		startRound(tableState)
+	end
 end
 
 -------------------------------------------------------------------------------
@@ -1063,9 +1085,20 @@ function releasePlayer(tableState, player)
 	end
 	-- Ignore leaving while a match is running except a forfeit/quit.
 	if tableState.matchActive then
-		-- A real player left mid-match: give the match to the opponent.
 		local seat = seatOfPlayer(tableState, player)
 		if seat then
+			-- Last-second jump: no heart has been lost yet (still in the cash
+			-- roll or the very start of round 1) - the match never really got
+			-- going, so CANCEL it for everyone instead of awarding the
+			-- opponent a forfeit win (that forfeit raced the running roll and
+			-- left the other player with a dead round + stuck camera).
+			if tableState.hearts[1] == HEARTS_PER_PLAYER
+				and tableState.hearts[2] == HEARTS_PER_PLAYER then
+				tableState.occupants[seat] = nil
+				cancelCountdown(tableState, player)
+				return
+			end
+			-- A real player left mid-match: give the match to the opponent.
 			tableState.occupants[seat] = nil
 			gameOver(tableState, opponentSeat(seat), { player })
 		end
@@ -1288,9 +1321,10 @@ local function quickTeleport(player, seat)
 	-- PivotTo + Sit sometimes leaves the player standing half off the chair
 	-- (and nothing starts until Seat.Occupant is set). Verify the seat
 	-- actually took, re-centering + re-requesting until it does (~1s max).
-	-- 0.1s steps: a successful seat should not wait out a 0.15s sleep.
+	-- 0.05s steps: Seat:Sit latches within a frame or two, so a successful
+	-- seat is confirmed almost instantly (the retries still cover a slow one).
 	for _ = 1, 10 do
-		task.wait(0.1)
+		task.wait(0.05)
 		if not humanoid.Parent then
 			return true -- rig gone (respawn) - nothing left to fix here
 		end

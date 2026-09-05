@@ -153,6 +153,34 @@ local function getStatValue(p, from, stat)
 end
 
 -------------------------------------------------------------------------------
+-- SANITIZE ENTRIES (drop malformed rows BEFORE rendering, so a single bad
+-- entry can never error the render and leave the board cleared-and-empty)
+-------------------------------------------------------------------------------
+local function sanitizeEntries(list)
+	local out = {}
+	for _, e in list do
+		if type(e) == "table" then
+			local v = tonumber(e.value)
+			-- v == v rejects NaN; the huge checks reject +/-inf.
+			if v and v == v and v ~= math.huge and v ~= -math.huge then
+				local name = e.name
+				if type(name) ~= "string" or name == "" then
+					name = "?"
+				end
+				table.insert(out, {
+					userId = tonumber(e.userId),
+					name = name,
+					value = v,
+				})
+			end
+		end
+	end
+	return out
+end
+
+local refreshErrorWarned = false -- one-time diagnostic for a dead render
+
+-------------------------------------------------------------------------------
 -- BUILD ONE BOARD (find the pieces, hide the template)
 -------------------------------------------------------------------------------
 local function buildBoard(surface, cfg)
@@ -230,6 +258,11 @@ local function refreshBoard(board, cfg)
 			})
 		end
 	end
+
+	-- Drop anything malformed so the sort + row build below can never error
+	-- on a bad entry (that used to clear the rows and then die, leaving the
+	-- board empty forever).
+	entries = sanitizeEntries(entries)
 
 	table.sort(entries, function(a, b)
 		if a.value ~= b.value then
@@ -321,6 +354,16 @@ local function refreshAll()
 	end
 end
 
+local function safeRefreshAll()
+	-- pcall'd: a render error must NEVER kill a refresh - the board would
+	-- stay frozen (or empty, if it died mid-render) until a rejoin.
+	local ok, err = pcall(refreshAll)
+	if not ok and not refreshErrorWarned then
+		refreshErrorWarned = true
+		warn("[Leaderboards] A board render errored (it will retry on the next 30s tick): " .. tostring(err))
+	end
+end
+
 -- The server re-sends the FULL list on every push, so connecting here (after
 -- the build) is safe: a push that arrived earlier is covered by the next
 -- one. The first usable list re-renders immediately; later updates land on
@@ -342,13 +385,13 @@ if pushEvent then
 			end
 		end
 		if reRender then
-			refreshAll()
+			safeRefreshAll()
 		end
 	end)
 end
 
 task.spawn(function()
-	refreshAll()
+	safeRefreshAll()
 	-- Phase-locked to the GLOBAL clock: everyone refreshes on the same
 	-- second (unix time crossing a multiple of REFRESH_SECONDS), and the
 	-- wait time is re-computed from the clock each pass so drift
@@ -356,7 +399,7 @@ task.spawn(function()
 	while true do
 		local intoPhase = os.time() % REFRESH_SECONDS
 		task.wait(math.max(REFRESH_SECONDS - intoPhase, 0.1))
-		refreshAll()
+		safeRefreshAll()
 	end
 end)
 
