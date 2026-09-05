@@ -66,7 +66,7 @@ local RestoreStreakResult = Events:WaitForChild("RestoreStreakResult")
 -- One-time build marker: if behavior still looks old after pasting, check
 -- Output for this line - if you don't see THIS version, the pasted script is
 -- not the one running.
-warn("[GameManager] build v11 (fast quickplay, reset=forfeit, leaver streak break) running.")
+warn("[GameManager] build v12 (loser ejects instead of respawning, cash sfx on landing) running.")
 
 -------------------------------------------------------------------------------
 -- CONFIG
@@ -568,47 +568,56 @@ function gameOver(tableState, winnerSeatIndex, extraRecipients)
 end
 
 -- Match-end drama:
---   * The winning real player stands up (leaves the chair).
---   * The losing real player ragdolls on the chair, then respawns.
---   * A bot never "respaws" - if the bot loses it is simply left (cleaned on
---     rematch); if the bot wins, the human loser ragdolls + respawns.
+--   * The winning real player stays seated in their chair (a fresh bot match
+--     starts from the pause button).
+--   * The losing real player stands up and steps OUT of their chair - behind
+--     it if the space allows (in front if it's against a wall). No death and
+--     no respawn: the old kill+respawn nulled out the loser's client-side
+--     state (music, GUI) while the new character loaded in.
+--   * A bot never "ejects" - if the bot loses it is simply despawned with the
+--     post-match cleanup.
 function handleMatchEndDramatics(tableState, winnerSeatIndex)
-	-- Only the loser (when there's a clear winner) respawns. The winner stays
-	-- seated in their chair for the rematch.
-	-- NOTE: no ragdoll here - the Realism Mod handles that.
+	-- Only the loser (when there's a clear winner) is ejected. The winner
+	-- stays seated for the rematch.
 	if winnerSeatIndex == nil then
 		return -- draw: no drama, everyone stays seated
 	end
 
-	local function respawnLoser(player, seatIndex, seat)
+	local function ejectLoser(player, seatIndex, seat)
 		task.delay(1.6, function()
-			if player.Parent then
-				player:LoadCharacter()
-				-- Re-seat the loser once their new character spawns, so they can
-				-- use the pause-menu replay (which requires being seated).
-				local spawned
-				spawned = player.CharacterAdded:Connect(function(character)
-					if spawned then
-						spawned:Disconnect()
-					end
-					task.wait(0.5)
-					if character and character.Parent then
-						local humanoid = character:FindFirstChildOfClass("Humanoid")
-						local seatNow = seat or tableState.seats[seatIndex]
-						if humanoid and seatNow then
-							character:PivotTo(seatNow.CFrame * CFrame.new(0, 0.6, 0))
-							task.wait(0.1)
-							humanoid.Sit = true
-						end
-					end
-				end)
+			if not (player and player.Parent) then
+				return
 			end
+			local char = player.Character
+			local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+			if not (char and char.Parent and humanoid) then
+				return
+			end
+			if not humanoid.Seated then
+				return -- already up (they jumped out during the celebration)
+			end
+			local seatNow = seat or tableState.seats[seatIndex]
+			if not seatNow then
+				humanoid.Sit = false
+				return
+			end
+			-- Stand up first, then step out BEHIND the seat: a seated character
+			-- faces the seat's -Z, so behind is +Z. The PivotTo also breaks the
+			-- seat's grip on the rig. If the space behind is blocked (seat
+			-- against a wall) fall back to the front instead.
+			humanoid.Sit = false
+			local behind = seatNow.CFrame * CFrame.new(0, 1, 4)
+			local params = RaycastParams.new()
+			params.FilterDescendantsInstances = { char }
+			params.FilterType = Enum.RaycastFilterType.Exclude
+			local hit = workspace:Raycast(seatNow.Position, behind.Position - seatNow.Position, params)
+			char:PivotTo(hit and (seatNow.CFrame * CFrame.new(0, 1, -4)) or behind)
 		end)
 	end
 
 	for seatIndex, occ in tableState.occupants do
 		if occ ~= "BOT" and occ and seatIndex ~= winnerSeatIndex then
-			respawnLoser(occ, seatIndex, tableState.seats[seatIndex])
+			ejectLoser(occ, seatIndex, tableState.seats[seatIndex])
 		end
 	end
 end
@@ -925,25 +934,37 @@ local function runCashReroll(tableState)
 		end
 	end
 
-	-- Wait for the animation to finish, then a little more so the reward is
-	-- clearly shown before the game starts. The wait is CANCELLABLE: a
-	-- last-second jump cancels the match mid-roll, and startMatch must not
-	-- then fire a RoundStart into the dead match.
-	local total = REROLL_DURATION + REWARD_SHOW_WAIT
-	local waited = 0
-	while waited < total do
-		task.wait(0.1)
-		waited = waited + 0.1
-		if tableState.matchGen ~= gen or not tableState.matchActive then
-			return nil -- cancelled mid-roll
+	-- The waits are CANCELLABLE: a last-second jump cancels the match
+	-- mid-roll, and startMatch must not then fire a RoundStart into the dead
+	-- match.
+	local function cancellableWait(seconds)
+		local waited = 0
+		while waited < seconds do
+			task.wait(0.1)
+			waited = waited + 0.1
+			if tableState.matchGen ~= gen or not tableState.matchActive then
+				return false -- cancelled mid-roll
+			end
 		end
+		return true
 	end
 
-	-- Tell clients the roll is done (StatsPanel slides out to the top here).
+	-- Phase 1: the roll itself. CashAwarded fires the moment the roll LANDS -
+	-- that's when the client plays the "cash" SFX + the StatsPanel slides
+	-- out. Firing it only after the extra show-wait used to leave the sound
+	-- ~1.5s behind the landed reward.
+	if not cancellableWait(REROLL_DURATION) then
+		return nil
+	end
 	for _, occ in tableState.occupants do
 		if occ ~= "BOT" and occ then
 			CashAwarded:FireClient(occ, reward)
 		end
+	end
+
+	-- Phase 2: hold the landed reward on screen for a beat before round 1.
+	if not cancellableWait(REWARD_SHOW_WAIT) then
+		return nil
 	end
 
 	return reward

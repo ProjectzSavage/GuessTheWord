@@ -271,6 +271,11 @@ end
 -- GameUI is a ScreenGui -> uses .Enabled. Frames use .Visible.
 -------------------------------------------------------------------------------
 GameUI.Enabled = true
+-- Keep the runtime GUI (and anything parented INSIDE it, like your music
+-- Sound/AudioPlayer) alive across character respawns. With the default
+-- ResetOnSpawn = true the whole GameUI is wiped and rebuilt when a character
+-- dies, so all playback + every runtime visibility change died with it.
+GameUI.ResetOnSpawn = false
 
 -- Visibility with open/close animations (via UIFX). These animate a UIScale, so
 -- they don't reflow layout. We only animate frames we have references to; the
@@ -1723,9 +1728,9 @@ local function showCelebration(youWon, isDraw, isBotMatch)
 			-- is set (by onLeftSeat) and they go straight back to the lobby.
 			showPauseScreen()
 		else
-			-- Loser (their character was just respawned back to spawn) or a
-			-- human match: no pause overlay, no PlayVsBot — straight back to
-			-- the lobby so QuickPlay is immediately available.
+			-- Loser (just stepped out of their chair) or a human match: no
+			-- pause overlay, no PlayVsBot — straight back to the lobby so
+			-- QuickPlay is immediately available.
 			enterLobby()
 		end
 	end)
@@ -1738,6 +1743,11 @@ GameOver.OnClientEvent:Connect(function(winnerName, youWon, isDraw, isBotMatch)
 	leftSeatAfterMatch = false -- reset for this match's celebration
 	lockJump(false)
 	setQuickPlayVisible(false) -- match just ended; re-shown via enterLobby/waiting
+	-- The match is OVER: clear the round UI NOW. A timeout end leaves the
+	-- puzzle on screen by design (it reveals the word), so without this the
+	-- puzzle could survive the celebration into the lobby (stuck UI).
+	hideFrame(PuzzleArea)
+	hideCountdown()
 	showCelebration(youWon, isDraw, isBotMatch)
 	if isDraw then
 		TimerLabel.Text = "DRAW"

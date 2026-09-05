@@ -233,4 +233,17 @@ if button then
 	setButtonImage()
 end
 
+-- Respawn guard: if the audio stops while the character is dead (e.g. the
+-- player's rig gets replaced mid-track), restart the CURRENT track once the
+-- new character has arrived - instead of the playlist dying forever.
+player.CharacterAdded:Connect(function()
+	if paused or finishedAll then
+		return
+	end
+	task.wait(1)
+	if audioPlayer and audioPlayer.Parent and not audioPlayer.IsPlaying then
+		task.defer(playTrack, index)
+	end
+end)
+
 task.defer(playTrack, 1)
