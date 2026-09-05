@@ -95,7 +95,7 @@ end
 local function ensureData(player)
 	if not playerData[player.UserId] then
 		local data = {
-			claimed = {}, lastDailyClaim = 0, dailyDay = 1, robuxSpent = 0, totalPlaytime = 0,
+			claimed = {}, lastDailyClaim = 0, dailyClaimedCount = 0, robuxSpent = 0, totalPlaytime = 0,
 		}
 		local saved = ProfileStore.load(player.UserId).rewards
 		if type(saved) == "table" then
@@ -103,8 +103,19 @@ local function ensureData(player)
 				data.claimed = saved.claimed
 			end
 			data.lastDailyClaim = tonumber(saved.lastDailyClaim) or 0
-			data.dailyDay = tonumber(saved.dailyDay) or 1
 			data.robuxSpent = tonumber(saved.robuxSpent) or 0
+			-- Legacy migration (the OLD dailies were a 7-day CYCLE whose
+			-- claims lived in the claimed map): fold the old d* claims
+			-- into the new chain counter and drop them. Runs once per
+			-- player - after this save, no d* ids remain in the map.
+			local legacyCount = 0
+			for id in pairs(data.claimed) do
+				if string.sub(id, 1, 1) == "d" then
+					legacyCount += 1
+					data.claimed[id] = nil
+				end
+			end
+			data.dailyClaimedCount = tonumber(saved.dailyClaimedCount) or legacyCount
 			-- totalPlaytime is a SESSION counter - it starts at 0 on every
 			-- join (playtime rewards are per-session).
 		end
@@ -117,7 +128,7 @@ local function ensureData(player)
 			return {
 				claimed = d.claimed or {},
 				lastDailyClaim = d.lastDailyClaim or 0,
-				dailyDay = d.dailyDay or 1,
+				dailyClaimedCount = d.dailyClaimedCount or 0,
 				robuxSpent = d.robuxSpent or 0,
 			}
 		end)
@@ -252,28 +263,21 @@ local function isFollowing(player, ownerId)
 	return false
 end
 
-local function isDailyId(id)
-	return type(id) == "string" and string.sub(id, 1, 1) == "d"
-end
-
-local function checkDailyReset(player, data)
-	local now = os.time()
-	local nextClaim = (data.lastDailyClaim or 0) + DAILY_SECONDS
-	if now < nextClaim then return end
-	for id in pairs(data.claimed) do
-		if isDailyId(id) then data.claimed[id] = nil end
-	end
-	data.lastDailyClaim = now
-	data.dailyDay = ((data.dailyDay or 1) % 7) + 1
-	saveData(player)
-end
-
 local function buildPayload(player, data)
-	checkDailyReset(player, data)
 	local playMin = math.floor((data.totalPlaytime or 0) / 60)
 	local now = os.time()
-	local dailyLeft = math.max(0, (data.lastDailyClaim or 0) + DAILY_SECONDS - now)
 	local robuxSpent = data.robuxSpent or 0
+	-- DAILY: a sequential chain. The FIRST one is claimable immediately;
+	-- each claim arms a 24h countdown for the NEXT one; missing days never
+	-- lock you out (a ready daily stays ready until claimed - the check is
+	-- only "has 24h passed since the last claim?"). After day 7 the chain
+	-- wraps and runs again.
+	local dailyCount = data.dailyClaimedCount or 0
+	local dailyPos = dailyCount % 7 -- rows claimed in the current cycle (0-6)
+	local dailyReady = dailyCount == 0
+		or now >= (data.lastDailyClaim or 0) + DAILY_SECONDS
+	local dailyLeft = dailyReady and 0
+		or math.max(0, (data.lastDailyClaim or 0) + DAILY_SECONDS - now)
 
 	local categories = { playtime = {}, daily = {}, group = {}, social = {}, vipdaily = {}, robuxspent = {} }
 
@@ -292,8 +296,8 @@ local function buildPayload(player, data)
 	for i, row in ipairs(DAILY) do
 		table.insert(categories.daily, {
 			id = row.id, rewards = row.rewards, day = i,
-			claimed = data.claimed[row.id] == true,
-			ready = (data.dailyDay == i and dailyLeft <= 0 and not data.claimed[row.id]),
+			claimed = i <= dailyPos,
+			ready = (i == dailyPos + 1) and dailyReady,
 		})
 	end
 
@@ -337,7 +341,7 @@ local function buildPayload(player, data)
 	return {
 		totalPlaytime = data.totalPlaytime or 0,
 		dailyCountdown = dailyLeft,
-		dailyDay = data.dailyDay or 1,
+		dailyDay = dailyPos + 1,
 		robuxSpentTotal = robuxSpent,
 		categories = categories,
 	}
@@ -398,6 +402,10 @@ RewardClaim.OnServerEvent:Connect(function(player, categoryId, rowId)
 	markClaimed(player, row.id, grant)
 
 	if categoryId == "daily" then
+		-- Advance the chain: this claim arms the 24h countdown for the NEXT
+		-- daily. (markClaimed already saved once; save again with the fresh
+		-- counter + timestamp.)
+		data.dailyClaimedCount = (data.dailyClaimedCount or 0) + 1
 		data.lastDailyClaim = os.time()
 		saveData(player)
 	end

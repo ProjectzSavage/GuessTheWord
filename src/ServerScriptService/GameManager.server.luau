@@ -66,7 +66,7 @@ local RestoreStreakResult = Events:WaitForChild("RestoreStreakResult")
 -- One-time build marker: if behavior still looks old after pasting, check
 -- Output for this line - if you don't see THIS version, the pasted script is
 -- not the one running.
-warn("[GameManager] build v12 (loser ejects instead of respawning, cash sfx on landing) running.")
+warn("[GameManager] build v13 (clean quickplay seating, safe loser eject) running.")
 
 -------------------------------------------------------------------------------
 -- CONFIG
@@ -597,21 +597,48 @@ function handleMatchEndDramatics(tableState, winnerSeatIndex)
 				return -- already up (they jumped out during the celebration)
 			end
 			local seatNow = seat or tableState.seats[seatIndex]
+			-- Stand up first: even if every exit spot is blocked, the player
+			-- at least ends up STANDING (never stuck in the chair, never
+			-- teleported into geometry).
+			humanoid.Sit = false
 			if not seatNow then
-				humanoid.Sit = false
 				return
 			end
-			-- Stand up first, then step out BEHIND the seat: a seated character
-			-- faces the seat's -Z, so behind is +Z. The PivotTo also breaks the
-			-- seat's grip on the rig. If the space behind is blocked (seat
-			-- against a wall) fall back to the front instead.
-			humanoid.Sit = false
-			local behind = seatNow.CFrame * CFrame.new(0, 1, 4)
-			local params = RaycastParams.new()
-			params.FilterDescendantsInstances = { char }
-			params.FilterType = Enum.RaycastFilterType.Exclude
-			local hit = workspace:Raycast(seatNow.Position, behind.Position - seatNow.Position, params)
-			char:PivotTo(hit and (seatNow.CFrame * CFrame.new(0, 1, -4)) or behind)
+			-- Pick the exit spot. A seated character faces the seat's -Z, so
+			-- BEHIND is +Z. The check must NOT count the chair the seat sits
+			-- in (backrest / armrests / the table it belongs to) as "blocked"
+			-- (that made the behind check always fail and dumped the player in
+			-- front - i.e. INTO the table between the two seats).
+			local function rayBlocked(localStart, localEnd, extraExclude)
+				local params = RaycastParams.new()
+				local filter = { char }
+				for _, inst in ipairs(extraExclude or {}) do
+					table.insert(filter, inst)
+				end
+				params.FilterDescendantsInstances = filter
+				params.FilterType = Enum.RaycastFilterType.Exclude
+				local origin = seatNow.CFrame * localStart
+				return workspace:Raycast(origin.Position, (seatNow.CFrame * localEnd).Position - origin.Position, params) ~= nil
+			end
+			-- Everything the seat belongs to (chair model, table model, ...):
+			-- it hugs the seat, so it must not block the behind exit.
+			local seatChain = {}
+			local ancestor = seatNow
+			local depth = 0
+			while ancestor and depth < 8 do
+				table.insert(seatChain, ancestor)
+				ancestor = ancestor.Parent
+				depth += 1
+			end
+			-- Start 1 stud out from the seat center so the ray doesn't begin
+			-- inside the seat part itself.
+			if not rayBlocked(Vector3.new(0, 0, 1), Vector3.new(0, 1, 4), seatChain) then
+				char:PivotTo(seatNow.CFrame * CFrame.new(0, 1, 4))
+			elseif not rayBlocked(Vector3.new(0, 0, -1), Vector3.new(0, 1, -4)) then
+				char:PivotTo(seatNow.CFrame * CFrame.new(0, 1, -4))
+			end
+			-- Both sides blocked: no teleport - the player just stands up in
+			-- place and walks away.
 		end)
 	end
 
@@ -1352,18 +1379,32 @@ local function quickTeleport(player, seat)
 			return false
 		end
 	end
-	char:PivotTo(target)
+	-- Let the SEAT pull the rig over first: Seat:Sit teleports the character
+	-- to the seat with the engine's own canonical placement, which the
+	-- client follows cleanly. A manual PivotTo right before Seat:Sit used to
+	-- leave the BODY parts a few studs low while the seat re-anchored the
+	-- HRP - that's why ONLY quickplay seatings looked "under the seat" while
+	-- walking in and sitting was fine.
 	seat:Sit(humanoid)
-	-- Seat:Sit only latches when the rig is settled over the seat; a bare
-	-- PivotTo + Sit sometimes leaves the player standing half off the chair
-	-- (and nothing starts until Seat.Occupant is set). Verify the seat
-	-- actually took, re-centering + re-requesting until it does (~1s max).
-	-- 0.05s steps: Seat:Sit latches within a frame or two, so a successful
-	-- seat is confirmed almost instantly (the retries still cover a slow one).
-	for _ = 1, 10 do
+	-- 0.05s steps: a healthy seat latches within a frame or two, so the
+	-- success is confirmed almost instantly (the retries still cover a slow
+	-- one).
+	for _ = 1, 8 do
 		task.wait(0.05)
 		if not humanoid.Parent then
 			return true -- rig gone (respawn) - nothing left to fix here
+		end
+		if humanoid.Seated and humanoid.SeatPart == seat then
+			return true
+		end
+	end
+	-- The seat didn't pull the rig over on its own: bring it in manually and
+	-- keep requesting the seat until it latches (~0.6s more, worst case).
+	char:PivotTo(target)
+	for _ = 1, 12 do
+		task.wait(0.05)
+		if not humanoid.Parent then
+			return true
 		end
 		if humanoid.Seated and humanoid.SeatPart == seat then
 			return true
