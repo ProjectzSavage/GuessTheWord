@@ -23,12 +23,21 @@
 		        └── Name / Rank / Value (TextLabel)
 
 	HOW IT WORKS
+	  * GLOBAL mode (default): the GlobalLeaderboards server script keeps the
+	    all-time world top lists in a DataStore and pushes them to every
+	    client, so EVERY server shows the same world ranking.
+	    - Cash = all-time cash, Wins = all-time wins,
+	      Streak = biggest streak ever reached.
+	    - Until the first list arrives, the subtitle shows "Loading..." and
+	      the rows are this server's players, so the boards are never empty.
+	  * FALLBACK mode: if GlobalLeaderboards.server.luau is not running (the
+	    GlobalLeaderboardsPush event is missing), the boards simply show this
+	    server's top players from their leaderstats / Stats values.
 	  * Rows are clones of RowTemplate (the template itself is hidden).
-	  * Top 6 players per board, refreshed every REFRESH_SECONDS (30s),
-	    phase-locked to the global clock so every client refreshes together.
-	  * Cash + Wins come from each player's leaderstats, Streak from the
-	    "Stats" folder — all of it replicates, so every client shows the
-	    same boards.
+	  * Top 6 rows per board. The server pushes a fresh list every
+	    REFRESH_SECONDS (30s) and the client re-renders on the same 30s
+	    phase-locked tick, so the boards flip at the same moment on every
+	    server.
 	  * Your own row is highlighted with a gold stroke.
 	  * Also drives the Workspace.RefreshPart "Count" label ("Refreshes in:
 	    M:SS") so the sign always matches the real refresh time.
@@ -54,6 +63,7 @@ local REFRESH_SECONDS = 30
 -------------------------------------------------------------------------------
 local BOARDS = {
 	CashLeaderboard = {
+		boardKey = "cash",
 		from = "leaderstats",
 		stat = "Cash",
 		title = "CASH",
@@ -64,6 +74,7 @@ local BOARDS = {
 		end,
 	},
 	StreaksLeaderboard = {
+		boardKey = "streak",
 		from = "Stats",
 		stat = "Streak",
 		title = "STREAKS",
@@ -74,6 +85,7 @@ local BOARDS = {
 		end,
 	},
 	WinsLeaderboard = {
+		boardKey = "wins",
 		from = "leaderstats",
 		stat = "Wins",
 		title = "WINS",
@@ -86,31 +98,47 @@ local BOARDS = {
 }
 
 -------------------------------------------------------------------------------
+-- GLOBAL DATA (pushed from the GlobalLeaderboards server script)
+-------------------------------------------------------------------------------
+local Events = ReplicatedStorage:FindFirstChild("Events") or ReplicatedStorage:WaitForChild("Events", 10)
+local pushEvent = Events and Events:FindFirstChild("GlobalLeaderboardsPush")
+local useGlobal = pushEvent ~= nil
+
+local globalLists = {} -- boardKey ("cash"/"wins"/"streak") -> {userId, name, value} list
+local hasData = {}     -- boardKey -> true once at least one push has arrived
+
+if useGlobal then
+	warn("[Leaderboards] Global mode: boards show the all-time world top lists (GlobalLeaderboards server script).")
+else
+	warn("[Leaderboards] GlobalLeaderboardsPush event not found - boards fall back to this server's players. Paste GlobalLeaderboards.server.luau (ServerScriptService) to make them global.")
+end
+
+-------------------------------------------------------------------------------
 -- HEADSHOTS (Players:GetUserThumbnailAsync — works everywhere, cached)
 -------------------------------------------------------------------------------
 local headshotCache = {} -- userId -> image url
 
-local function getHeadshot(p)
-	local cached = headshotCache[p.UserId]
+local function getHeadshot(userId)
+	local cached = headshotCache[userId]
 	if cached then
 		return cached
 	end
 	local ok, cap = pcall(function()
 		return Players:GetUserThumbnailAsync(
-			p.UserId,
+			userId,
 			Enum.ThumbnailType.HeadShot,
 			Enum.ThumbnailSize.Size48x48
 		)
 	end)
 	local img = (ok and cap and cap.Image) or ""
 	if img ~= "" then
-		headshotCache[p.UserId] = img
+		headshotCache[userId] = img
 	end
 	return img
 end
 
 -------------------------------------------------------------------------------
--- READ A PLAYER'S STAT
+-- READ A PLAYER'S STAT (per-server fallback only)
 -------------------------------------------------------------------------------
 local function getStatValue(p, from, stat)
 	local folder = p:FindFirstChild(from)
@@ -169,25 +197,45 @@ local function buildBoard(surface, cfg)
 	return {
 		list = list,
 		template = template,
+		subtitle = subtitle and subtitle:IsA("TextLabel") and subtitle or nil,
+		-- Subtitle to show once data is flowing (keeps custom text you wrote).
+		subtitleDefault = (subtitle and subtitle:IsA("TextLabel") and subtitle.Text ~= "") and subtitle.Text or cfg.subtitle,
 	}
 end
 
 -------------------------------------------------------------------------------
--- REFRESH ONE BOARD (top N rows, live values)
+-- REFRESH ONE BOARD (top N rows)
 -------------------------------------------------------------------------------
 local function refreshBoard(board, cfg)
-	local entries = {}
-	for _, p in Players:GetPlayers() do
-		table.insert(entries, {
-			player = p,
-			value = getStatValue(p, cfg.from, cfg.stat),
-		})
+	local globalList = globalLists[cfg.boardKey]
+	local usingGlobal = useGlobal and globalList ~= nil and #globalList > 0
+
+	if board.subtitle then
+		-- "Loading..." until the first usable global list has arrived.
+		board.subtitle.Text = (useGlobal and not usingGlobal) and "Loading..." or board.subtitleDefault
 	end
+
+	local entries
+	if usingGlobal then
+		entries = globalList
+	else
+		-- This server's players: shown before the first global push and when
+		-- GlobalLeaderboards.server.luau is not running.
+		entries = {}
+		for _, p in Players:GetPlayers() do
+			table.insert(entries, {
+				userId = p.UserId,
+				name = p.DisplayName,
+				value = getStatValue(p, cfg.from, cfg.stat),
+			})
+		end
+	end
+
 	table.sort(entries, function(a, b)
 		if a.value ~= b.value then
 			return a.value > b.value
 		end
-		return a.player.DisplayName < b.player.DisplayName
+		return tostring(a.name) < tostring(b.name)
 	end)
 
 	-- Remove previous rows (keep the template + layout objects).
@@ -199,18 +247,19 @@ local function refreshBoard(board, cfg)
 
 	for i = 1, math.min(TOP_N, #entries) do
 		local e = entries[i]
+		local uid = tonumber(e.userId)
 		local row = board.template:Clone()
 		row.Name = "Row" .. i
 		row.Visible = true
 
 		local avatar = row:FindFirstChild("Avatar")
 		if avatar and avatar:IsA("ImageLabel") then
-			avatar.Image = getHeadshot(e.player)
+			avatar.Image = uid and getHeadshot(uid) or ""
 		end
 
 		local nameLbl = row:FindFirstChild("Name")
 		if nameLbl and nameLbl:IsA("TextLabel") then
-			nameLbl.Text = e.player.DisplayName
+			nameLbl.Text = e.name or "?"
 		end
 
 		local rankLbl = row:FindFirstChild("Rank")
@@ -220,12 +269,12 @@ local function refreshBoard(board, cfg)
 
 		local valueLbl = row:FindFirstChild("Value")
 		if valueLbl and valueLbl:IsA("TextLabel") then
-			valueLbl.Text = cfg.formatValue(e.value)
+			valueLbl.Text = cfg.formatValue(tonumber(e.value) or 0)
 		end
 
 		-- Highlight your own row.
 		local stroke = row:FindFirstChildOfClass("UIStroke")
-		if stroke and e.player == player then
+		if stroke and uid and uid == player.UserId then
 			stroke.Color = Color3.fromRGB(255, 200, 80)
 			stroke.Transparency = 0
 		end
@@ -257,12 +306,39 @@ for surfaceName, cfg in pairs(BOARDS) do
 	end
 end
 
-task.spawn(function()
-	local function refreshAll()
-		for surfaceName, board in pairs(boards) do
-			refreshBoard(board, BOARDS[surfaceName])
-		end
+local function refreshAll()
+	for surfaceName, board in pairs(boards) do
+		refreshBoard(board, BOARDS[surfaceName])
 	end
+end
+
+-- The server re-sends the FULL list on every push, so connecting here (after
+-- the build) is safe: a push that arrived earlier is covered by the next
+-- one. The first usable list re-renders immediately; later updates land on
+-- the 30s phase tick below.
+if pushEvent then
+	pushEvent.OnClientEvent:Connect(function(payload)
+		if type(payload) ~= "table" then
+			return
+		end
+		local reRender = false
+		for key, list in payload do
+			if type(list) == "table" then
+				local wasShowing = hasData[key] and globalLists[key] ~= nil and #globalLists[key] > 0
+				globalLists[key] = list
+				hasData[key] = true
+				if not wasShowing and #list > 0 then
+					reRender = true
+				end
+			end
+		end
+		if reRender then
+			refreshAll()
+		end
+	end)
+end
+
+task.spawn(function()
 	refreshAll()
 	-- Phase-locked to the GLOBAL clock: everyone refreshes on the same
 	-- second (unix time crossing a multiple of REFRESH_SECONDS), and the

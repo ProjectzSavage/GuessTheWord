@@ -57,6 +57,7 @@ local EVENT_NAMES = {
 	"SpectatorGuess",   -- Client -> Server : a player's live in-progress guess (for spectators)
 	"RestoreStreakPrompt", -- Server -> Client : (lostStreak, productId) buy-back prompt after a lost streak
 	"RestoreStreakResult",  -- Server -> Client : (success, restoredStreak) after a restore purchase
+	"GlobalLeaderboardsPush", -- Server -> Client : all-time world top lists (cash/wins/streak)
 }
 
 -- Idempotent: if the folder already exists, reuse it (don't wipe manual setup).
