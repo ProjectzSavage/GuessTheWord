@@ -130,7 +130,7 @@ local function getHeadshot(userId)
 			Enum.ThumbnailSize.Size48x48
 		)
 	end)
-	local img = (ok and cap and cap.Image) or ""
+	local img = (ok and cap) or ""
 	if img ~= "" then
 		headshotCache[userId] = img
 	end

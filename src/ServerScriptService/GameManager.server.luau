@@ -1283,7 +1283,7 @@ local function quickTeleport(player, seat)
 		end
 	end
 	char:PivotTo(target)
-	humanoid.Sit = true
+	seat:Sit(humanoid)
 	-- Humanoid.Sit only latches when the rig is settled over the seat; a bare
 	-- PivotTo + Sit sometimes leaves the player standing half off the chair
 	-- (and nothing starts until Seat.Occupant is set). Verify the seat
@@ -1299,7 +1299,7 @@ local function quickTeleport(player, seat)
 		if (hrp.Position - seat.Position).Magnitude > 2 then
 			char:PivotTo(target)
 		end
-		humanoid.Sit = true
+		seat:Sit(humanoid)
 	end
 	return humanoid.Seated and humanoid.SeatPart == seat
 end
