@@ -66,7 +66,7 @@ local RestoreStreakResult = Events:WaitForChild("RestoreStreakResult")
 -- One-time build marker: if behavior still looks old after pasting, check
 -- Output for this line - if you don't see THIS version, the pasted script is
 -- not the one running.
-warn("[GameManager] build v13 (clean quickplay seating, safe loser eject) running.")
+warn("[GameManager] build v14 (seat enforcer: every seat seats reliably) running.")
 
 -------------------------------------------------------------------------------
 -- CONFIG
@@ -143,6 +143,17 @@ local function discoverTables()
 	for _, folder in TABLE_AREA:GetChildren() do
 		if folder:IsA("Folder") and string.sub(folder.Name, 1, 5) == "Table" then
 			local seats = findSeats(folder)
+			-- Normalize the table's seats: a seat left Disabled in the place
+			-- file silently refuses to seat anyone - that's the classic
+			-- "one seat of this table doesn't work". Make sure the game's
+			-- seats are enabled and say so in Output.
+			for _, seat in seats do
+				if seat.Disabled then
+					warn("[GameManager] seat '" .. seat:GetFullName()
+						.. "' was Disabled in the place file - enabled it so it can seat players.")
+					seat.Disabled = false
+				end
+			end
 			if #seats >= 2 then
 				tableStates[folder.Name] = {
 					folder = folder,
@@ -1073,6 +1084,41 @@ playerOnSeat = function(seat)
 		return Players:GetPlayerFromCharacter(humanoid.Parent)
 	end
 	return nil
+end
+
+-- Seat enforcer: on some tables, some seat parts never auto-capture the
+-- player standing on them (a per-seat engine quirk - part size/placement,
+-- cloned parts, ...). The engine's passive capture is the only thing that
+-- sets seat.Occupant, so the table looks dead even though the player is on
+-- the seat. If a standing player is right on one of our seats, force them
+-- seated (the same Seat:Sit call quickplay uses) so EVERY seat behaves the
+-- same. Only while that table has no match/countdown running: during those,
+-- leaving the seat is a meaningful action (cancel / forfeit) and must not
+-- be undone.
+local function enforceSeat(tableState, seat)
+	if seat.Disabled or seat.Occupant or tableState.matchActive or tableState.countdownActive then
+		return
+	end
+	for _, player in Players:GetPlayers() do
+		local char = player.Character
+		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+		if not (humanoid and humanoid.Parent) or humanoid.Seated then
+			continue
+		end
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		if not hrp then
+			continue
+		end
+		local delta = hrp.Position - seat.Position
+		local flat = Vector3.new(delta.X, 0, delta.Z)
+		-- Right on the seat: close in XZ and at seat height (a standing
+		-- player's HRP sits ~1-3 studs above the seat center; the Y band
+		-- keeps this from grabbing players on platforms above/below).
+		if flat.Magnitude <= 2 and math.abs(delta.Y) <= 3.5 then
+			seat:Sit(humanoid)
+			break -- one seat seats one player; the rest are checked next tick
+		end
+	end
 end
 
 -- Reconcile one seat against the tracked occupants. Idempotent, so it is safe
@@ -2102,6 +2148,7 @@ task.spawn(function()
 		task.wait(POLL_INTERVAL)
 		for _, ts in tableStates do
 			for seatIndex, seat in ts.seats do
+				enforceSeat(ts, seat) -- seats that won't auto-capture still seat
 				reconcileSeat(ts, seatIndex, seat)
 			end
 		end
